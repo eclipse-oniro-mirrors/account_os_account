@@ -16,7 +16,9 @@
 #include "authorization_manager_service.h"
 
 #include <fstream>
+#include <securec.h>
 #include <sstream>
+
 #include "account_error_no.h"
 #include "account_hisysevent_adapter.h"
 #include "account_log_wrapper.h"
@@ -489,7 +491,7 @@ ErrCode AuthorizationManagerService::CheckAuthorizationToken(const std::vector<u
     errCode = InnerAuthorizationManager::GetInstance().VerifyToken(
         token, privilege, newPid, result.challenge, result.iamToken);
     auto tokenInfo = const_cast<std::vector<uint8_t>*>(&token);
-    std::fill(tokenInfo->begin(), tokenInfo->end(), 0);
+    (void)memset_s(tokenInfo->data(), tokenInfo->size(), 0, tokenInfo->size());
     if (errCode != ERR_OK && errCode != ERR_AUTHORIZATION_PRIVILEGE_DENIED) {
         ACCOUNT_LOGE("Failed to verify token, errCode: %{public}d", errCode);
         return errCode;

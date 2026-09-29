@@ -48,7 +48,9 @@ CJsonUnique AppAccountDataStorage::GetAccessibleAccountsFromAuthorizedAccounts(c
     } else {
         if (!IsKeyExist(jsonObject, authorizedApp)) {
             auto array = CreateJsonArray();
-            AddObjToJson(jsonObject, authorizedApp, array);
+            if (!AddObjToJson(jsonObject, authorizedApp, array)) {
+                ACCOUNT_LOGE("Failed to add authorizedApp to json");
+            }
         } else {
             accessibleAccounts = GetVectorStringFromJson(jsonObject, authorizedApp);
         }

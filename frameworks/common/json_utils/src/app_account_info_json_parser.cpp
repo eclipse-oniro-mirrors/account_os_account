@@ -44,6 +44,7 @@ static void ParseTokenInfosFromJson(const cJSON *jsonObject, AppAccountInfo &acc
 CJsonUnique ToJson(const AppAccountInfo &accountInfo)
 {
     auto tokenArray = CreateJsonArray();
+    bool success = true;
     for (const auto &pair : accountInfo.oauthTokens_) {
         const auto &authType = pair.first;
         const auto &tokenInfo = pair.second;
@@ -51,25 +52,37 @@ CJsonUnique ToJson(const AppAccountInfo &accountInfo)
             continue;
         }
         auto tokenObject = CreateJson();
-        AddStringToJson(tokenObject, OAUTH_TYPE, authType);
-        AddStringToJson(tokenObject, OAUTH_TOKEN, tokenInfo.token);
-        AddBoolToJson(tokenObject, OAUTH_TOKEN_STATUS, tokenInfo.status);
-        AddSetStringToJson(tokenObject, OAUTH_AUTH_LIST, tokenInfo.authList);
-        AddObjToArray(tokenArray, tokenObject);
+        if (tokenObject == nullptr) {
+            success = false;
+            break;
+        }
+        success &= AddStringToJson(tokenObject, OAUTH_TYPE, authType);
+        success &= AddStringToJson(tokenObject, OAUTH_TOKEN, tokenInfo.token);
+        success &= AddBoolToJson(tokenObject, OAUTH_TOKEN_STATUS, tokenInfo.status);
+        success &= AddSetStringToJson(tokenObject, OAUTH_AUTH_LIST, tokenInfo.authList);
+        success &= AddObjToArray(tokenArray, tokenObject);
+        if (!success) {
+            return nullptr;
+        }
     }
     auto jsonObject = CreateJson();
+    if (jsonObject == nullptr) {
+        return nullptr;
+    }
 
-    AddStringToJson(jsonObject, OWNER, accountInfo.owner_);
-    AddStringToJson(jsonObject, NAME, accountInfo.name_);
-    AddStringToJson(jsonObject, ALIAS, accountInfo.alias_);
-    AddStringToJson(jsonObject, EXTRA_INFO, accountInfo.extraInfo_);
-    AddIntToJson(jsonObject, APP_INDEX_KEY, static_cast<int>(accountInfo.appIndex_));
-    AddSetStringToJson(jsonObject, AUTHORIZED_APPS, accountInfo.authorizedApps_);
-    AddBoolToJson(jsonObject, SYNC_ENABLE, accountInfo.syncEnable_);
-    AddStringToJson(jsonObject, ASSOCIATED_DATA, accountInfo.associatedData_);
-    AddStringToJson(jsonObject, ACCOUNT_CREDENTIAL, accountInfo.accountCredential_);
-    AddObjToJson(jsonObject, OAUTH_TOKEN_INFOS, tokenArray);
-
+    success &= AddStringToJson(jsonObject, OWNER, accountInfo.owner_);
+    success &= AddStringToJson(jsonObject, NAME, accountInfo.name_);
+    success &= AddStringToJson(jsonObject, ALIAS, accountInfo.alias_);
+    success &= AddStringToJson(jsonObject, EXTRA_INFO, accountInfo.extraInfo_);
+    success &= AddIntToJson(jsonObject, APP_INDEX_KEY, static_cast<int>(accountInfo.appIndex_));
+    success &= AddSetStringToJson(jsonObject, AUTHORIZED_APPS, accountInfo.authorizedApps_);
+    success &= AddBoolToJson(jsonObject, SYNC_ENABLE, accountInfo.syncEnable_);
+    success &= AddStringToJson(jsonObject, ASSOCIATED_DATA, accountInfo.associatedData_);
+    success &= AddStringToJson(jsonObject, ACCOUNT_CREDENTIAL, accountInfo.accountCredential_);
+    success &= AddObjToJson(jsonObject, OAUTH_TOKEN_INFOS, tokenArray);
+    if (!success) {
+        return nullptr;
+    }
     return jsonObject;
 }
 

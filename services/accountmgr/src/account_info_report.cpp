@@ -32,21 +32,31 @@ std::string TransformIntoJson(const std::string &user, int32_t id, ReportEvent e
 {
     auto jsonResult = CreateJson();
 #ifdef SECURITY_GUARDE_ENABLE
-    AddIntToJson(jsonResult, "type", 0);
-    AddIntToJson(jsonResult, "subType", static_cast<int32_t>(event));
+    if (jsonResult == nullptr) {
+        return "";
+    }
+    bool success = true;
+    success &= AddIntToJson(jsonResult, "type", 0);
+    success &= AddIntToJson(jsonResult, "subType", static_cast<int32_t>(event));
     auto userJson = CreateJson();
-    AddStringToJson(userJson, "userName", user);
-    AddIntToJson(userJson, "userId", id);
+    if (userJson == nullptr) {
+        return "";
+    }
+    success &= AddStringToJson(userJson, "userName", user);
+    success &= AddIntToJson(userJson, "userId", id);
 
-    AddObjToJson(jsonResult, "caller", userJson);
-    AddStringToJson(jsonResult, "bootTime",
+    success &= AddObjToJson(jsonResult, "caller", userJson);
+    success &= AddStringToJson(jsonResult, "bootTime",
         std::to_string(MiscServices::TimeServiceClient::GetInstance()->GetBootTimeNs()));
-    AddStringToJson(jsonResult, "wallTime",
+    success &= AddStringToJson(jsonResult, "wallTime",
         std::to_string(MiscServices::TimeServiceClient::GetInstance()->GetWallTimeNs()));
-    AddStringToJson(jsonResult, "outcome", (result == 0) ? "Success" : "Fail");
-    AddStringToJson(jsonResult, "sourceInfo", "");
-    AddStringToJson(jsonResult, "targetInfo", "");
-    AddStringToJson(jsonResult, "extra", "");
+    success &= AddStringToJson(jsonResult, "outcome", (result == 0) ? "Success" : "Fail");
+    success &= AddStringToJson(jsonResult, "sourceInfo", "");
+    success &= AddStringToJson(jsonResult, "targetInfo", "");
+    success &= AddStringToJson(jsonResult, "extra", "");
+    if (!success) {
+        return "";
+    }
 #endif
     return PackJsonToString(jsonResult);
 }
@@ -73,26 +83,39 @@ std::string TransformIntoAccountOperationJson(
 {
 #ifdef SECURITY_GUARDE_ENABLE
     auto jsonResult = CreateJson();
-    AddIntToJson(jsonResult, "operationType", static_cast<int32_t>(operationType));
+    if (jsonResult == nullptr) {
+        return "";
+    }
+    bool success = true;
+    success &= AddIntToJson(jsonResult, "operationType", static_cast<int32_t>(operationType));
     auto sourceJson = CreateJson();
-    AddIntToJson(sourceJson, "sourcePid", accountOperationInfo.pid);
-    AddIntToJson(sourceJson, "sourceUid", accountOperationInfo.uid);
-    AddStringToJson(sourceJson, "sourceUserName", accountOperationInfo.sourceUserName);
-    AddIntToJson(sourceJson, "sourceUserId", accountOperationInfo.sourceUserId);
+    if (sourceJson == nullptr) {
+        return "";
+    }
+    success &= AddIntToJson(sourceJson, "sourcePid", accountOperationInfo.pid);
+    success &= AddIntToJson(sourceJson, "sourceUid", accountOperationInfo.uid);
+    success &= AddStringToJson(sourceJson, "sourceUserName", accountOperationInfo.sourceUserName);
+    success &= AddIntToJson(sourceJson, "sourceUserId", accountOperationInfo.sourceUserId);
 
     auto targetJson = CreateJson();
-    AddStringToJson(targetJson, "targetUserName", accountOperationInfo.targetUserName);
-    AddIntToJson(targetJson, "targetUserId", accountOperationInfo.targetUserId);
+    if (targetJson == nullptr) {
+        return "";
+    }
+    success &= AddStringToJson(targetJson, "targetUserName", accountOperationInfo.targetUserName);
+    success &= AddIntToJson(targetJson, "targetUserId", accountOperationInfo.targetUserId);
 
-    AddObjToJson(jsonResult, "source", sourceJson);
-    AddObjToJson(jsonResult, "target", targetJson);
+    success &= AddObjToJson(jsonResult, "source", sourceJson);
+    success &= AddObjToJson(jsonResult, "target", targetJson);
     int64_t bootTime = MiscServices::TimeServiceClient::GetInstance()->GetBootTimeNs();
     int64_t wallTimeNS = MiscServices::TimeServiceClient::GetInstance()->GetWallTimeNs();
     int64_t happenTime = wallTimeNS / NANO_TO_MILLI;
     int64_t happenTimeNS = wallTimeNS % NANO_TO_MILLI;
-    AddStringToJson(jsonResult, "bootTime", std::to_string(bootTime));
-    AddDoubleToJson(jsonResult, "happenTime", static_cast<double>(happenTime));
-    AddDoubleToJson(jsonResult, "happenTimeNS", static_cast<double>(happenTimeNS));
+    success &= AddStringToJson(jsonResult, "bootTime", std::to_string(bootTime));
+    success &= AddDoubleToJson(jsonResult, "happenTime", static_cast<double>(happenTime));
+    success &= AddDoubleToJson(jsonResult, "happenTimeNS", static_cast<double>(happenTimeNS));
+    if (!success) {
+        return "";
+    }
     return PackJsonToString(jsonResult);
 #else
     return "";

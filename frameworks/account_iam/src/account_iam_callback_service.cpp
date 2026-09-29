@@ -15,6 +15,8 @@
 
 #include "account_iam_callback_service.h"
 
+#include <securec.h>
+
 #include "account_error_no.h"
 #include "account_iam_client.h"
 #include "account_log_wrapper.h"
@@ -204,7 +206,7 @@ DomainCredentialRecipient::DomainCredentialRecipient()
 DomainCredentialRecipient::~DomainCredentialRecipient()
 {
     if (data_.size() > 0) {
-        std::fill(data_.begin(), data_.end(), 0);
+        (void)memset_s(data_.data(), data_.size(), 0, data_.size());
     }
 }
 
@@ -213,7 +215,7 @@ void DomainCredentialRecipient::OnSetData(int32_t authSubType, std::vector<uint8
     std::unique_lock<std::mutex> lock(mutex_);
     data_ = data;
     dataReady_ = true;
-    std::fill(data.begin(), data.end(), 0);
+    (void)memset_s(data.data(), data.size(), 0, data.size());
     cv_.notify_all();
 }
 

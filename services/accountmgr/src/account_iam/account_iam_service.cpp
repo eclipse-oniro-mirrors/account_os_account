@@ -18,6 +18,7 @@
 #include <securec.h>
 #include "account_log_wrapper.h"
 #include "account_permission_manager.h"
+#include "hitrace_adapter.h"
 #include "iget_cred_info_callback.h"
 #include "iinner_os_account_manager.h"
 #include "inner_account_iam_manager.h"
@@ -151,7 +152,8 @@ int32_t AccountIAMService::AddCredential(
     }
     InnerAccountIAMManager::GetInstance().AddCredential(userId, credInfoIam.credentialParameters, idmCallback);
     auto info = const_cast<CredentialParametersIam*>(&credInfoIam);
-    std::fill(info->credentialParameters.token.begin(), info->credentialParameters.token.end(), 0);
+    auto &token = info->credentialParameters.token;
+    (void)memset_s(token.data(), token.size(), 0, token.size());
     return ERR_OK;
 }
 
@@ -167,7 +169,8 @@ int32_t AccountIAMService::UpdateCredential(int32_t userId, const CredentialPara
     }
     InnerAccountIAMManager::GetInstance().UpdateCredential(userId, credInfoIam.credentialParameters, idmCallback);
     auto info = const_cast<CredentialParametersIam *>(&credInfoIam);
-    std::fill(info->credentialParameters.token.begin(), info->credentialParameters.token.end(), 0);
+    auto &token = info->credentialParameters.token;
+    (void)memset_s(token.data(), token.size(), 0, token.size());
     return ERR_OK;
 }
 
@@ -195,7 +198,7 @@ int32_t AccountIAMService::DelCred(
     }
     InnerAccountIAMManager::GetInstance().DelCred(userId, credentialId, authToken, idmCallback);
     auto token = const_cast<std::vector<uint8_t> *>(&authToken);
-    std::fill(token->begin(), token->end(), 0);
+    (void)memset_s(token->data(), token->size(), 0, token->size());
     return ERR_OK;
 }
 
@@ -211,7 +214,7 @@ int32_t AccountIAMService::DelUser(
     }
     InnerAccountIAMManager::GetInstance().DelUser(userId, authToken, idmCallback);
     auto token = const_cast<std::vector<uint8_t> *>(&authToken);
-    std::fill(token->begin(), token->end(), 0);
+    (void)memset_s(token->data(), token->size(), 0, token->size());
     return ERR_OK;
 }
 
@@ -246,6 +249,7 @@ int32_t AccountIAMService::PrepareRemoteAuth(
 int32_t AccountIAMService::AuthUser(
     const AuthParam& authParam, const sptr<IIDMCallback> &idmCallback, uint64_t &contextId)
 {
+    TraceGuard traceGuard("IAM Service AuthUser");
     if (!CheckPermission(PERMISSION_ACCESS_USER_AUTH_INTERNAL)) {
         return ERR_ACCOUNT_COMMON_PERMISSION_DENIED;
     }

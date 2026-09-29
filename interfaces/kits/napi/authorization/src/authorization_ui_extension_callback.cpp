@@ -14,6 +14,9 @@
  */
 
 #include "authorization_ui_extension_callback.h"
+
+#include <securec.h>
+
 #include "account_constants.h"
 #include "account_error_no.h"
 #include "account_log_wrapper.h"
@@ -81,17 +84,17 @@ void UIExtensionCallbackBase::OnResult(int32_t resultCode, const OHOS::AAFwk::Wa
     ACCOUNT_LOGI("ResultCode is %{public}d", resultCode);
     std::vector<int> iamToken = result.GetIntArrayParam(AuthorizationConstants::TOKEN_KEY);
     std::vector<uint8_t> tokenVec(iamToken.begin(), iamToken.end());
-    std::fill(iamToken.begin(), iamToken.end(), 0);
+    (void)memset_s(iamToken.data(), iamToken.size() * sizeof(int), 0, iamToken.size() * sizeof(int));
 
     int32_t accountId = result.GetIntParam(AuthorizationConstants::ACCOUNTID_KEY, -1);
     if (accountId == -1) {
         ACCOUNT_LOGI("AccountId is %{public}d", accountId);
-        std::fill(tokenVec.begin(), tokenVec.end(), 0);
+        (void)memset_s(tokenVec.data(), tokenVec.size(), 0, tokenVec.size());
         return ReleaseHandler(ERR_AUTHORIZATION_CREATE_UI_EXTENSION_ERROR);
     }
 
     ReleaseHandler(ERR_OK, AUTHORIZATION_SUCCESS, tokenVec, accountId);
-    std::fill(tokenVec.begin(), tokenVec.end(), 0);
+    (void)memset_s(tokenVec.data(), tokenVec.size(), 0, tokenVec.size());
 }
 
 void UIExtensionCallbackBase::OnReceive(const OHOS::AAFwk::WantParams& request) { ACCOUNT_LOGI("enter OnReceive"); }

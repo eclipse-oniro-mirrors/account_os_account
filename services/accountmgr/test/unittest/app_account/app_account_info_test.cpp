@@ -956,6 +956,7 @@ HWTEST_F(AppAccountInfoTest, AppAccountInfo_Marshalling_0100, TestSize.Level3)
     // check the data
     EXPECT_EQ(owner, infoPtr->owner_);
     EXPECT_EQ(name, infoPtr->name_);
+    EXPECT_EQ(appAccountInfo.appIndex_, infoPtr->appIndex_);
     EXPECT_EQ(extraInfo, infoPtr->extraInfo_);
     EXPECT_EQ(authorizedApps.size(), infoPtr->authorizedApps_.size());
     EXPECT_EQ(*(authorizedApps.begin()), *(infoPtr->authorizedApps_.begin()));
@@ -1093,34 +1094,216 @@ HWTEST_F(AppAccountInfoTest, AppAccountInfo_ToJson_FromJson_001, TestSize.Level1
 }
 
 /**
- * @tc.name: AppAccountInfo_ToJson_FromJson_AppIndex_001
- * @tc.desc: appIndex_ must survive ToJson/FromJson round-trip; legacy JSON without
- *          appIndex field defaults to 0. Regression for appIndex serialization fix.
+ * @tc.name: AppAccountInfo_ToJson_FieldCompleteness_001
+ * @tc.desc: Test ToJson(AppAccountInfo) returns non-null and all fields are present.
  * @tc.type: FUNC
- * @tc.require
+ * @tc.require:
  */
-HWTEST_F(AppAccountInfoTest, AppAccountInfo_ToJson_FromJson_AppIndex_001, TestSize.Level1)
+HWTEST_F(AppAccountInfoTest, AppAccountInfo_ToJson_FieldCompleteness_001, TestSize.Level3)
 {
-    // non-zero appIndex must survive round-trip
-    for (uint32_t idx : std::vector<uint32_t>{0, 1, 2, 100}) {
-        AppAccountInfo info;
-        info.owner_ = STRING_OWNER;
-        info.name_ = STRING_NAME;
-        info.appIndex_ = idx;
-        auto jsonObject = ToJson(info);
-        ASSERT_NE(jsonObject, nullptr);
-        AppAccountInfo restored;
-        FromJson(jsonObject.get(), restored);
-        EXPECT_EQ(restored.appIndex_, idx) << "appIndex=" << idx;
-    }
+    ACCOUNT_LOGI("AppAccountInfo_ToJson_FieldCompleteness_001");
 
-    // legacy JSON without appIndex field → FromJson keeps constructor default 0
-    const char *legacyJson = "{\"owner\":\"com.example.owner\",\"name\":\"name\"}";
-    auto legacyObj = CreateJsonFromString(legacyJson);
-    ASSERT_NE(legacyObj, nullptr);
-    AppAccountInfo legacyInfo;
-    FromJson(legacyObj.get(), legacyInfo);
-    EXPECT_EQ(legacyInfo.appIndex_, 0u);
+    AppAccountInfo testAppAccountInfo;
+    testAppAccountInfo.owner_ = STRING_OWNER;
+    testAppAccountInfo.name_ = STRING_NAME;
+    testAppAccountInfo.alias_ = STRING_TOKEN;
+    testAppAccountInfo.extraInfo_ = STRING_EXTRA_INFO;
+    testAppAccountInfo.syncEnable_ = SYNC_ENABLE_TRUE;
+    testAppAccountInfo.associatedData_ = STRING_ASSOCIATED_DATA;
+    testAppAccountInfo.accountCredential_ = STRING_ACCOUNT_CREDENTIAL;
+    testAppAccountInfo.authorizedApps_ = {STRING_BUNDLE_NAME};
+
+    OAuthTokenInfo tokenInfo1;
+    tokenInfo1.authType = STRING_AUTH_TYPE;
+    tokenInfo1.token = STRING_TOKEN;
+    tokenInfo1.status = true;
+    testAppAccountInfo.oauthTokens_[STRING_AUTH_TYPE] = tokenInfo1;
+
+    auto jsonObject = ToJson(testAppAccountInfo);
+    ASSERT_NE(jsonObject, nullptr);
+
+    EXPECT_TRUE(IsKeyExist(jsonObject, OWNER));
+    EXPECT_TRUE(IsKeyExist(jsonObject, NAME));
+    EXPECT_TRUE(IsKeyExist(jsonObject, ALIAS));
+    EXPECT_TRUE(IsKeyExist(jsonObject, EXTRA_INFO));
+    EXPECT_TRUE(IsKeyExist(jsonObject, AUTHORIZED_APPS));
+    EXPECT_TRUE(IsKeyExist(jsonObject, SYNC_ENABLE));
+    EXPECT_TRUE(IsKeyExist(jsonObject, ASSOCIATED_DATA));
+    EXPECT_TRUE(IsKeyExist(jsonObject, ACCOUNT_CREDENTIAL));
+    EXPECT_TRUE(IsKeyExist(jsonObject, OAUTH_TOKEN_INFOS));
+
+    EXPECT_EQ(STRING_OWNER, GetStringFromJson(jsonObject, OWNER));
+    EXPECT_EQ(STRING_NAME, GetStringFromJson(jsonObject, NAME));
+}
+
+/**
+ * @tc.name: AppAccountInfo_ToJson_EmptyOAuthTokens_001
+ * @tc.desc: Test ToJson(AppAccountInfo) with no OAuth tokens returns non-null.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AppAccountInfoTest, AppAccountInfo_ToJson_EmptyOAuthTokens_001, TestSize.Level3)
+{
+    ACCOUNT_LOGI("AppAccountInfo_ToJson_EmptyOAuthTokens_001");
+
+    AppAccountInfo testAppAccountInfo;
+    testAppAccountInfo.owner_ = STRING_OWNER;
+    testAppAccountInfo.name_ = STRING_NAME;
+    testAppAccountInfo.oauthTokens_.clear();
+
+    auto jsonObject = ToJson(testAppAccountInfo);
+    ASSERT_NE(jsonObject, nullptr);
+    EXPECT_TRUE(IsKeyExist(jsonObject, OAUTH_TOKEN_INFOS));
+    EXPECT_TRUE(IsKeyExist(jsonObject, OWNER));
+    EXPECT_TRUE(IsKeyExist(jsonObject, NAME));
+}
+
+/**
+ * @tc.name: AppAccountInfo_ToJson_RoundTrip_001
+ * @tc.desc: Test ToJson -> FromJson round trip preserves all fields.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AppAccountInfoTest, AppAccountInfo_ToJson_RoundTrip_001, TestSize.Level3)
+{
+    ACCOUNT_LOGI("AppAccountInfo_ToJson_RoundTrip_001");
+
+    AppAccountInfo originalInfo;
+    originalInfo.owner_ = STRING_OWNER;
+    originalInfo.name_ = STRING_NAME;
+    originalInfo.alias_ = STRING_TOKEN;
+    originalInfo.appIndex_ = 10;
+    originalInfo.extraInfo_ = STRING_EXTRA_INFO;
+    originalInfo.syncEnable_ = SYNC_ENABLE_TRUE;
+    originalInfo.associatedData_ = STRING_ASSOCIATED_DATA;
+    originalInfo.accountCredential_ = STRING_ACCOUNT_CREDENTIAL;
+    originalInfo.authorizedApps_ = {STRING_BUNDLE_NAME, STRING_BUNDLE_NAME_TWO};
+
+    OAuthTokenInfo tokenInfo;
+    tokenInfo.authType = STRING_AUTH_TYPE;
+    tokenInfo.token = STRING_TOKEN;
+    tokenInfo.status = true;
+    tokenInfo.authList = {STRING_AUTH_TYPE_TWO};
+    originalInfo.oauthTokens_[STRING_AUTH_TYPE] = tokenInfo;
+
+    auto jsonObject = ToJson(originalInfo);
+    ASSERT_NE(jsonObject, nullptr);
+
+    AppAccountInfo roundTripInfo;
+    FromJson(jsonObject.get(), roundTripInfo);
+
+    EXPECT_EQ(originalInfo.owner_, roundTripInfo.owner_);
+    EXPECT_EQ(originalInfo.name_, roundTripInfo.name_);
+    EXPECT_EQ(originalInfo.alias_, roundTripInfo.alias_);
+    EXPECT_EQ(originalInfo.appIndex_, roundTripInfo.appIndex_);
+    EXPECT_EQ(originalInfo.extraInfo_, roundTripInfo.extraInfo_);
+    EXPECT_EQ(originalInfo.syncEnable_, roundTripInfo.syncEnable_);
+    EXPECT_EQ(originalInfo.associatedData_, roundTripInfo.associatedData_);
+    EXPECT_EQ(originalInfo.accountCredential_, roundTripInfo.accountCredential_);
+    EXPECT_EQ(originalInfo.authorizedApps_, roundTripInfo.authorizedApps_);
+    EXPECT_EQ(originalInfo.oauthTokens_.size(), roundTripInfo.oauthTokens_.size());
+    EXPECT_EQ(roundTripInfo.oauthTokens_[STRING_AUTH_TYPE].token, tokenInfo.token);
+    EXPECT_EQ(roundTripInfo.oauthTokens_[STRING_AUTH_TYPE].status, tokenInfo.status);
+    EXPECT_EQ(roundTripInfo.oauthTokens_[STRING_AUTH_TYPE].authList, tokenInfo.authList);
+}
+
+/**
+ * @tc.name: AppAccountInfo_AppIndex_DefaultValue_001
+ * @tc.desc: Test appIndex_ default value when not set.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AppAccountInfoTest, AppAccountInfo_AppIndex_DefaultValue_001, TestSize.Level3)
+{
+    ACCOUNT_LOGI("AppAccountInfo_AppIndex_DefaultValue_001");
+
+    AppAccountInfo info;
+    EXPECT_EQ(info.GetAppIndex(), static_cast<uint32_t>(0));
+
+    info.SetAppIndex(42);
+    EXPECT_EQ(info.GetAppIndex(), static_cast<uint32_t>(42));
+}
+
+/**
+ * @tc.name: AppAccountInfo_SetAssociatedData_ReturnCheck_001
+ * @tc.desc: Test SetAssociatedData returns ERR_OK on success.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AppAccountInfoTest, AppAccountInfo_SetAssociatedData_ReturnCheck_001, TestSize.Level3)
+{
+    ACCOUNT_LOGI("AppAccountInfo_SetAssociatedData_ReturnCheck_001");
+
+    AppAccountInfo appAccountInfo;
+    appAccountInfo.name_ = STRING_NAME;
+    appAccountInfo.owner_ = STRING_OWNER;
+
+    ErrCode ret = appAccountInfo.SetAssociatedData(STRING_ASSOCIATED_KEY, STRING_ASSOCIATED_VALUE);
+    EXPECT_EQ(ret, ERR_OK);
+
+    std::string retrievedValue;
+    ret = appAccountInfo.GetAssociatedData(STRING_ASSOCIATED_KEY, retrievedValue);
+    EXPECT_EQ(ret, ERR_OK);
+    EXPECT_EQ(STRING_ASSOCIATED_VALUE, retrievedValue);
+}
+
+/**
+ * @tc.name: AppAccountInfo_SetAccountCredential_ReturnCheck_001
+ * @tc.desc: Test SetAccountCredential returns ERR_OK on success.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AppAccountInfoTest, AppAccountInfo_SetAccountCredential_ReturnCheck_001, TestSize.Level3)
+{
+    ACCOUNT_LOGI("AppAccountInfo_SetAccountCredential_ReturnCheck_001");
+
+    AppAccountInfo appAccountInfo;
+    appAccountInfo.name_ = STRING_NAME;
+    appAccountInfo.owner_ = STRING_OWNER;
+
+    ErrCode ret = appAccountInfo.SetAccountCredential(STRING_CREDENTIAL_TYPE, STRING_CREDENTIAL);
+    EXPECT_EQ(ret, ERR_OK);
+
+    std::string retrievedCredential;
+    ret = appAccountInfo.GetAccountCredential(STRING_CREDENTIAL_TYPE, retrievedCredential);
+    EXPECT_EQ(ret, ERR_OK);
+    EXPECT_EQ(STRING_CREDENTIAL, retrievedCredential);
+}
+
+/**
+ * @tc.name: AppAccountInfo_SetAssociatedData_EmptyKey_001
+ * @tc.desc: Test SetAssociatedData with empty key returns error.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AppAccountInfoTest, AppAccountInfo_SetAssociatedData_EmptyKey_001, TestSize.Level3)
+{
+    ACCOUNT_LOGI("AppAccountInfo_SetAssociatedData_EmptyKey_001");
+
+    AppAccountInfo appAccountInfo;
+    appAccountInfo.name_ = STRING_NAME;
+    appAccountInfo.owner_ = STRING_OWNER;
+
+    ErrCode ret = appAccountInfo.SetAssociatedData(STRING_EMPTY, STRING_ASSOCIATED_VALUE);
+    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR);
+}
+
+/**
+ * @tc.name: AppAccountInfo_SetAccountCredential_EmptyType_001
+ * @tc.desc: Test SetAccountCredential with empty credentialType returns error.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AppAccountInfoTest, AppAccountInfo_SetAccountCredential_EmptyType_001, TestSize.Level3)
+{
+    ACCOUNT_LOGI("AppAccountInfo_SetAccountCredential_EmptyType_001");
+
+    AppAccountInfo appAccountInfo;
+    appAccountInfo.name_ = STRING_NAME;
+    appAccountInfo.owner_ = STRING_OWNER;
+
+    ErrCode ret = appAccountInfo.SetAccountCredential(STRING_EMPTY, STRING_CREDENTIAL);
+    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR);
 }
 
 /**

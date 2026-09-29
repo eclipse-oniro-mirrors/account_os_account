@@ -35,7 +35,7 @@ typedef UserIam::UserAuth::Attributes Attributes;
 
 IDMContext::~IDMContext()
 {
-    std::fill(token.begin(), token.end(), 0);
+    (void)memset_s(token.data(), token.size(), 0, token.size());
 }
 
 #ifdef HAS_USER_AUTH_PART

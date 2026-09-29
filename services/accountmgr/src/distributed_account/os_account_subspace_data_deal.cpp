@@ -272,22 +272,30 @@ std::string OsAccountSubProfileDataDeal::SerializeSubProfileInfoToJson(
     const OsAccountSubspaceInfo &info) const
 {
     auto jsonObj = CreateJson();
-    AddIntToJson(jsonObj, JSON_KEY_SUBSPACE_ID, info.subspaceId);
-    AddIntToJson(jsonObj, JSON_KEY_OS_ACCOUNT_ID, info.userId_);
-    AddBoolToJson(jsonObj, JSON_KEY_IS_CREATE_COMPLETED, info.isCreateCompleted);
-    AddBoolToJson(jsonObj, JSON_KEY_TO_BE_REMOVED, info.toBeRemoved);
-    AddIntToJson(jsonObj, JSON_KEY_BIND_TIME, static_cast<int32_t>(info.bindTime_));
-    AddIntToJson(jsonObj, JSON_KEY_VERSION, info.version_);
-    AddStringToJson(jsonObj, JSON_KEY_OHOSACCOUNT_NAME, info.ohosAccountInfo_.name_);
-    AddStringToJson(jsonObj, JSON_KEY_OHOSACCOUNT_RAW_UID, info.ohosAccountInfo_.GetRawUid());
-    AddStringToJson(jsonObj, JSON_KEY_OHOSACCOUNT_UID, info.ohosAccountInfo_.uid_);
-    AddIntToJson(jsonObj, JSON_KEY_OHOSACCOUNT_STATUS, static_cast<int32_t>(info.ohosAccountInfo_.status_));
-    AddIntToJson(jsonObj, JSON_KEY_OHOSACCOUNT_CALLINGUID, info.ohosAccountInfo_.callingUid_);
-    AddStringToJson(jsonObj, JSON_KEY_OHOSACCOUNT_NICKNAME, info.ohosAccountInfo_.nickname_);
-    AddStringToJson(jsonObj, JSON_KEY_OHOSACCOUNT_SCALABLEDATA, info.ohosAccountInfo_.scalableData_);
-    AddIntToJson(jsonObj, JSON_KEY_SUBSPACE_INDEX, info.index);
-    AddIntToJson(jsonObj, JSON_KEY_SUBSPACE_OFFSET, info.subspaceOffset);
-    AddInt64ToJson(jsonObj, JSON_KEY_SUBSPACE_CREATE_TIME, info.createTime);
+    if (jsonObj == nullptr) {
+        return "";
+    }
+    bool success = true;
+    success &= AddIntToJson(jsonObj, JSON_KEY_SUBSPACE_ID, info.subspaceId);
+    success &= AddIntToJson(jsonObj, JSON_KEY_OS_ACCOUNT_ID, info.userId_);
+    success &= AddBoolToJson(jsonObj, JSON_KEY_IS_CREATE_COMPLETED, info.isCreateCompleted);
+    success &= AddBoolToJson(jsonObj, JSON_KEY_TO_BE_REMOVED, info.toBeRemoved);
+    success &= AddIntToJson(jsonObj, JSON_KEY_BIND_TIME, static_cast<int32_t>(info.bindTime_));
+    success &= AddIntToJson(jsonObj, JSON_KEY_VERSION, info.version_);
+    success &= AddStringToJson(jsonObj, JSON_KEY_OHOSACCOUNT_NAME, info.ohosAccountInfo_.name_);
+    success &= AddStringToJson(jsonObj, JSON_KEY_OHOSACCOUNT_RAW_UID, info.ohosAccountInfo_.GetRawUid());
+    success &= AddStringToJson(jsonObj, JSON_KEY_OHOSACCOUNT_UID, info.ohosAccountInfo_.uid_);
+    success &= AddIntToJson(jsonObj, JSON_KEY_OHOSACCOUNT_STATUS, static_cast<int32_t>(info.ohosAccountInfo_.status_));
+    success &= AddIntToJson(jsonObj, JSON_KEY_OHOSACCOUNT_CALLINGUID, info.ohosAccountInfo_.callingUid_);
+    success &= AddStringToJson(jsonObj, JSON_KEY_OHOSACCOUNT_NICKNAME, info.ohosAccountInfo_.nickname_);
+    success &= AddStringToJson(jsonObj, JSON_KEY_OHOSACCOUNT_SCALABLEDATA, info.ohosAccountInfo_.scalableData_);
+    success &= AddIntToJson(jsonObj, JSON_KEY_SUBSPACE_INDEX, info.index);
+    success &= AddIntToJson(jsonObj, JSON_KEY_SUBSPACE_OFFSET, info.subspaceOffset);
+    success &= AddInt64ToJson(jsonObj, JSON_KEY_SUBSPACE_CREATE_TIME, info.createTime);
+    if (!success) {
+        ACCOUNT_LOGE("Failed to serialize subprofile info to json");
+        return "";
+    }
     return PackJsonToString(jsonObj);
 }
 

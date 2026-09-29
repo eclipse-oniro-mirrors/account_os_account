@@ -135,12 +135,47 @@ ohos_unittest("PrivilegesMapTest") {
   part_name = "os_account"
 }
 
+ohos_unittest("AppAccountInfoJsonParserMockTest") {
+  module_out_path = module_output_path
+
+  sources = [
+    "${services_path}/accountmgr/test/unittest/os_account/mock/mock_json_util.cpp",
+    "${common_path}/json_utils/src/app_account_info_json_parser.cpp",
+    "${common_path}/log/src/account_log_wrapper.cpp",
+    "app_account_info_json_parser_mock_test.cpp",
+  ]
+
+  include_dirs = [
+    "${services_path}/accountmgr/test/unittest/os_account/mock/",
+    "${common_path}/json_utils/include",
+    "${app_account_innerkits_native_path}/include",
+    "${innerkits_common}/include",
+  ]
+
+  configs = [
+    "${common_path}:account_common_config",
+    "${common_path}/test:common_test_config",
+  ]
+
+  deps = [ "${common_path}:libaccount_common" ]
+
+  external_deps = [
+    "cJSON:cjson",
+    "c_utils:utils",
+    "googletest:gtest_main",
+    "hilog:libhilog",
+  ]
+
+  part_name = "os_account"
+}
+
 group("unittest") {
   testonly = true
 
   deps = [
     ":AccountCommonTest",
     ":AccountJsonTest",
+    ":AppAccountInfoJsonParserMockTest",
     ":PrivilegesMapTest",
   ]
 }

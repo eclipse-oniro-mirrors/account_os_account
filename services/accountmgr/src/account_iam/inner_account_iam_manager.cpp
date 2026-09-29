@@ -16,11 +16,14 @@
 #include "inner_account_iam_manager.h"
 
 #include <thread>
+#include <securec.h>
+
 #include "account_constants.h"
 #include "account_iam_callback.h"
 #include "account_iam_hisysevent_utils.h"
 #include "account_log_wrapper.h"
 #include "domain_account_callback_service.h"
+#include "hitrace_adapter.h"
 #include "iinner_os_account_manager.h"
 #ifdef SUPPORT_AUTHORIZATION
 #include "inner_authorization_manager.h"
@@ -324,6 +327,7 @@ void InnerAccountIAMManager::CopyAuthParam(const AuthParam &authParam, UserIam::
 int32_t InnerAccountIAMManager::AuthUser(
     AuthParam &authParam, const sptr<IIDMCallback> &callback, uint64_t &contextId)
 {
+    TraceGuard traceGuard("IAM AuthUser");
     if (callback == nullptr) {
         ACCOUNT_LOGE("callback is nullptr");
         return ERR_ACCOUNT_COMMON_NULL_PTR_ERROR;
@@ -384,7 +388,7 @@ std::shared_ptr<AuthCallback> InnerAccountIAMManager::CreateAuthCallbackWrapper(
             return nullptr;
         }
         authParam.challenge = challenge;
-        std::fill(challenge.begin(), challenge.end(), 0);
+        (void)memset_s(challenge.data(), challenge.size(), 0, challenge.size());
         return std::make_shared<AuthorizationAuthCallback>(authParam, callback, sessionId);
     }
 #endif // SUPPORT_AUTHORIZATION
@@ -534,6 +538,7 @@ void InnerAccountIAMManager::GetEnrolledId(
 void InnerAccountIAMManager::HandleFileKeyException(int32_t userId, const std::vector<uint8_t> &secret,
     const std::vector<uint8_t> &token)
 {
+    TraceGuard traceGuard("IAM HandleFileKeyException");
     std::string path = Constants::USER_INFO_BASE + Constants::PATH_SEPARATOR + std::to_string(userId) +
         Constants::PATH_SEPARATOR + Constants::USER_SECRET_FLAG_FILE_NAME;
     auto accountFileOperator = std::make_shared<AccountFileOperator>();
@@ -611,6 +616,7 @@ void InnerAccountIAMManager::SetState(int32_t userId, IAMState state)
 
 ErrCode InnerAccountIAMManager::UpdateStorageKeyContext(const int32_t userId)
 {
+    TraceGuard traceGuard("IAM StorageManager UpdateKeyContext");
     int times = 0;
     ErrCode errCode = ERR_OK;
     while (times < MAX_RETRY_TIMES) {
@@ -646,6 +652,7 @@ ErrCode InnerAccountIAMManager::InnerUpdateStorageKeyContext(const int32_t userI
 ErrCode InnerAccountIAMManager::UpdateStorageUserAuth(int32_t userId, uint64_t secureUid,
     const std::vector<uint8_t> &token, const std::vector<uint8_t> &oldSecret, const std::vector<uint8_t> &newSecret)
 {
+    TraceGuard traceGuard("IAM StorageManager UpdateUserAuth");
     int times = 0;
     ErrCode errCode = ERR_OK;
     while (times < MAX_RETRY_TIMES) {
@@ -707,6 +714,7 @@ ErrCode InnerAccountIAMManager::UpdateUserAuthWithRecoveryKey(const std::vector<
 
 ErrCode InnerAccountIAMManager::GetLockScreenStatus(uint32_t userId, bool &lockScreenStatus)
 {
+    TraceGuard traceGuard("IAM StorageManager GetLockScreenStatus");
     int times = 0;
     ErrCode errCode = ERR_OK;
     while (times < MAX_RETRY_TIMES) {
@@ -741,6 +749,7 @@ ErrCode InnerAccountIAMManager::InnerGetLockScreenStatus(uint32_t userId, bool &
 ErrCode InnerAccountIAMManager::UnlockUserScreen(
     int32_t userId, const std::vector<uint8_t> &token, const std::vector<uint8_t> &secret)
 {
+    TraceGuard traceGuard("IAM StorageManager UnlockUserScreen");
     int times = 0;
     ErrCode errCode = ERR_OK;
     while (times < MAX_RETRY_TIMES) {
@@ -776,6 +785,7 @@ ErrCode InnerAccountIAMManager::InnerUnlockUserScreen(
 ErrCode InnerAccountIAMManager::ActivateUserKey(
     int32_t userId, const std::vector<uint8_t> &token, const std::vector<uint8_t> &secret)
 {
+    TraceGuard traceGuard("IAM StorageManager ActiveUserKey");
     std::lock_guard<std::mutex> userLock(*GetOperatingUserLock(userId));
     int times = 0;
     ErrCode errCode = ERR_OK;
@@ -811,6 +821,7 @@ ErrCode InnerAccountIAMManager::InnerActivateUserKey(
 
 ErrCode InnerAccountIAMManager::PrepareStartUser(int32_t userId)
 {
+    TraceGuard traceGuard("IAM StorageManager PrepareStartUser");
     int times = 0;
     ErrCode errCode = ERR_OK;
     while (times < MAX_RETRY_TIMES) {
@@ -899,6 +910,7 @@ ErrCode InnerAccountIAMManager::CheckNeedReactivateUserKey(int32_t userId, bool 
 ErrCode InnerAccountIAMManager::UnlockUserStorage(int32_t accountId, const std::vector<uint8_t> &token,
     const std::vector<uint8_t> &secret, bool &isUpdateVerifiedStatus)
 {
+    TraceGuard traceGuard("IAM UnlockUserStorage");
     if (secret.empty()) {
         isUpdateVerifiedStatus = false;
         ACCOUNT_LOGW("Secret is empty, skip unlock user storage");

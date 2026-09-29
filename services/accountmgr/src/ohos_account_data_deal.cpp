@@ -230,23 +230,44 @@ ErrCode OhosAccountDataDeal::AccountInfoToJson(const AccountInfo &accountInfo)
     return SaveAccountInfo(accountInfo);
 }
 
+static CJsonUnique SerializeAccountInfoToJson(const AccountInfo &accountInfo)
+{
+    auto jsonData = CreateJson();
+    if (jsonData == nullptr) {
+        ACCOUNT_LOGE("Failed to create json object");
+        return nullptr;
+    }
+    bool success = true;
+    success &= AddIntToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_VERSION, accountInfo.version_);
+    success &= AddIntToJson(jsonData, DATADEAL_JSON_KEY_BIND_TIME, accountInfo.bindTime_);
+    success &= AddInt64ToJson(jsonData, DATADEAL_JSON_KEY_CREATE_TIME, accountInfo.createTime_);
+    success &= AddIntToJson(jsonData, DATADEAL_JSON_KEY_USERID, accountInfo.userId_);
+    success &= AddStringToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_NAME, accountInfo.ohosAccountInfo_.name_);
+    success &= AddStringToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_RAW_UID,
+        accountInfo.ohosAccountInfo_.GetRawUid());
+    success &= AddStringToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_UID, accountInfo.ohosAccountInfo_.uid_);
+    success &= AddIntToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_STATUS, accountInfo.ohosAccountInfo_.status_);
+    success &= AddIntToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_CALLINGUID,
+        accountInfo.ohosAccountInfo_.callingUid_);
+    success &= AddStringToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_NICKNAME,
+        accountInfo.ohosAccountInfo_.nickname_);
+    success &= AddStringToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_SCALABLEDATA,
+        accountInfo.ohosAccountInfo_.scalableData_);
+    if (!success) {
+        ACCOUNT_LOGE("Failed to serialize account info to json");
+        return nullptr;
+    }
+    return jsonData;
+}
+
 ErrCode OhosAccountDataDeal::SaveAccountInfo(const AccountInfo &accountInfo)
 {
     std::lock_guard<std::mutex> lock(accountInfoFileLock_);
 
-    std::string scalableDataStr = accountInfo.ohosAccountInfo_.scalableData_;
-    auto jsonData = CreateJson();
-    AddIntToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_VERSION, accountInfo.version_);
-    AddIntToJson(jsonData, DATADEAL_JSON_KEY_BIND_TIME, accountInfo.bindTime_);
-    AddInt64ToJson(jsonData, DATADEAL_JSON_KEY_CREATE_TIME, accountInfo.createTime_);
-    AddIntToJson(jsonData, DATADEAL_JSON_KEY_USERID, accountInfo.userId_);
-    AddStringToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_NAME, accountInfo.ohosAccountInfo_.name_);
-    AddStringToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_RAW_UID, accountInfo.ohosAccountInfo_.GetRawUid());
-    AddStringToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_UID, accountInfo.ohosAccountInfo_.uid_);
-    AddIntToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_STATUS, accountInfo.ohosAccountInfo_.status_);
-    AddIntToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_CALLINGUID, accountInfo.ohosAccountInfo_.callingUid_);
-    AddStringToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_NICKNAME, accountInfo.ohosAccountInfo_.nickname_);
-    AddStringToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_SCALABLEDATA, scalableDataStr);
+    auto jsonData = SerializeAccountInfoToJson(accountInfo);
+    if (jsonData == nullptr) {
+        return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+    }
 
     std::string avatarFile = configFileDir_ + std::to_string(accountInfo.userId_) + ACCOUNT_AVATAR_NAME;
     ErrCode ret = accountFileOperator_->InputFileByPathAndContentWithTransaction(
@@ -275,6 +296,30 @@ ErrCode OhosAccountDataDeal::SaveAccountInfo(const AccountInfo &accountInfo)
     accountFileWatcherMgr_.AddAccountInfoDigest(accountInfoValue, configFile);
 #endif // ENABLE_FILE_WATCHER
     return ret;
+}
+
+static ErrCode FillAvatarIntoJson(CJsonUnique &jsonData, const std::string &configFileDir,
+    const std::shared_ptr<AccountFileOperator> &accountFileOperator, int32_t userId, const std::string &filePath)
+{
+    std::string avatarData;
+    if (IsKeyExist(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_AVATAR)) {
+        cJSON *it = GetItemFromJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_AVATAR);
+        if (IsString(it)) {
+            if (!AddStringToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_AVATAR, it->valuestring)) {
+                ACCOUNT_LOGE("Failed to add avatar to json, filePath=%{public}s", filePath.c_str());
+                return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+            }
+        }
+    } else {
+        std::string avatarFile = configFileDir + std::to_string(userId) + ACCOUNT_AVATAR_NAME;
+        if (accountFileOperator->GetFileContentByPath(avatarFile, avatarData) == ERR_OK) {
+            if (!AddStringToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_AVATAR, avatarData)) {
+                ACCOUNT_LOGE("Failed to add avatar to json, filePath=%{public}s", filePath.c_str());
+                return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+            }
+        }
+    }
+    return ERR_OK;
 }
 
 ErrCode OhosAccountDataDeal::ParseJsonFromFile(const std::string &filePath, CJsonUnique &jsonData, int32_t userId)
@@ -310,19 +355,7 @@ ErrCode OhosAccountDataDeal::ParseJsonFromFile(const std::string &filePath, CJso
             ERR_ACCOUNT_DATADEAL_JSON_FILE_CORRUPTION, "Invalid json file: " + filePath);
         return ERR_ACCOUNT_DATADEAL_JSON_FILE_CORRUPTION;
     }
-    std::string avatarData;
-    if (IsKeyExist(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_AVATAR)) {
-        cJSON *it = GetItemFromJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_AVATAR);
-        if (IsString(it)) {
-            AddStringToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_AVATAR,  it->valuestring);
-        }
-    } else {
-        std::string avatarFile = configFileDir_ + std::to_string(userId) + ACCOUNT_AVATAR_NAME;
-        if (accountFileOperator_->GetFileContentByPath(avatarFile, avatarData) == ERR_OK) {
-            AddStringToJson(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_AVATAR,  avatarData);
-        }
-    }
-    return ERR_OK;
+    return FillAvatarIntoJson(jsonData, configFileDir_, accountFileOperator_, userId, filePath);
 }
 
 template <typename T, typename Callback>

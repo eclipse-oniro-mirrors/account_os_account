@@ -25,6 +25,7 @@
 #include "account_iam_info.h"
 #include "account_info_report.h"
 #include "account_log_wrapper.h"
+#include "hitrace_adapter.h"
 #include "iam_common_defines.h"
 #include "iinner_os_account_manager.h"
 #include "inner_account_iam_manager.h"
@@ -103,9 +104,9 @@ UpdateCredInfo::UpdateCredInfo(const Attributes &extraInfo)
 
 UpdateCredInfo::~UpdateCredInfo()
 {
-    std::fill(token.begin(), token.end(), 0);
-    std::fill(newSecret.begin(), newSecret.end(), 0);
-    std::fill(oldSecret.begin(), oldSecret.end(), 0);
+    (void)memset_s(token.data(), token.size(), 0, token.size());
+    (void)memset_s(newSecret.data(), newSecret.size(), 0, newSecret.size());
+    (void)memset_s(oldSecret.data(), oldSecret.size(), 0, oldSecret.size());
 }
 
 ReEnrollCallback::ReEnrollCallback(const sptr<IIDMCallback> &innerCallback,
@@ -165,7 +166,7 @@ ErrCode AuthCallback::InnerHandleReEnroll(const std::vector<uint8_t> &token)
         .additionalInfo = REENROLL_ADDITIONAL_INFO
     };
     InnerAccountIAMManager::GetInstance().UpdateCredential(userId_, credInfo, callback);
-    std::fill(credInfo.token.begin(), credInfo.token.end(), 0);
+    (void)memset_s(credInfo.token.data(), credInfo.token.size(), 0, credInfo.token.size());
     std::unique_lock<std::mutex> lock(callback->mutex_);
     bool done = callback->onResultCondition_.wait_for(lock, std::chrono::seconds(Constants::REENROLL_WAIT_TIME),
         [cb = callback]() { return cb->isCalled_; });
@@ -254,7 +255,7 @@ ErrCode AuthCallback::HandleAuthResult(const Attributes &extraInfo, int32_t acco
         secret.clear();
     }
     ErrCode ret = UnlockAccount(accountId, token, secret, isUpdateVerifiedStatus);
-    std::fill(secret.begin(), secret.end(), 0);
+    (void)memset_s(secret.data(), secret.size(), 0, secret.size());
     if (ret != ERR_OK) {
         int32_t remainTimes = 0;
         int32_t freezingTime = 0;
@@ -264,7 +265,7 @@ ErrCode AuthCallback::HandleAuthResult(const Attributes &extraInfo, int32_t acco
         errInfo.SetInt32Value(Attributes::AttributeKey::ATTR_REMAIN_TIMES, remainTimes);
         errInfo.SetInt32Value(Attributes::AttributeKey::ATTR_FREEZING_TIME, freezingTime);
         innerCallback_->OnResult(ResultCode::FAIL, errInfo.Serialize());
-        std::fill(token.begin(), token.end(), 0);
+        (void)memset_s(token.data(), token.size(), 0, token.size());
         return ret;
     }
 #ifdef SUPPORT_DOMAIN_ACCOUNTS
@@ -272,7 +273,7 @@ ErrCode AuthCallback::HandleAuthResult(const Attributes &extraInfo, int32_t acco
     InnerDomainAccountManager::GetInstance().AuthWithToken(accountId, token);
 #endif // SUPPORT_DOMAIN_ACCOUNTS
     HandleReEnroll(extraInfo, accountId, token);
-    std::fill(token.begin(), token.end(), 0);
+    (void)memset_s(token.data(), token.size(), 0, token.size());
     return ret;
 }
 
@@ -333,6 +334,7 @@ inline static bool NeedReportAuthError(int32_t result, AuthType authType)
 
 void AuthCallback::OnResult(int32_t result, const Attributes &extraInfo)
 {
+    TraceGuard traceGuard("IAM AuthCallback OnResult");
     int32_t authedAccountId = 0;
     if (!extraInfo.GetInt32Value(Attributes::AttributeKey::ATTR_USER_ID, authedAccountId)) {
         ACCOUNT_LOGE("Get account id from auth result failed");
@@ -452,7 +454,7 @@ AddCredCallback::AddCredCallback(uint32_t userId, const CredentialParameters &cr
 
 AddCredCallback::~AddCredCallback()
 {
-    std::fill(credInfo_.token.begin(), credInfo_.token.end(), 0);
+    (void)memset_s(credInfo_.token.data(), credInfo_.token.size(), 0, credInfo_.token.size());
 }
 
 void AddCredCallback::SetDeathRecipient(const sptr<IDMCallbackDeathRecipient> &deathRecipient)
@@ -487,6 +489,7 @@ inline static void ReadFromAttribute(const Attributes &extraInfo, uint64_t &cred
 
 void AddCredCallback::OnResult(int32_t result, const Attributes &extraInfo)
 {
+    TraceGuard traceGuard("IAM AddCred OnResult");
     std::unique_lock<std::mutex> lock(mutex_);
     ACCOUNT_LOGI("Add cred result, userId:%{public}d, authType:%{public}d, result:%{public}d.",
         userId_, credInfo_.authType, result);
@@ -509,8 +512,8 @@ void AddCredCallback::OnResult(int32_t result, const Attributes &extraInfo)
         if (!isDomainUnlockEnabled_) {
             code = AddUserKey(userId_, secureUid, token, {}, newSecret);
         }
-        std::fill(newSecret.begin(), newSecret.end(), 0);
-        std::fill(token.begin(), token.end(), 0);
+        (void)memset_s(newSecret.data(), newSecret.size(), 0, newSecret.size());
+        (void)memset_s(token.data(), token.size(), 0, token.size());
         if (code == ERR_OK) {
             InnerAccountIAMManager::GetInstance().DeleteSecretFaultFile(userId_, OPERATION_ADD_CRED);
         }
@@ -548,7 +551,7 @@ UpdateCredCallback::UpdateCredCallback(
 
 UpdateCredCallback::~UpdateCredCallback()
 {
-    std::fill(credInfo_.token.begin(), credInfo_.token.end(), 0);
+    (void)memset_s(credInfo_.token.data(), credInfo_.token.size(), 0, credInfo_.token.size());
 }
 
 void UpdateCredCallback::SetDeathRecipient(const sptr<IDMCallbackDeathRecipient> &deathRecipient)
@@ -613,6 +616,7 @@ void UpdateCredCallback::InnerOnResult(int32_t result, const Attributes &extraIn
 
 void UpdateCredCallback::OnResult(int32_t result, const Attributes &extraInfo)
 {
+    TraceGuard traceGuard("IAM UpdateCred OnResult");
     std::unique_lock<std::mutex> updateLock(mutex_);
     InnerOnResult(result, extraInfo);
     isCalled_ = true;
@@ -636,7 +640,7 @@ VerifyTokenCallbackWrapper::VerifyTokenCallbackWrapper(uint32_t userId, const st
 
 VerifyTokenCallbackWrapper::~VerifyTokenCallbackWrapper()
 {
-    std::fill(token_.begin(), token_.end(), 0);
+    (void)memset_s(token_.data(), token_.size(), 0, token_.size());
 }
 
 void VerifyTokenCallbackWrapper::OnResult(int32_t result, const Attributes &extraInfo)
@@ -667,7 +671,7 @@ void VerifyTokenCallbackWrapper::InnerOnResult(int32_t result, const Attributes 
     if (!isDomainUnlockEnabled_) {
         errCode = innerIamMgr.UpdateStorageUserAuth(userId_, secureUid, token_, rootSecret, {});
     }
-    std::fill(rootSecret.begin(), rootSecret.end(), 0);
+    (void)memset_s(rootSecret.data(), rootSecret.size(), 0, rootSecret.size());
     if (errCode != ERR_OK) {
         ReportOsAccountOperationFail(userId_, scene, errCode, "Failed to update user auth");
         InnerAccountIAMManager::GetInstance().DeleteSecretFaultFile(userId_, scene);
@@ -778,11 +782,12 @@ DelCredCallback::DelCredCallback(int32_t userId, bool isPIN, std::vector<uint8_t
 
 DelCredCallback::~DelCredCallback()
 {
-    std::fill(token_.begin(), token_.end(), 0);
+    (void)memset_s(token_.data(), token_.size(), 0, token_.size());
 }
 
 void DelCredCallback::OnResult(int32_t result, const Attributes &extraInfo)
 {
+    TraceGuard traceGuard("IAM DelCred OnResult");
     ACCOUNT_LOGI("DelCredCallback, result=%{public}d, userId=%{public}d", result, userId_);
     if (innerCallback_ == nullptr) {
         ACCOUNT_LOGE("innerCallback_ is nullptr");
@@ -799,8 +804,8 @@ void DelCredCallback::OnResult(int32_t result, const Attributes &extraInfo)
         uint64_t secureUid = 0;
         extraInfo.GetUint64Value(Attributes::AttributeKey::ATTR_SEC_USER_ID, secureUid);
         ErrCode updateRet = innerIamMgr.UpdateStorageUserAuth(userId_, secureUid, token_, oldSecret, newSecret);
-        std::fill(newSecret.begin(), newSecret.end(), 0);
-        std::fill(oldSecret.begin(), oldSecret.end(), 0);
+        (void)memset_s(newSecret.data(), newSecret.size(), 0, newSecret.size());
+        (void)memset_s(oldSecret.data(), oldSecret.size(), 0, oldSecret.size());
         if (updateRet != ERR_OK) {
             ReportOsAccountOperationFail(userId_, OPERATION_DELETE_CRED, updateRet, "Failed to update user auth");
         }

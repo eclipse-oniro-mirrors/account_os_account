@@ -26,6 +26,7 @@
 #include "account_error_no.h"
 #include "account_log_wrapper.h"
 #include "os_account_constants.h"
+#include "os_account_json_builder.h"
 #include "os_account_manager.h"
 #define private public
 #include "os_account_control_file_manager.h"
@@ -194,6 +195,101 @@ HWTEST_F(OsAccountControlFileManagerMockUnitTest, UpdateSpecificOAConstraints001
     EXPECT_EQ(g_controlManager->UpdateSpecificOAConstraints("302", "302", constraintStr, true), ERR_OK);
     SetTimes(0, 3, ADD_OBJ_METHOD_NAME);
     EXPECT_EQ(g_controlManager->UpdateSpecificOAConstraints("302", "302", constraintStr, false), ERR_OK);
+}
+
+/**
+ * @tc.name: BuildAndSaveConstraints_Fail001
+ * @tc.desc: Test Build* functions with Add*ToJson failure.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountControlFileManagerMockUnitTest, BuildAndSaveConstraints_Fail001, TestSize.Level1)
+{
+    SetTimes(0, 1, ADD_VECTOR_METHOD_NAME);
+    g_controlManager->BuildAndSaveBaseOAConstraintsJsonFile();
+    SetTimes(0, 0, ADD_VECTOR_METHOD_NAME);
+
+    SetTimes(0, 1, "AddIntToJson");
+    g_controlManager->BuildAndSaveGlobalOAConstraintsJsonFile();
+    SetTimes(0, 0, "AddIntToJson");
+
+    SetTimes(0, 1, ADD_OBJ_METHOD_NAME);
+    g_controlManager->BuildAndSaveGlobalOAConstraintsJsonFile();
+    SetTimes(0, 0, ADD_OBJ_METHOD_NAME);
+
+    SetTimes(0, 1, ADD_OBJ_METHOD_NAME);
+    g_controlManager->BuildAndSaveSpecificOAConstraintsJsonFile();
+    SetTimes(0, 0, ADD_OBJ_METHOD_NAME);
+
+    SetTimes(0, 2, ADD_OBJ_METHOD_NAME);
+    g_controlManager->BuildAndSaveSpecificOAConstraintsJsonFile();
+    SetTimes(0, 0, ADD_OBJ_METHOD_NAME);
+
+    SetTimes(0, 1, "AddVectorUint8ToJson");
+    g_controlManager->RecoverAccountInfoDigestJsonFile();
+    SetTimes(0, 0, "AddVectorUint8ToJson");
+
+    SetTimes(0, 1, "AddIntToJson");
+    EXPECT_NE(g_controlManager->UpdateDeviceOwnerId(100), ERR_OK);
+    SetTimes(0, 0, "AddIntToJson");
+}
+
+/**
+ * @tc.name: ControlFileManager_AddJsonFail001
+ * @tc.desc: Test control file manager functions with Add*ToJson failure.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountControlFileManagerMockUnitTest, ControlFileManager_AddJsonFail001, TestSize.Level1)
+{
+    SetTimes(0, 1, ADD_VECTOR_METHOD_NAME);
+    EXPECT_EQ(g_controlManager->UpdateAccountList("999", true), ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR);
+    SetTimes(0, 0, ADD_VECTOR_METHOD_NAME);
+
+    SetTimes(0, 1, "AddIntToJson");
+    EXPECT_EQ(g_controlManager->UpdateAccountList("999", true), ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR);
+    SetTimes(0, 0, "AddIntToJson");
+
+    SetTimes(0, 1, "AddIntToJson");
+    EXPECT_EQ(g_controlManager->SetNextLocalId(200), ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR);
+    SetTimes(0, 0, "AddIntToJson");
+
+    int64_t serialNumber = 0;
+    SetTimes(0, 1, "AddInt64ToJson");
+    EXPECT_EQ(g_controlManager->GetSerialNumber(serialNumber), ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR);
+    SetTimes(0, 0, "AddInt64ToJson");
+
+    SetTimes(0, 1, "AddIntToJson");
+    int32_t id = 0;
+    EXPECT_EQ(g_controlManager->GetAllowCreateId(id), ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR);
+    SetTimes(0, 0, "AddIntToJson");
+
+    SetTimes(0, 1, "AddIntToJson");
+    EXPECT_EQ(g_controlManager->SetDefaultActivatedOsAccount(100, 100), ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR);
+    SetTimes(0, 0, "AddIntToJson");
+}
+
+/**
+ * @tc.name: ControlFileManager_CreateJsonFail001
+ * @tc.desc: Test control file manager functions with CreateJson failure.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountControlFileManagerMockUnitTest, ControlFileManager_CreateJsonFail001, TestSize.Level1)
+{
+    SetCreateJsonFail(true);
+    g_controlManager->BuildAndSaveBaseOAConstraintsJsonFile();
+    g_controlManager->BuildAndSaveGlobalOAConstraintsJsonFile();
+    g_controlManager->BuildAndSaveSpecificOAConstraintsJsonFile();
+    g_controlManager->RecoverAccountInfoDigestJsonFile();
+    SetTimes(0, 1, "AddIntToJson");
+    EXPECT_EQ(g_controlManager->UpdateDeviceOwnerId(100), ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR);
+    SetTimes(0, 0, "AddIntToJson");
+    EXPECT_EQ(BuildAccountListJson({}), nullptr);
+    SetCreateJsonFail(false);
+    SetTimes(0, 1, "AddIntToJson");
+    EXPECT_EQ(BuildAccountListJson({}), nullptr);
+    SetTimes(0, 0, "AddIntToJson");
 }
 }  // namespace AccountSA
 }  // namespace OHOS

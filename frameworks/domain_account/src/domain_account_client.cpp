@@ -16,6 +16,8 @@
 #include "domain_account_client.h"
 
 #include <thread>
+#include <securec.h>
+
 #include "account_error_no.h"
 #include "account_log_wrapper.h"
 #ifdef SUPPORT_DOMAIN_ACCOUNTS
@@ -271,7 +273,7 @@ ErrCode DomainAccountClient::AuthUser(int32_t userId,
         idlOptions.challenge = unlockOptions.challenge;
         idlOptions.authIntent = unlockOptions.authIntent;
         ErrCode errCode = proxy->AuthUserWithUnlockOptions(userId, password, idlOptions, callbackService);
-        std::fill(password.begin(), password.end(), 0);
+        (void)memset_s(password.data(), password.size(), 0, password.size());
         if (errCode != ERR_OK) {
             ACCOUNT_LOGE("Failed to auth for domain account, errCode=%{public}d", errCode);
             Parcel emptyParcel;
