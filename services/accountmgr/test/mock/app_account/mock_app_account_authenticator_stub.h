@@ -23,22 +23,22 @@ namespace AccountSA {
 class MockAppAccountAuthenticator : public AppAccountAuthenticatorStub {
 public:
     ErrCode AddAccountImplicitly(const std::string &authType, const std::string &callerBundleName,
-        const AAFwk::WantParams &options, const sptr<IRemoteObject> &callback, int32_t &funcResult);
-    ErrCode Authenticate(const AppAccountAuthenticatorStringInfo &stringInfo, const AAFwk::WantParams &options,
-        const sptr<IRemoteObject> &callback, int32_t &funcResult);
+        const AAFwk::WantParams &options, const sptr<IRemoteObject> &callback);
+    ErrCode Authenticate(
+        const AppAccountAuthenticatorStringInfo &stringInfo, const AAFwk::WantParams &options,
+        const sptr<IRemoteObject> &callback);
     ErrCode VerifyCredential(
-        const std::string &name, const VerifyCredentialOptions &options, const sptr<IRemoteObject> &callback,
-        int32_t &funcResult);
+        const std::string &name, const VerifyCredentialOptions &options,
+        const sptr<IRemoteObject> &callback);
     ErrCode CheckAccountLabels(
-        const std::string &name, const std::vector<std::string> &labels, const sptr<IRemoteObject> &callback,
-        int32_t &funcResult);
-    ErrCode SetProperties(const SetPropertiesOptions &options, const sptr<IRemoteObject> &callback,
-        int32_t &funcResult);
-    ErrCode IsAccountRemovable(const std::string &name, const sptr<IRemoteObject> &callback, int32_t &funcResult);
-    ErrCode CreateAccountImplicitly(const CreateAccountImplicitlyOptions &options, const sptr<IRemoteObject> &callback,
-        int32_t &funcResult);
-    ErrCode Auth(const std::string &name, const std::string &authType, const AAFwk::WantParams &options,
-        const sptr<IRemoteObject> &callback, int32_t &funcResult);
+        const std::string &name, const std::vector<std::string> &labels,
+        const sptr<IRemoteObject> &callback);
+    ErrCode SetProperties(const SetPropertiesOptions &options, const sptr<IRemoteObject> &callback);
+    ErrCode IsAccountRemovable(const std::string &name, const sptr<IRemoteObject> &callback);
+    ErrCode CreateAccountImplicitly(
+        const CreateAccountImplicitlyOptions &options, const sptr<IRemoteObject> &callback);
+    ErrCode Auth(const std::string &name, const std::string &authType,
+        const AAFwk::WantParams &options, const sptr<IRemoteObject> &callback);
 
 public:
     bool status = true;

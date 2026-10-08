@@ -33,19 +33,6 @@ namespace {
 #ifndef FUZZ_TEST
 const char THREAD_AUTH_SESSION[] = "authSession";
 #endif
-ErrCode ConvertToAccountErrCode(ErrCode idlErrCode, int32_t funcResult)
-{
-    if (idlErrCode == ERR_OK) {
-        return funcResult;
-    }
-    if (idlErrCode == ERR_INVALID_VALUE) {
-        return ERR_ACCOUNT_COMMON_WRITE_DESCRIPTOR_ERROR;
-    } else if (idlErrCode == ERR_INVALID_DATA) {
-        return ERR_ACCOUNT_COMMON_WRITE_PARCEL_ERROR;
-    } else {
-        return ERR_APPACCOUNT_KIT_SEND_REQUEST;
-    }
-}
 }
 
 SessionClientDeathRecipient::SessionClientDeathRecipient(const std::string &sessionId) : sessionId_(sessionId)
@@ -216,6 +203,8 @@ void AppAccountAuthenticatorSession::OnAbilityConnectDone(
     AppAccountAuthenticatorStringInfo stringInfo(request_.name, request_.authType, request_.callerBundleName);
     OnAbilityConnectInner(stringInfo, resultCode, errResult);
     if (resultCode != ERR_OK) {
+        REPORT_APP_ACCOUNT_FAIL(request_.name, request_.owner, Constants::APP_DFX_AUTHENTICATOR_SESSION,
+            resultCode, "OnAbilityConnectInner failed");
         OnResult(ERR_JS_ACCOUNT_AUTHENTICATOR_SERVICE_EXCEPTION, errResult);
     }
 }
@@ -223,48 +212,36 @@ void AppAccountAuthenticatorSession::OnAbilityConnectDone(
 void AppAccountAuthenticatorSession::OnAbilityConnectInner(const AppAccountAuthenticatorStringInfo &stringInfo,
     int32_t &resultCode, AAFwk::Want &errResult)
 {
-    int32_t funcResult = 0;
     switch (action_) {
         case ADD_ACCOUNT_IMPLICITLY:
             resultCode = authenticatorProxy_->AddAccountImplicitly(request_.authType, request_.callerBundleName,
-                request_.options.GetParams(), authenticatorCb_->AsObject(), funcResult);
-            resultCode = ConvertToAccountErrCode(resultCode, funcResult);
+                request_.options.GetParams(), authenticatorCb_->AsObject());
             break;
         case AUTHENTICATE:
             resultCode = authenticatorProxy_->Authenticate(stringInfo, request_.options.GetParams(),
-                authenticatorCb_->AsObject(), funcResult);
-            resultCode = ConvertToAccountErrCode(resultCode, funcResult);
+                authenticatorCb_->AsObject());
             break;
         case CREATE_ACCOUNT_IMPLICITLY:
             resultCode = authenticatorProxy_->CreateAccountImplicitly(request_.createOptions,
-                authenticatorCb_->AsObject(), funcResult);
-            resultCode = ConvertToAccountErrCode(resultCode, funcResult);
+                authenticatorCb_->AsObject());
             break;
         case AUTH:
             resultCode = authenticatorProxy_->Auth(
-                request_.name, request_.authType, request_.options.GetParams(), authenticatorCb_->AsObject(),
-                funcResult);
-            resultCode = ConvertToAccountErrCode(resultCode, funcResult);
+                request_.name, request_.authType, request_.options.GetParams(), authenticatorCb_->AsObject());
             break;
         case VERIFY_CREDENTIAL:
             resultCode = authenticatorProxy_->VerifyCredential(
-                request_.name, request_.verifyCredOptions, authenticatorCb_->AsObject(), funcResult);
-            resultCode = ConvertToAccountErrCode(resultCode, funcResult);
+                request_.name, request_.verifyCredOptions, authenticatorCb_->AsObject());
             break;
         case CHECK_ACCOUNT_LABELS:
             resultCode = authenticatorProxy_->CheckAccountLabels(
-                request_.name, request_.labels, authenticatorCb_->AsObject(), funcResult);
-            resultCode = ConvertToAccountErrCode(resultCode, funcResult);
+                request_.name, request_.labels, authenticatorCb_->AsObject());
             break;
         case SET_AUTHENTICATOR_PROPERTIES:
-            resultCode = authenticatorProxy_->SetProperties(request_.setPropOptions, authenticatorCb_->AsObject(),
-                funcResult);
-            resultCode = ConvertToAccountErrCode(resultCode, funcResult);
+            resultCode = authenticatorProxy_->SetProperties(request_.setPropOptions, authenticatorCb_->AsObject());
             break;
         case IS_ACCOUNT_REMOVABLE:
-            resultCode = authenticatorProxy_->IsAccountRemovable(request_.name, authenticatorCb_->AsObject(),
-                funcResult);
-            resultCode = ConvertToAccountErrCode(resultCode, funcResult);
+            resultCode = authenticatorProxy_->IsAccountRemovable(request_.name, authenticatorCb_->AsObject());
             break;
         default:
             ACCOUNT_LOGE("unsupported action: %{public}d", action_);
