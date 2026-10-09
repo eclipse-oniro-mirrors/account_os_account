@@ -1556,34 +1556,38 @@ public:
     {}
     ~TaiheAppAccountAuthenticator() override = default;
 
-    // Abandoned interface
+    static void NotifyCallbackError(const sptr<IRemoteObject>& remoteObjCallback)
+    {
+        auto cbProxy = iface_cast<AccountSA::IAppAccountAuthenticatorCallback>(remoteObjCallback);
+        if (cbProxy != nullptr) {
+            AAFwk::Want result;
+            cbProxy->OnResult(ERR_JS_ACCOUNT_AUTHENTICATOR_SERVICE_EXCEPTION, result);
+        }
+    }
+
     ErrCode AddAccountImplicitly(const std::string& authType,
         const std::string& callerBundleName,
         const WantParams& options,
-        const sptr<IRemoteObject>& remoteObjCallback,
-        int32_t& funcResult) override
+        const sptr<IRemoteObject>& remoteObjCallback) override
     {
         return ERR_OK;
     }
 
-    // Abandoned interface
     ErrCode Authenticate(
         const AppAccountAuthenticatorStringInfo& appAccountAuthenticatorStringInfo,
         const WantParams& options,
-        const sptr<IRemoteObject>& remoteObjCallback,
-        int32_t& funcResult) override
+        const sptr<IRemoteObject>& remoteObjCallback) override
     {
         return ERR_OK;
     }
 
     ErrCode CreateAccountImplicitly(
         const AccountSA::CreateAccountImplicitlyOptions& options,
-        const sptr<IRemoteObject>& remoteObjCallback,
-        int32_t& funcResult) override
+        const sptr<IRemoteObject>& remoteObjCallback) override
     {
         if (handler_ == nullptr) {
             ACCOUNT_LOGE("EventHandler is null");
-            funcResult = ERR_JS_ACCOUNT_AUTHENTICATOR_SERVICE_EXCEPTION;
+            NotifyCallbackError(remoteObjCallback);
             return ERR_OK;
         }
         auto shareThis = shared_from_this();
@@ -1609,10 +1613,9 @@ public:
         };
         if (!handler_->PostTask(task, __func__, 0, OHOS::AppExecFwk::EventQueue::Priority::VIP, {})) {
             ACCOUNT_LOGE("Failed to post %{public}s task to handler", __func__);
-            funcResult = ERR_JS_ACCOUNT_AUTHENTICATOR_SERVICE_EXCEPTION;
+            NotifyCallbackError(remoteObjCallback);
             return ERR_OK;
         }
-        funcResult = ERR_OK;
         return ERR_OK;
     }
 
@@ -1620,12 +1623,11 @@ public:
         const std::string& name,
         const std::string& authType,
         const WantParams& options,
-        const sptr<IRemoteObject>& remoteObjCallback,
-        int32_t& funcResult) override
+        const sptr<IRemoteObject>& remoteObjCallback) override
     {
         if (handler_ == nullptr) {
             ACCOUNT_LOGE("EventHandler is null");
-            funcResult = ERR_JS_ACCOUNT_AUTHENTICATOR_SERVICE_EXCEPTION;
+            NotifyCallbackError(remoteObjCallback);
             return ERR_OK;
         }
         auto shareThis = shared_from_this();
@@ -1646,22 +1648,20 @@ public:
         };
         if (!handler_->PostTask(task, __func__, 0, OHOS::AppExecFwk::EventQueue::Priority::VIP, {})) {
             ACCOUNT_LOGE("Failed to post %{public}s task to handler", __func__);
-            funcResult = ERR_JS_ACCOUNT_AUTHENTICATOR_SERVICE_EXCEPTION;
+            NotifyCallbackError(remoteObjCallback);
             return ERR_OK;
         }
-        funcResult = ERR_OK;
         return ERR_OK;
     }
 
     ErrCode VerifyCredential(
         const std::string& name,
         const AccountSA::VerifyCredentialOptions& options,
-        const sptr<IRemoteObject>& remoteObjCallback,
-        int32_t& funcResult) override
+        const sptr<IRemoteObject>& remoteObjCallback) override
     {
         if (handler_ == nullptr) {
             ACCOUNT_LOGE("EventHandler is null");
-            funcResult = ERR_JS_ACCOUNT_AUTHENTICATOR_SERVICE_EXCEPTION;
+            NotifyCallbackError(remoteObjCallback);
             return ERR_OK;
         }
         auto shareThis = shared_from_this();
@@ -1687,22 +1687,20 @@ public:
         };
         if (!handler_->PostTask(task, __func__, 0, OHOS::AppExecFwk::EventQueue::Priority::VIP, {})) {
             ACCOUNT_LOGE("Failed to post %{public}s task to handler", __func__);
-            funcResult = ERR_JS_ACCOUNT_AUTHENTICATOR_SERVICE_EXCEPTION;
+            NotifyCallbackError(remoteObjCallback);
             return ERR_OK;
         }
-        funcResult = ERR_OK;
         return ERR_OK;
     }
 
     ErrCode CheckAccountLabels(
         const std::string& name,
         const std::vector<std::string>& labels,
-        const sptr<IRemoteObject>& remoteObjCallback,
-        int32_t& funcResult) override
+        const sptr<IRemoteObject>& remoteObjCallback) override
     {
         if (handler_ == nullptr) {
             ACCOUNT_LOGE("EventHandler is null");
-            funcResult = ERR_JS_ACCOUNT_AUTHENTICATOR_SERVICE_EXCEPTION;
+            NotifyCallbackError(remoteObjCallback);
             return ERR_OK;
         }
         auto shareThis = shared_from_this();
@@ -1722,21 +1720,19 @@ public:
         };
         if (!handler_->PostTask(task, __func__, 0, OHOS::AppExecFwk::EventQueue::Priority::VIP, {})) {
             ACCOUNT_LOGE("Failed to post %{public}s task to handler", __func__);
-            funcResult = ERR_JS_ACCOUNT_AUTHENTICATOR_SERVICE_EXCEPTION;
+            NotifyCallbackError(remoteObjCallback);
             return ERR_OK;
         }
-        funcResult = ERR_OK;
         return ERR_OK;
     }
 
     ErrCode SetProperties(
         const AccountSA::SetPropertiesOptions& options,
-        const sptr<IRemoteObject>& remoteObjCallback,
-        int32_t& funcResult) override
+        const sptr<IRemoteObject>& remoteObjCallback) override
     {
         if (handler_ == nullptr) {
             ACCOUNT_LOGE("EventHandler is null");
-            funcResult = ERR_JS_ACCOUNT_AUTHENTICATOR_SERVICE_EXCEPTION;
+            NotifyCallbackError(remoteObjCallback);
             return ERR_OK;
         }
         auto shareThis = shared_from_this();
@@ -1766,21 +1762,19 @@ public:
         };
         if (!handler_->PostTask(task, __func__, 0, OHOS::AppExecFwk::EventQueue::Priority::VIP, {})) {
             ACCOUNT_LOGE("Failed to post %{public}s task to handler", __func__);
-            funcResult = ERR_JS_ACCOUNT_AUTHENTICATOR_SERVICE_EXCEPTION;
+            NotifyCallbackError(remoteObjCallback);
             return ERR_OK;
         }
-        funcResult = ERR_OK;
         return ERR_OK;
     }
 
     ErrCode IsAccountRemovable(
         const std::string& name,
-        const sptr<IRemoteObject>& remoteObjCallback,
-        int32_t& funcResult) override
+        const sptr<IRemoteObject>& remoteObjCallback) override
     {
         if (handler_ == nullptr) {
             ACCOUNT_LOGE("EventHandler is null");
-            funcResult = ERR_JS_ACCOUNT_AUTHENTICATOR_SERVICE_EXCEPTION;
+            NotifyCallbackError(remoteObjCallback);
             return ERR_OK;
         }
         auto shareThis = shared_from_this();
@@ -1793,10 +1787,9 @@ public:
         };
         if (!handler_->PostTask(task, __func__, 0, OHOS::AppExecFwk::EventQueue::Priority::VIP, {})) {
             ACCOUNT_LOGE("Failed to post %{public}s task to handler", __func__);
-            funcResult = ERR_JS_ACCOUNT_AUTHENTICATOR_SERVICE_EXCEPTION;
+            NotifyCallbackError(remoteObjCallback);
             return ERR_OK;
         }
-        funcResult = ERR_OK;
         return ERR_OK;
     }
 
