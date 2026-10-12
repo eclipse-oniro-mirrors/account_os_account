@@ -285,38 +285,6 @@ ohos_unittest("app_account_info_test") {
   ]
 }
 
-ohos_unittest("app_account_info_mock_test") {
-  module_out_path = module_output_path
-
-  sources = [
-    "${services_path}/accountmgr/test/unittest/os_account/mock/mock_json_util.cpp",
-    "${app_account_innerkits_native_path}/src/app_account_info.cpp",
-    "${common_path}/json_utils/src/app_account_info_json_parser.cpp",
-    "app_account_info_mock_test.cpp",
-  ]
-
-  include_dirs = [
-    "${services_path}/accountmgr/test/unittest/os_account/mock/",
-    "${common_path}/json_utils/include",
-  ]
-
-  configs = [ ":app_account_service_config_unittest" ]
-
-  deps = [
-    "${common_path}:libaccount_common",
-  ]
-
-  external_deps = [
-    "cJSON:cjson",
-    "c_utils:utils",
-    "googletest:gmock_main",
-    "googletest:gtest_main",
-    "hilog:libhilog",
-  ]
-
-  part_name = "os_account"
-}
-
 ohos_unittest("app_account_manager_service_test") {
   branch_protector_ret = "pac_ret"
 
