@@ -41,6 +41,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <securec.h>
 #include <stdexcept>
 #include <vector>
 #include <thread>
@@ -1552,7 +1553,7 @@ static bool ParseChallengeOption(
     auto taiheChallenge = taiheOptions.value().challenge.value();
     std::vector<uint8_t> challenge(taiheChallenge.data(), taiheChallenge.data() + taiheChallenge.size());
     options.challenge = challenge;
-    std::fill(challenge.begin(), challenge.end(), 0);
+    (void)memset_s(challenge.data(), challenge.size(), 0, challenge.size());
 
     return true;
 }

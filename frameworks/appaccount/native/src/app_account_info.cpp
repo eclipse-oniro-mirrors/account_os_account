@@ -544,7 +544,14 @@ ErrCode AppAccountInfo::SetAssociatedData(const std::string &key, const std::str
             return ERR_APPACCOUNT_SERVICE_ASSOCIATED_DATA_OVER_SIZE;
         }
     }
-    AddStringToJson(jsonObject, key, value);
+    bool success = AddStringToJson(jsonObject, key, value);
+    if (!success) {
+        ACCOUNT_LOGE("Failed to add associated data to json");
+        REPORT_APP_ACCOUNT_FAIL(name_, owner_,
+            Constants::APP_DFX_SET_CUSTOM_DATA, ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR,
+            "Failed to add associated data to json");
+        return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+    }
 
     associatedData_ = PackJsonToString(jsonObject);
     if (associatedData_.empty()) {
@@ -595,12 +602,24 @@ ErrCode AppAccountInfo::SetAccountCredential(
         }
     }
 #ifndef HAS_ASSET_PART
-    AddStringToJson(jsonObject, credentialType, credential);
+    if (!AddStringToJson(jsonObject, credentialType, credential)) {
+        ACCOUNT_LOGE("Failed to add credential to json");
+        REPORT_APP_ACCOUNT_FAIL(name_, owner_,
+            Constants::APP_DFX_SET_CREDENTIAL, ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR,
+            "Failed to add credential to json");
+        return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+    }
 #else
     if (!IsKeyExist(jsonObject, credentialType)) {
         std::string credentialTypeAlias;
         ComputeHash(credentialType, credentialTypeAlias);
-        AddStringToJson(jsonObject, credentialType, (GetAlias() + credentialTypeAlias));
+        if (!AddStringToJson(jsonObject, credentialType, (GetAlias() + credentialTypeAlias))) {
+            ACCOUNT_LOGE("Failed to add credential alias to json");
+            REPORT_APP_ACCOUNT_FAIL(name_, owner_,
+                Constants::APP_DFX_SET_CREDENTIAL, ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR,
+                "Failed to add credential alias to json");
+            return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+        }
     } else {
         return ERR_OK;
     }

@@ -16,6 +16,7 @@
 #ifndef OS_ACCOUNT_INTERFACES_INNERKITS_DOMAIN_ACCOUNT_INCLUDE_DOMAIN_ACCOUNT_COMMON_H
 #define OS_ACCOUNT_INTERFACES_INNERKITS_DOMAIN_ACCOUNT_INCLUDE_DOMAIN_ACCOUNT_COMMON_H
 
+#include <securec.h>
 #include <string>
 #include <vector>
 #include "parcel.h"
@@ -51,8 +52,8 @@ struct EdmAuthorizationOption {
     std::vector<uint8_t> binData;
     ~EdmAuthorizationOption()
     {
-        std::fill(certData.begin(), certData.end(), 0);
-        std::fill(binData.begin(), binData.end(), 0);
+        (void)memset_s(certData.data(), certData.size(), 0, certData.size());
+        (void)memset_s(binData.data(), binData.size(), 0, binData.size());
     }
 };
 
@@ -69,7 +70,7 @@ struct CreateOsAccountForDomainOptions: public EdmAuthorizationOption, public Pa
 
     ~CreateOsAccountForDomainOptions()
     {
-        std::fill(token.begin(), token.end(), 0);
+        (void)memset_s(token.data(), token.size(), 0, token.size());
     }
 };
 
@@ -165,8 +166,8 @@ struct DomainAuthResult : public Parcelable {
 
     ~DomainAuthResult()
     {
-        std::fill(this->token.begin(), this->token.end(), 0);
-        std::fill(this->secret.begin(), this->secret.end(), 0);
+        (void)memset_s(this->token.data(), this->token.size(), 0, this->token.size());
+        (void)memset_s(this->secret.data(), this->secret.size(), 0, this->secret.size());
     }
     bool ReadFromParcel(Parcel &parcel);
     bool Marshalling(Parcel &parcel) const override;
@@ -192,7 +193,7 @@ struct DomainAccountUnlockOptions {
         : challenge(challenge), authIntent(authIntent) {}
     ~DomainAccountUnlockOptions()
     {
-        std::fill(challenge.begin(), challenge.end(), 0);
+        (void)memset_s(challenge.data(), challenge.size(), 0, challenge.size());
     }
 };
 

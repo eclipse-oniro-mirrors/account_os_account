@@ -2085,7 +2085,7 @@ ErrCode InnerDomainAccountManager::AuthUserWithUnlockOptions(int32_t localId,
     std::lock_guard<std::recursive_mutex> lockContext(authContextIdMapMutex_);
     uint64_t contextId = 0;
     errCode = PluginAuthWithUnlockIntent(domainInfo, password, challenge, contextId);
-    std::fill(challenge.begin(), challenge.end(), 0);
+    (void)memset_s(challenge.data(), challenge.size(), 0, challenge.size());
     if (errCode == ERR_OK) {
         if (!AddToContextMap(contextId, innerCallback)) {
             ACCOUNT_LOGE("AddToContextMap failed");

@@ -425,8 +425,11 @@ ErrCode AccountFileWatcherMgr::GenerateAccountInfoDigestStr(
     if (accountInfoDigestJson == nullptr) {
         return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
     }
-    AddVectorUint8ToJson(accountInfoDigestJson, userInfoPath,
-                         std::vector<uint8_t>(digestOutData, digestOutData + ALG_COMMON_SIZE));
+    if (!AddVectorUint8ToJson(accountInfoDigestJson, userInfoPath,
+        std::vector<uint8_t>(digestOutData, digestOutData + ALG_COMMON_SIZE))) {
+        ACCOUNT_LOGE("Failed to add digest to json for userInfoPath=%{public}s", userInfoPath.c_str());
+        return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+    }
     digestStr = PackJsonToString(accountInfoDigestJson);
     if (digestStr.empty()) {
         ACCOUNT_LOGE("failed to dump json object.");

@@ -15,21 +15,35 @@
 
 #include "os_account_json_builder.h"
 
+#include "account_log_wrapper.h"
+
 namespace OHOS {
 namespace AccountSA {
 
 CJsonUnique BuildAccountListJson(const std::vector<std::string> &accounts)
 {
     auto defaultActivatedIds = CreateJson();
-    AddIntToJson(defaultActivatedIds, std::to_string(Constants::DEFAULT_DISPLAY_ID), Constants::START_USER_ID);
+    if (defaultActivatedIds == nullptr) {
+        return nullptr;
+    }
     auto accountList = CreateJson();
-    AddVectorStringToJson(accountList, Constants::ACCOUNT_LIST, accounts);
-    AddIntToJson(accountList, Constants::COUNT_ACCOUNT_NUM, accounts.size());
-    AddObjToJson(accountList, DEFAULT_ACTIVATED_ACCOUNT_ID, defaultActivatedIds);
-    AddIntToJson(accountList, Constants::MAX_ALLOW_CREATE_ACCOUNT_ID, Constants::MAX_USER_ID);
-    AddInt64ToJson(accountList, Constants::SERIAL_NUMBER_NUM, Constants::SERIAL_NUMBER_NUM_START);
-    AddBoolToJson(accountList, IS_SERIAL_NUMBER_FULL, Constants::IS_SERIAL_NUMBER_FULL_INIT_VALUE);
-    AddIntToJson(accountList, NEXT_LOCAL_ID, Constants::START_USER_ID + 1);
+    if (accountList == nullptr) {
+        return nullptr;
+    }
+    bool success = true;
+    success &= AddIntToJson(defaultActivatedIds,
+        std::to_string(Constants::DEFAULT_DISPLAY_ID), Constants::START_USER_ID);
+    success &= AddVectorStringToJson(accountList, Constants::ACCOUNT_LIST, accounts);
+    success &= AddIntToJson(accountList, Constants::COUNT_ACCOUNT_NUM, accounts.size());
+    success &= AddObjToJson(accountList, DEFAULT_ACTIVATED_ACCOUNT_ID, defaultActivatedIds);
+    success &= AddIntToJson(accountList, Constants::MAX_ALLOW_CREATE_ACCOUNT_ID, Constants::MAX_USER_ID);
+    success &= AddInt64ToJson(accountList, Constants::SERIAL_NUMBER_NUM, Constants::SERIAL_NUMBER_NUM_START);
+    success &= AddBoolToJson(accountList, IS_SERIAL_NUMBER_FULL, Constants::IS_SERIAL_NUMBER_FULL_INIT_VALUE);
+    success &= AddIntToJson(accountList, NEXT_LOCAL_ID, Constants::START_USER_ID + 1);
+    if (!success) {
+        ACCOUNT_LOGE("Failed to build account list json");
+        return nullptr;
+    }
     return accountList;
 }
 }  // namespace AccountSA

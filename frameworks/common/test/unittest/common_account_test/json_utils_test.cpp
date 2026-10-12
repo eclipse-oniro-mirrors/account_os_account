@@ -1114,3 +1114,86 @@ HWTEST_F(JsonUtilsTest, PackJsonToMapUint64Int32Test007, TestSize.Level4)
     EXPECT_EQ(1, result.size());
     EXPECT_EQ(456, result[123]);
 }
+
+/**
+ * @tc.name: CreateJsonFromMapTest001
+ * @tc.desc: CreateJsonFromMap returns valid json with all map entries
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(JsonUtilsTest, CreateJsonFromMapTest001, TestSize.Level4)
+{
+    std::map<std::string, std::string> mapData = {{"key1", "value1"}, {"key2", "value2"}, {"key3", "value3"}};
+    auto jsonObj = CreateJsonFromMap(mapData);
+    ASSERT_NE(jsonObj, nullptr);
+    EXPECT_EQ("value1", GetStringFromJson(jsonObj, "key1"));
+    EXPECT_EQ("value2", GetStringFromJson(jsonObj, "key2"));
+    EXPECT_EQ("value3", GetStringFromJson(jsonObj, "key3"));
+    EXPECT_EQ(PackJsonToMap(jsonObj), mapData);
+}
+
+/**
+ * @tc.name: CreateJsonFromMapTest002
+ * @tc.desc: CreateJsonFromMap with empty map returns valid empty json object
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(JsonUtilsTest, CreateJsonFromMapTest002, TestSize.Level4)
+{
+    std::map<std::string, std::string> emptyMap;
+    auto jsonObj = CreateJsonFromMap(emptyMap);
+    ASSERT_NE(jsonObj, nullptr);
+    EXPECT_TRUE(IsObject(jsonObj));
+}
+
+/**
+ * @tc.name: CreateJsonStringTest002
+ * @tc.desc: CreateJsonString with nullptr input returns null CJsonUnique
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(JsonUtilsTest, CreateJsonStringTest002, TestSize.Level4)
+{
+    auto jsonObj = CreateJsonString(nullptr);
+    EXPECT_EQ(jsonObj, nullptr);
+}
+
+/**
+ * @tc.name: AddVectorIntToJsonReturnTest001
+ * @tc.desc: AddVectorIntToJson checks return value for normal and edge cases
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(JsonUtilsTest, AddVectorIntToJsonReturnTest001, TestSize.Level4)
+{
+    auto jsonObj = CreateJson();
+    std::vector<int32_t> vec = {1, 2, 3, 4, 5};
+    EXPECT_TRUE(AddVectorIntToJson(jsonObj, "int_list", vec));
+    auto result = GetVectorIntFromJson(jsonObj, "int_list");
+    EXPECT_EQ(result.size(), vec.size());
+    for (size_t i = 0; i < vec.size(); i++) {
+        EXPECT_EQ(vec[i], result[i]);
+    }
+    EXPECT_FALSE(AddVectorIntToJson(jsonObj, "", vec));
+    CJsonUnique nullJson;
+    EXPECT_FALSE(AddVectorIntToJson(nullJson, "key", vec));
+}
+
+/**
+ * @tc.name: AddVectorUint8ToJsonReturnTest001
+ * @tc.desc: AddVectorUint8ToJson checks return value
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(JsonUtilsTest, AddVectorUint8ToJsonReturnTest001, TestSize.Level4)
+{
+    auto jsonObj = CreateJson();
+    std::vector<uint8_t> vec = {10, 20, 30, 40, 50};
+    EXPECT_TRUE(AddVectorUint8ToJson(jsonObj, "uint8_list", vec));
+    auto result = GetVectorUint8FromJson(jsonObj, "uint8_list");
+    EXPECT_EQ(result.size(), vec.size());
+    for (size_t i = 0; i < vec.size(); i++) {
+        EXPECT_EQ(vec[i], result[i]);
+    }
+    EXPECT_FALSE(AddVectorUint8ToJson(jsonObj, "", vec));
+}

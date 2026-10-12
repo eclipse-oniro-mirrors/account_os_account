@@ -17,6 +17,7 @@
 #define OS_ACCOUNT_INTERFACES_INNERKITS_OS_ACCOUNT_INFO_H
 #include <map>
 #include <optional>
+#include <securec.h>
 #include <vector>
 #include "account_error_no.h"
 #include "domain_account_common.h"
@@ -75,7 +76,7 @@ struct CreateOsAccountOptions : public EdmAuthorizationOption, public Parcelable
     ~CreateOsAccountOptions()
     {
         if (token.has_value()) {
-            std::fill(token.value().begin(), token.value().end(), 0);
+            (void)memset_s(token.value().data(), token.value().size(), 0, token.value().size());
         }
     };
 };
@@ -89,7 +90,7 @@ struct RemoveOsAccountOptions : public EdmAuthorizationOption, public Parcelable
     ~RemoveOsAccountOptions()
     {
         if (token.has_value()) {
-            std::fill(token.value().begin(), token.value().end(), 0);
+            (void)memset_s(token.value().data(), token.value().size(), 0, token.value().size());
         }
     };
 };

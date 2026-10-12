@@ -24,16 +24,18 @@ namespace AccountSA {
 
 #ifdef ENABLE_MULTIPLE_OS_ACCOUNT_SUBSPACE
 namespace {
-void SerializeSubProfileToJson(CJson *jsonObject, const SubProfileContext &data)
+bool SerializeSubProfileToJson(CJson *jsonObject, const SubProfileContext &data)
 {
-    AddIntToJson(jsonObject, NEXT_SUBPROFILE_ID, data.nextSubProfileId);
-    AddVectorIntToJson(jsonObject, SUBPROFILE_ID_LIST, data.subProfileIdList);
-    AddIntToJson(jsonObject, NEXT_SUBPROFILE_INDEX, data.nextSubProfileIndex);
+    bool success = true;
+    success &= AddIntToJson(jsonObject, NEXT_SUBPROFILE_ID, data.nextSubProfileId);
+    success &= AddVectorIntToJson(jsonObject, SUBPROFILE_ID_LIST, data.subProfileIdList);
+    success &= AddIntToJson(jsonObject, NEXT_SUBPROFILE_INDEX, data.nextSubProfileIndex);
     auto indexMapJson = CreateJson();
     for (const auto &[index, subspaceId] : data.subProfileIndexMap) {
-        AddIntToJson(indexMapJson, std::to_string(index), subspaceId);
+        success &= AddIntToJson(indexMapJson, std::to_string(index), subspaceId);
     }
-    AddObjToJson(jsonObject, SUBPROFILE_INDEX_MAP, indexMapJson.get());
+    success &= AddObjToJson(jsonObject, SUBPROFILE_INDEX_MAP, indexMapJson.get());
+    return success;
 }
 
 SubProfileContext DeserializeSubProfileFromJson(CJson *jsonObject)
@@ -61,40 +63,50 @@ SubProfileContext DeserializeSubProfileFromJson(CJson *jsonObject)
 CJsonUnique ToJson(const OsAccountInfo &accountInfo)
 {
     auto jsonObject = CreateJson();
+    if (jsonObject == nullptr) {
+        return nullptr;
+    }
 
-    AddIntToJson(jsonObject, LOCAL_ID, accountInfo.localId_);
-    AddStringToJson(jsonObject, LOCAL_NAME, accountInfo.localName_);
-    AddStringToJson(jsonObject, SHORT_NAME, accountInfo.shortName_);
-    AddIntToJson(jsonObject, TYPE, static_cast<int32_t>(accountInfo.type_));
-    AddVectorStringToJson(jsonObject, CONSTRAINTS, accountInfo.constraints_);
-    AddBoolToJson(jsonObject, IS_OS_ACCOUNT_VERIFIED, accountInfo.isVerified_);
-    AddStringToJson(jsonObject, PHOTO, accountInfo.photo_);
-    AddInt64ToJson(jsonObject, CREATE_TIME, accountInfo.createTime_);
-    AddInt64ToJson(jsonObject, LAST_LOGGED_IN_TIME, accountInfo.lastLoginTime_);
-    AddInt64ToJson(jsonObject, SERIAL_NUMBER, accountInfo.serialNumber_);
+    bool success = true;
+    success &= AddIntToJson(jsonObject, LOCAL_ID, accountInfo.localId_);
+    success &= AddStringToJson(jsonObject, LOCAL_NAME, accountInfo.localName_);
+    success &= AddStringToJson(jsonObject, SHORT_NAME, accountInfo.shortName_);
+    success &= AddIntToJson(jsonObject, TYPE, static_cast<int32_t>(accountInfo.type_));
+    success &= AddVectorStringToJson(jsonObject, CONSTRAINTS, accountInfo.constraints_);
+    success &= AddBoolToJson(jsonObject, IS_OS_ACCOUNT_VERIFIED, accountInfo.isVerified_);
+    success &= AddStringToJson(jsonObject, PHOTO, accountInfo.photo_);
+    success &= AddInt64ToJson(jsonObject, CREATE_TIME, accountInfo.createTime_);
+    success &= AddInt64ToJson(jsonObject, LAST_LOGGED_IN_TIME, accountInfo.lastLoginTime_);
+    success &= AddInt64ToJson(jsonObject, SERIAL_NUMBER, accountInfo.serialNumber_);
 
-    AddBoolToJson(jsonObject, IS_ACTIVATED, accountInfo.isActivated_);
-    AddBoolToJson(jsonObject, IS_ACCOUNT_COMPLETED, accountInfo.isCreateCompleted_);
-    AddBoolToJson(jsonObject, TO_BE_REMOVED, accountInfo.toBeRemoved_);
-    AddUint64ToJson(jsonObject, CREDENTIAL_ID, accountInfo.credentialId_);
-    AddUint64ToJson(jsonObject, DISPLAY_ID, accountInfo.displayId_);
-    AddBoolToJson(jsonObject, IS_FOREGROUND, accountInfo.isForeground_);
-    AddBoolToJson(jsonObject, IS_LOGGED_IN, accountInfo.isLoggedIn_);
-    AddBoolToJson(jsonObject, IS_DATA_REMOVABLE, accountInfo.isDataRemovable_);
-    AddIntToJson(jsonObject, CREATOR_TYPE, accountInfo.creatorType_);
-    AddIntToJson(jsonObject, VERSION, accountInfo.version_);
+    success &= AddBoolToJson(jsonObject, IS_ACTIVATED, accountInfo.isActivated_);
+    success &= AddBoolToJson(jsonObject, IS_ACCOUNT_COMPLETED, accountInfo.isCreateCompleted_);
+    success &= AddBoolToJson(jsonObject, TO_BE_REMOVED, accountInfo.toBeRemoved_);
+    success &= AddUint64ToJson(jsonObject, CREDENTIAL_ID, accountInfo.credentialId_);
+    success &= AddUint64ToJson(jsonObject, DISPLAY_ID, accountInfo.displayId_);
+    success &= AddBoolToJson(jsonObject, IS_FOREGROUND, accountInfo.isForeground_);
+    success &= AddBoolToJson(jsonObject, IS_LOGGED_IN, accountInfo.isLoggedIn_);
+    success &= AddBoolToJson(jsonObject, IS_DATA_REMOVABLE, accountInfo.isDataRemovable_);
+    success &= AddIntToJson(jsonObject, CREATOR_TYPE, accountInfo.creatorType_);
+    success &= AddIntToJson(jsonObject, VERSION, accountInfo.version_);
     auto domainInfoObject = CreateJson();
-    AddStringToJson(domainInfoObject, DOMAIN_NAME, accountInfo.domainInfo_.domain_);
-    AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_NAME, accountInfo.domainInfo_.accountName_);
-    AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_ID, accountInfo.domainInfo_.accountId_);
-    AddIntToJson(domainInfoObject, DOMAIN_ACCOUNT_STATUS, static_cast<int>(accountInfo.domainInfo_.status_));
-    AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_CONFIG, accountInfo.domainInfo_.serverConfigId_);
-    AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_ADDITION, accountInfo.domainInfo_.additionInfo_);
-    AddObjToJson(jsonObject, DOMAIN_INFO, domainInfoObject);
+    if (domainInfoObject == nullptr) {
+        return nullptr;
+    }
+    success &= AddStringToJson(domainInfoObject, DOMAIN_NAME, accountInfo.domainInfo_.domain_);
+    success &= AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_NAME, accountInfo.domainInfo_.accountName_);
+    success &= AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_ID, accountInfo.domainInfo_.accountId_);
+    success &= AddIntToJson(domainInfoObject, DOMAIN_ACCOUNT_STATUS,
+        static_cast<int>(accountInfo.domainInfo_.status_));
+    success &= AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_CONFIG, accountInfo.domainInfo_.serverConfigId_);
+    success &= AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_ADDITION, accountInfo.domainInfo_.additionInfo_);
+    success &= AddObjToJson(jsonObject, DOMAIN_INFO, domainInfoObject);
 #ifdef ENABLE_MULTIPLE_OS_ACCOUNT_SUBSPACE
-    AddIntToJson(jsonObject, FOREGROUND_SUBPROFILE_ID, accountInfo.foregroundSubProfileId_);
+    success &= AddIntToJson(jsonObject, FOREGROUND_SUBPROFILE_ID, accountInfo.foregroundSubProfileId_);
 #endif // ENABLE_MULTIPLE_OS_ACCOUNT_SUBSPACE
-
+    if (!success) {
+        return nullptr;
+    }
     return jsonObject;
 }
 
@@ -143,12 +155,19 @@ bool FromJson(cJSON *jsonObject, OsAccountInfo &accountInfo)
 CJsonUnique ToJson(const DomainAccountInfo &domainInfo)
 {
     auto domainInfoObject = CreateJson();
-    AddStringToJson(domainInfoObject, DOMAIN_NAME, domainInfo.domain_);
-    AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_NAME, domainInfo.accountName_);
-    AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_ID, domainInfo.accountId_);
-    AddIntToJson(domainInfoObject, DOMAIN_ACCOUNT_STATUS, static_cast<int>(domainInfo.status_));
-    AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_CONFIG, domainInfo.serverConfigId_);
-    AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_ADDITION, domainInfo.additionInfo_);
+    if (domainInfoObject == nullptr) {
+        return nullptr;
+    }
+    bool success = true;
+    success &= AddStringToJson(domainInfoObject, DOMAIN_NAME, domainInfo.domain_);
+    success &= AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_NAME, domainInfo.accountName_);
+    success &= AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_ID, domainInfo.accountId_);
+    success &= AddIntToJson(domainInfoObject, DOMAIN_ACCOUNT_STATUS, static_cast<int>(domainInfo.status_));
+    success &= AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_CONFIG, domainInfo.serverConfigId_);
+    success &= AddStringToJson(domainInfoObject, DOMAIN_ACCOUNT_ADDITION, domainInfo.additionInfo_);
+    if (!success) {
+        return nullptr;
+    }
     return domainInfoObject;
 }
 
@@ -171,7 +190,12 @@ bool FromJson(cJSON *jsonObject, DomainAccountInfo &domainInfo)
 CJsonUnique ToJsonSubProfile(const SubProfileContext &data)
 {
     auto jsonObject = CreateJson();
-    SerializeSubProfileToJson(jsonObject.get(), data);
+    if (jsonObject == nullptr) {
+        return nullptr;
+    }
+    if (!SerializeSubProfileToJson(jsonObject.get(), data)) {
+        return nullptr;
+    }
     return jsonObject;
 }
 

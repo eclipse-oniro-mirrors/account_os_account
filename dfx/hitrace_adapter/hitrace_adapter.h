@@ -23,6 +23,40 @@ void StartTraceAdapter(const std::string &value);
 void FinishTraceAdapter();
 void CountTraceAdapter(const std::string &name, int64_t count);
 void UpdateTraceLabelAdapter();
+
+class TraceGuard {
+public:
+    explicit TraceGuard(const std::string &value) : valid_(true)
+    {
+        StartTraceAdapter(value);
+    }
+    ~TraceGuard()
+    {
+        if (valid_) {
+            FinishTraceAdapter();
+        }
+    }
+    TraceGuard(const TraceGuard &) = delete;
+    TraceGuard &operator=(const TraceGuard &) = delete;
+    TraceGuard(TraceGuard &&other) noexcept : valid_(other.valid_)
+    {
+        other.valid_ = false;
+    }
+    TraceGuard &operator=(TraceGuard &&other) noexcept
+    {
+        if (this != &other) {
+            if (valid_) {
+                FinishTraceAdapter();
+            }
+            valid_ = other.valid_;
+            other.valid_ = false;
+        }
+        return *this;
+    }
+
+private:
+    bool valid_;
+};
 } // AccountSA
 } // OHOS
 #endif // OS_ACCOUNT_DFX_HITRACE_ADAPTER_H

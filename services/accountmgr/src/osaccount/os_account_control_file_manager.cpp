@@ -473,7 +473,14 @@ void OsAccountControlFileManager::BuildAndSaveBaseOAConstraintsJsonFile()
         return;
     }
     auto baseOsAccountConstraints = CreateJson();
-    AddVectorStringToJson(baseOsAccountConstraints, START_USER_STRING_ID, baseOAConstraints);
+    if (baseOsAccountConstraints == nullptr) {
+        ACCOUNT_LOGE("Failed to create json object");
+        return;
+    }
+    if (!AddVectorStringToJson(baseOsAccountConstraints, START_USER_STRING_ID, baseOAConstraints)) {
+        ACCOUNT_LOGE("Failed to add base OA constraints to json");
+        return;
+    }
     ErrCode errCode = SaveBaseOAConstraintsToFile(baseOsAccountConstraints);
     if (errCode != ERR_OK) {
         ACCOUNT_LOGE("Save base OA constraints to file failed, errCode = %{public}d", errCode);
@@ -485,9 +492,19 @@ void OsAccountControlFileManager::BuildAndSaveGlobalOAConstraintsJsonFile()
     ACCOUNT_LOGI("BuildAndSaveGlobalOAConstraintsJsonFile start.");
     std::lock_guard<std::mutex> lock(accountInfoFileLock_);
     auto globalOsAccountConstraints = CreateJson();
-    AddIntToJson(globalOsAccountConstraints, DEVICE_OWNER_ID, -1);
+    if (globalOsAccountConstraints == nullptr) {
+        ACCOUNT_LOGE("Failed to create json object");
+        return;
+    }
+    if (!AddIntToJson(globalOsAccountConstraints, DEVICE_OWNER_ID, -1)) {
+        ACCOUNT_LOGE("Failed to add DEVICE_OWNER_ID to json");
+        return;
+    }
     auto allGlobalConstraints = CreateJsonNull();
-    AddObjToJson(globalOsAccountConstraints, Constants::ALL_GLOBAL_CONSTRAINTS, allGlobalConstraints);
+    if (!AddObjToJson(globalOsAccountConstraints, Constants::ALL_GLOBAL_CONSTRAINTS, allGlobalConstraints)) {
+        ACCOUNT_LOGE("Failed to add ALL_GLOBAL_CONSTRAINTS to json");
+        return;
+    }
     ErrCode errCode = SaveGlobalOAConstraintsToFile(globalOsAccountConstraints);
     if (errCode != ERR_OK) {
         ACCOUNT_LOGE("Save global OA constraints to file failed, errCode = %{public}d", errCode);
@@ -499,9 +516,23 @@ void OsAccountControlFileManager::BuildAndSaveSpecificOAConstraintsJsonFile()
     std::lock_guard<std::mutex> lock(accountInfoFileLock_);
     auto allGlobalConstraints = CreateJsonNull();
     auto osAccountConstraintsList = CreateJson();
-    AddObjToJson(osAccountConstraintsList, Constants::ALL_SPECIFIC_CONSTRAINTS, allGlobalConstraints);
+    if (osAccountConstraintsList == nullptr) {
+        ACCOUNT_LOGE("Failed to create json object");
+        return;
+    }
+    if (!AddObjToJson(osAccountConstraintsList, Constants::ALL_SPECIFIC_CONSTRAINTS, allGlobalConstraints)) {
+        ACCOUNT_LOGE("Failed to add ALL_SPECIFIC_CONSTRAINTS to json");
+        return;
+    }
     auto specificOsAccountConstraints = CreateJson();
-    AddObjToJson(specificOsAccountConstraints, START_USER_STRING_ID, osAccountConstraintsList);
+    if (specificOsAccountConstraints == nullptr) {
+        ACCOUNT_LOGE("Failed to create json object");
+        return;
+    }
+    if (!AddObjToJson(specificOsAccountConstraints, START_USER_STRING_ID, osAccountConstraintsList)) {
+        ACCOUNT_LOGE("Failed to add START_USER_STRING_ID to json");
+        return;
+    }
     ErrCode errCode = SaveSpecificOAConstraintsToFile(specificOsAccountConstraints);
     if (errCode != ERR_OK) {
         ACCOUNT_LOGE("Save specific OA constraints to file failed, errCode = %{public}d", errCode);
@@ -523,8 +554,15 @@ void OsAccountControlFileManager::RecoverAccountInfoDigestJsonFile()
         REPORT_OS_ACCOUNT_FAIL(-1, "fileInit", result, "Generate account info digest failed");
     }
     auto digestJsonData = CreateJson();
-    AddVectorUint8ToJson(digestJsonData, Constants::ACCOUNT_LIST_FILE_JSON_PATH,
-        std::vector<uint8_t>(digestOutData, digestOutData + ALG_COMMON_SIZE));
+    if (digestJsonData == nullptr) {
+        ACCOUNT_LOGE("Failed to create json object");
+        return;
+    }
+    if (!AddVectorUint8ToJson(digestJsonData, Constants::ACCOUNT_LIST_FILE_JSON_PATH,
+        std::vector<uint8_t>(digestOutData, digestOutData + ALG_COMMON_SIZE))) {
+        ACCOUNT_LOGE("Failed to add digest to json");
+        return;
+    }
     std::string strValue = PackJsonToString(digestJsonData);
     result = accountFileOperator_->InputFileByPathAndContent(Constants::ACCOUNT_INFO_DIGEST_FILE_PATH, strValue);
     if (result != ERR_OK) {
@@ -1046,6 +1084,56 @@ ErrCode OsAccountControlFileManager::RemoveOASpecificConstraintsInfo(const int32
     return SaveSpecificOAConstraintsToFile(specificOAConstraintsJson);
 }
 
+static void RemoveUserConstraintsFromSpecificObj(CJson *specificOAConstraintsJson,
+    cJSON *specificJsonObj, const int32_t id)
+{
+    cJSON *userPrivateConstraintsJson = nullptr;
+    GetDataByType<CJson *>(specificOAConstraintsJson, specificJsonObj->string, userPrivateConstraintsJson);
+    std::vector<std::string> allSpecificConstraints;
+    GetDataByType<std::vector<std::string>>(userPrivateConstraintsJson, Constants::ALL_SPECIFIC_CONSTRAINTS,
+                                            allSpecificConstraints);
+    if (allSpecificConstraints.size() == 0) {
+        return;
+    }
+    std::vector<std::string> waitForErase;
+    std::vector<cJSON *> userJsonObjLists;
+    cJSON* userJsonObj = nullptr;
+    cJSON_ArrayForEach(userJsonObj, userPrivateConstraintsJson) {
+        userJsonObjLists.emplace_back(userJsonObj);
+    }
+    for (const auto &item : userJsonObjLists) {
+        if (std::string(item->string) == Constants::ALL_SPECIFIC_CONSTRAINTS) {
+            continue;
+        }
+        std::vector<std::string> sourceList;
+        GetDataByType<std::vector<std::string>>(userPrivateConstraintsJson, item->string, sourceList);
+        sourceList.erase(std::remove(sourceList.begin(),
+            sourceList.end(), std::to_string(id)), sourceList.end());
+        if (sourceList.size() == 0) {
+            allSpecificConstraints.erase(std::remove(allSpecificConstraints.begin(),
+                allSpecificConstraints.end(), item->string), allSpecificConstraints.end());
+            if (!AddVectorStringToJson(userPrivateConstraintsJson, Constants::ALL_SPECIFIC_CONSTRAINTS,
+                allSpecificConstraints)) {
+                ACCOUNT_LOGE("Failed to add all specific constraints to json");
+                return;
+            }
+            waitForErase.push_back(item->string);
+        } else {
+            if (!AddVectorStringToJson(userPrivateConstraintsJson, item->string, sourceList)) {
+                ACCOUNT_LOGE("Failed to add source list to json");
+                return;
+            }
+        }
+    }
+    for (auto keyStr : waitForErase) {
+        DeleteItemFromJson(userPrivateConstraintsJson, keyStr);
+    }
+    if (!AddObjToJson(specificOAConstraintsJson, specificJsonObj->string, userPrivateConstraintsJson)) {
+        ACCOUNT_LOGE("Failed to add user private constraints to specific json");
+        return;
+    }
+}
+
 void OsAccountControlFileManager::RemoveAllUsersConstraintsInfo(CJsonUnique &specificOAConstraintsJson,
                                                                 const int32_t id)
 {
@@ -1055,42 +1143,7 @@ void OsAccountControlFileManager::RemoveAllUsersConstraintsInfo(CJsonUnique &spe
         specificJsonObjLists.emplace_back(specificJsonObj);
     }
     for (const auto &it : specificJsonObjLists) {
-        std::vector<std::string> waitForErase;
-        cJSON *userPrivateConstraintsJson = nullptr;
-        GetDataByType<CJson *>(specificOAConstraintsJson, it->string, userPrivateConstraintsJson);
-        std::vector<std::string> allSpecificConstraints;
-        GetDataByType<std::vector<std::string>>(userPrivateConstraintsJson, Constants::ALL_SPECIFIC_CONSTRAINTS,
-                                                allSpecificConstraints);
-        if (allSpecificConstraints.size() == 0) {
-            continue;
-        }
-        std::vector<cJSON *> userJsonObjLists;
-        cJSON* userJsonObj = nullptr;
-        cJSON_ArrayForEach(userJsonObj, userPrivateConstraintsJson) {
-            userJsonObjLists.emplace_back(userJsonObj);
-        }
-        for (const auto &item : userJsonObjLists) {
-            if (std::string(item->string) == Constants::ALL_SPECIFIC_CONSTRAINTS) {
-                continue;
-            }
-            std::vector<std::string> sourceList;
-            GetDataByType<std::vector<std::string>>(userPrivateConstraintsJson, item->string, sourceList);
-            sourceList.erase(std::remove(sourceList.begin(),
-                sourceList.end(), std::to_string(id)), sourceList.end());
-            if (sourceList.size() == 0) {
-                allSpecificConstraints.erase(std::remove(allSpecificConstraints.begin(),
-                    allSpecificConstraints.end(), item->string), allSpecificConstraints.end());
-                AddVectorStringToJson(userPrivateConstraintsJson, Constants::ALL_SPECIFIC_CONSTRAINTS,
-                    allSpecificConstraints);
-                waitForErase.push_back(item->string);
-            } else {
-                AddVectorStringToJson(userPrivateConstraintsJson, item->string, sourceList);
-            }
-        }
-        for (auto keyStr : waitForErase) {
-            DeleteItemFromJson(userPrivateConstraintsJson, keyStr);
-        }
-        AddObjToJson(specificOAConstraintsJson.get(), it->string, userPrivateConstraintsJson);
+        RemoveUserConstraintsFromSpecificObj(specificOAConstraintsJson.get(), it, id);
     }
 }
 
@@ -1114,8 +1167,14 @@ ErrCode OsAccountControlFileManager::UpdateAccountList(const std::string& idStr,
     } else {
         accountIdList.erase(std::remove(accountIdList.begin(), accountIdList.end(), idStr), accountIdList.end());
     }
-    AddVectorStringToJson(accountListJson, Constants::ACCOUNT_LIST, accountIdList);
-    AddIntToJson(accountListJson, Constants::COUNT_ACCOUNT_NUM, accountIdList.size());
+    if (!AddVectorStringToJson(accountListJson, Constants::ACCOUNT_LIST, accountIdList)) {
+        ACCOUNT_LOGE("Failed to add ACCOUNT_LIST to json");
+        return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+    }
+    if (!AddIntToJson(accountListJson, Constants::COUNT_ACCOUNT_NUM, accountIdList.size())) {
+        ACCOUNT_LOGE("Failed to add COUNT_ACCOUNT_NUM to json");
+        return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+    }
     return SaveAccountListToFileAndDataBase(accountListJson);
 }
 
@@ -1133,7 +1192,10 @@ ErrCode OsAccountControlFileManager::SetNextLocalId(const int32_t &nextLocalId)
         ACCOUNT_LOGW("SetNextLocalId get next localId failed");
         nextLocalIdJson = Constants::START_USER_ID + 1;
     }
-    AddIntToJson(accountListJson, NEXT_LOCAL_ID, std::max(nextLocalId, nextLocalIdJson));
+    if (!AddIntToJson(accountListJson, NEXT_LOCAL_ID, std::max(nextLocalId, nextLocalIdJson))) {
+        ACCOUNT_LOGE("SetNextLocalId add NEXT_LOCAL_ID to json failed");
+        return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+    }
     result = SaveAccountListToFileAndDataBase(accountListJson);
     if (result != ERR_OK) {
         ACCOUNT_LOGE("SetNextLocalId save accountListJson error.");
@@ -1284,7 +1346,10 @@ ErrCode OsAccountControlFileManager::GetSerialNumber(int64_t &serialNumber)
     }
     GetDataByType<int64_t>(accountListJson, Constants::SERIAL_NUMBER_NUM, serialNumber);
     if (serialNumber == Constants::CARRY_NUM) {
-        AddBoolToJson(accountListJson, IS_SERIAL_NUMBER_FULL, true);
+        if (!AddBoolToJson(accountListJson, IS_SERIAL_NUMBER_FULL, true)) {
+            ACCOUNT_LOGE("GetSerialNumber add IS_SERIAL_NUMBER_FULL to json failed");
+            return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+        }
         serialNumber = Constants::SERIAL_NUMBER_NUM_START;
     }
     bool isSerialNumberFull = false;
@@ -1306,7 +1371,10 @@ ErrCode OsAccountControlFileManager::GetSerialNumber(int64_t &serialNumber)
             serialNumber = (serialNumber == Constants::CARRY_NUM) ? Constants::SERIAL_NUMBER_NUM_START : serialNumber;
         }
     }
-    AddInt64ToJson(accountListJson, Constants::SERIAL_NUMBER_NUM, serialNumber + 1);
+    if (!AddInt64ToJson(accountListJson, Constants::SERIAL_NUMBER_NUM, serialNumber + 1)) {
+        ACCOUNT_LOGE("GetSerialNumber add SERIAL_NUMBER_NUM to json failed");
+        return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+    }
     result = SaveAccountListToFileAndDataBase(accountListJson);
     if (result != ERR_OK) {
         return result;
@@ -1372,7 +1440,10 @@ ErrCode OsAccountControlFileManager::GetAllowCreateId(int &id)
             Constants::MAX_CREATABLE_USER_ID, id);
         return ERR_OSACCOUNT_SERVICE_CONTROL_MAX_CAN_CREATE_ERROR;
     }
-    AddIntToJson(accountListJson, NEXT_LOCAL_ID, id + 1);
+    if (!AddIntToJson(accountListJson, NEXT_LOCAL_ID, id + 1)) {
+        ACCOUNT_LOGE("GetAllowCreateId add NEXT_LOCAL_ID to json failed");
+        return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+    }
     result = SaveAccountListToFileAndDataBase(accountListJson);
     if (result != ERR_OK) {
         ACCOUNT_LOGE("GetAllowCreateId save accountListJson error, errCode %{public}d.", result);
@@ -1689,7 +1760,10 @@ ErrCode OsAccountControlFileManager::UpdateDeviceOwnerId(const int deviceOwnerId
         ACCOUNT_LOGE("Get global json data from file failed!");
         return result;
     }
-    AddIntToJson(globalOAConstraintsJson, DEVICE_OWNER_ID, deviceOwnerId);
+    if (!AddIntToJson(globalOAConstraintsJson, DEVICE_OWNER_ID, deviceOwnerId)) {
+        ACCOUNT_LOGE("Failed to add DEVICE_OWNER_ID to json");
+        return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+    }
     return SaveGlobalOAConstraintsToFile(globalOAConstraintsJson);
 }
 
@@ -1710,14 +1784,30 @@ ErrCode OsAccountControlFileManager::SetDefaultActivatedOsAccount(const uint64_t
     CJson* defaultActivatedAccountJson = nullptr;
     int tmpId;
     if (GetDataByType<CJson *>(accountListJson, DEFAULT_ACTIVATED_ACCOUNT_ID, defaultActivatedAccountJson)) {
-        AddIntToJson(defaultActivatedAccountJson, std::to_string(displayId), id);
+        if (!AddIntToJson(defaultActivatedAccountJson, std::to_string(displayId), id)) {
+            ACCOUNT_LOGE("Failed to add displayId to json");
+            return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+        }
     } else if (GetDataByType<int>(accountListJson, DEFAULT_ACTIVATED_ACCOUNT_ID, tmpId)) {
         CJsonUnique tmpJson = CreateJson();
-        if (displayId != Constants::DEFAULT_DISPLAY_ID) {
-            AddIntToJson(tmpJson, std::to_string(Constants::DEFAULT_DISPLAY_ID), tmpId);
+        if (tmpJson == nullptr) {
+            ACCOUNT_LOGE("Failed to create json object");
+            return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
         }
-        AddIntToJson(tmpJson, std::to_string(displayId), id);
-        AddObjToJson(accountListJson, DEFAULT_ACTIVATED_ACCOUNT_ID, tmpJson);
+        if (displayId != Constants::DEFAULT_DISPLAY_ID) {
+            if (!AddIntToJson(tmpJson, std::to_string(Constants::DEFAULT_DISPLAY_ID), tmpId)) {
+                ACCOUNT_LOGE("Failed to add DEFAULT_DISPLAY_ID to json");
+                return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+            }
+        }
+        if (!AddIntToJson(tmpJson, std::to_string(displayId), id)) {
+            ACCOUNT_LOGE("Failed to add displayId to json");
+            return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+        }
+        if (!AddObjToJson(accountListJson, DEFAULT_ACTIVATED_ACCOUNT_ID, tmpJson)) {
+            ACCOUNT_LOGE("Failed to add DEFAULT_ACTIVATED_ACCOUNT_ID to json");
+            return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
+        }
     } else {
         ACCOUNT_LOGE("Failed, Json data for default activated account is not found!");
         ReportOsAccountOperationFail(id, "setDefaultActivated", ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR,
