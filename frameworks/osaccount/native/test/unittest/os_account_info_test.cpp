@@ -647,6 +647,186 @@ HWTEST_F(OsAccountInfoTest, OsAccountInfo_ToJson_FromJson_001, TestSize.Level1)
     EXPECT_EQ("202393938", GetStringFromJson(typeJson, DOMAIN_ACCOUNT_CONFIG));
 }
 
+/**
+ * @tc.name: OsAccountInfo_ToJson_FieldCompleteness_001
+ * @tc.desc: Test ToJson returns non-null and all fields are present after serialization.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountInfoTest, OsAccountInfo_ToJson_FieldCompleteness_001, TestSize.Level1)
+{
+    ACCOUNT_LOGI("OsAccountInfo_ToJson_FieldCompleteness_001");
+
+    auto objJson = CreateJsonFromString(OS_ACCOUNT_INFO_JSON_STRING);
+    ASSERT_NE(objJson, nullptr);
+
+    OsAccountInfo testOsAccountInfo;
+    FromJson(objJson.get(), testOsAccountInfo);
+    auto jsonObject = ToJson(testOsAccountInfo);
+    ASSERT_NE(jsonObject, nullptr);
+
+    EXPECT_TRUE(IsKeyExist(jsonObject, LOCAL_ID));
+    EXPECT_TRUE(IsKeyExist(jsonObject, LOCAL_NAME));
+    EXPECT_TRUE(IsKeyExist(jsonObject, SHORT_NAME));
+    EXPECT_TRUE(IsKeyExist(jsonObject, TYPE));
+    EXPECT_TRUE(IsKeyExist(jsonObject, CONSTRAINTS));
+    EXPECT_TRUE(IsKeyExist(jsonObject, IS_OS_ACCOUNT_VERIFIED));
+    EXPECT_TRUE(IsKeyExist(jsonObject, PHOTO));
+    EXPECT_TRUE(IsKeyExist(jsonObject, CREATE_TIME));
+    EXPECT_TRUE(IsKeyExist(jsonObject, LAST_LOGGED_IN_TIME));
+    EXPECT_TRUE(IsKeyExist(jsonObject, SERIAL_NUMBER));
+    EXPECT_TRUE(IsKeyExist(jsonObject, IS_ACTIVATED));
+    EXPECT_TRUE(IsKeyExist(jsonObject, IS_ACCOUNT_COMPLETED));
+    EXPECT_TRUE(IsKeyExist(jsonObject, TO_BE_REMOVED));
+    EXPECT_TRUE(IsKeyExist(jsonObject, CREDENTIAL_ID));
+    EXPECT_TRUE(IsKeyExist(jsonObject, DISPLAY_ID));
+    EXPECT_TRUE(IsKeyExist(jsonObject, IS_FOREGROUND));
+    EXPECT_TRUE(IsKeyExist(jsonObject, IS_LOGGED_IN));
+    EXPECT_TRUE(IsKeyExist(jsonObject, IS_DATA_REMOVABLE));
+    EXPECT_TRUE(IsKeyExist(jsonObject, CREATOR_TYPE));
+    EXPECT_TRUE(IsKeyExist(jsonObject, VERSION));
+    EXPECT_TRUE(IsKeyExist(jsonObject, DOMAIN_INFO));
+
+    cJSON *domainJson = GetObjFromJson(jsonObject, DOMAIN_INFO);
+    ASSERT_NE(domainJson, nullptr);
+    EXPECT_TRUE(IsKeyExist(domainJson, DOMAIN_NAME));
+    EXPECT_TRUE(IsKeyExist(domainJson, DOMAIN_ACCOUNT_NAME));
+    EXPECT_TRUE(IsKeyExist(domainJson, DOMAIN_ACCOUNT_ID));
+    EXPECT_TRUE(IsKeyExist(domainJson, DOMAIN_ACCOUNT_STATUS));
+    EXPECT_TRUE(IsKeyExist(domainJson, DOMAIN_ACCOUNT_CONFIG));
+    EXPECT_TRUE(IsKeyExist(domainJson, DOMAIN_ACCOUNT_ADDITION));
+}
+
+/**
+ * @tc.name: OsAccountInfo_ToJson_RoundTrip_001
+ * @tc.desc: Test ToJson -> FromJson round trip preserves all data.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountInfoTest, OsAccountInfo_ToJson_RoundTrip_001, TestSize.Level1)
+{
+    ACCOUNT_LOGI("OsAccountInfo_ToJson_RoundTrip_001");
+
+    auto objJson = CreateJsonFromString(OS_ACCOUNT_INFO_JSON_STRING);
+    ASSERT_NE(objJson, nullptr);
+
+    OsAccountInfo originalInfo;
+    FromJson(objJson.get(), originalInfo);
+    auto jsonObject = ToJson(originalInfo);
+    ASSERT_NE(jsonObject, nullptr);
+
+    OsAccountInfo roundTripInfo;
+    FromJson(jsonObject.get(), roundTripInfo);
+
+    EXPECT_EQ(originalInfo.localId_, roundTripInfo.localId_);
+    EXPECT_EQ(originalInfo.localName_, roundTripInfo.localName_);
+    EXPECT_EQ(originalInfo.shortName_, roundTripInfo.shortName_);
+    EXPECT_EQ(originalInfo.type_, roundTripInfo.type_);
+    EXPECT_EQ(originalInfo.constraints_, roundTripInfo.constraints_);
+    EXPECT_EQ(originalInfo.isVerified_, roundTripInfo.isVerified_);
+    EXPECT_EQ(originalInfo.createTime_, roundTripInfo.createTime_);
+    EXPECT_EQ(originalInfo.lastLoginTime_, roundTripInfo.lastLoginTime_);
+    EXPECT_EQ(originalInfo.serialNumber_, roundTripInfo.serialNumber_);
+    EXPECT_EQ(originalInfo.isActivated_, roundTripInfo.isActivated_);
+    EXPECT_EQ(originalInfo.isCreateCompleted_, roundTripInfo.isCreateCompleted_);
+    EXPECT_EQ(originalInfo.toBeRemoved_, roundTripInfo.toBeRemoved_);
+    EXPECT_EQ(originalInfo.credentialId_, roundTripInfo.credentialId_);
+    EXPECT_EQ(originalInfo.displayId_, roundTripInfo.displayId_);
+    EXPECT_EQ(originalInfo.isForeground_, roundTripInfo.isForeground_);
+    EXPECT_EQ(originalInfo.isLoggedIn_, roundTripInfo.isLoggedIn_);
+    EXPECT_EQ(originalInfo.isDataRemovable_, roundTripInfo.isDataRemovable_);
+    EXPECT_EQ(originalInfo.creatorType_, roundTripInfo.creatorType_);
+    EXPECT_EQ(originalInfo.photo_, roundTripInfo.photo_);
+    EXPECT_EQ(originalInfo.version_, roundTripInfo.version_);
+    EXPECT_EQ(originalInfo.domainInfo_.domain_, roundTripInfo.domainInfo_.domain_);
+    EXPECT_EQ(originalInfo.domainInfo_.accountName_, roundTripInfo.domainInfo_.accountName_);
+    EXPECT_EQ(originalInfo.domainInfo_.accountId_, roundTripInfo.domainInfo_.accountId_);
+    EXPECT_EQ(originalInfo.domainInfo_.status_, roundTripInfo.domainInfo_.status_);
+    EXPECT_EQ(originalInfo.domainInfo_.serverConfigId_, roundTripInfo.domainInfo_.serverConfigId_);
+    EXPECT_EQ(originalInfo.domainInfo_.additionInfo_, roundTripInfo.domainInfo_.additionInfo_);
+}
+
+/**
+ * @tc.name: DomainAccountInfo_ToJson_FieldCompleteness_001
+ * @tc.desc: Test ToJson(DomainAccountInfo) returns non-null with all fields present.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountInfoTest, DomainAccountInfo_ToJson_FieldCompleteness_001, TestSize.Level1)
+{
+    ACCOUNT_LOGI("DomainAccountInfo_ToJson_FieldCompleteness_001");
+
+    DomainAccountInfo domainInfo("test_domain", "test_name", "test_id", true, "test_config_id");
+    domainInfo.status_ = DomainAccountStatus::LOGIN;
+    domainInfo.additionInfo_ = "test_addition";
+
+    auto jsonResult = ToJson(domainInfo);
+    ASSERT_NE(jsonResult, nullptr);
+
+    EXPECT_TRUE(IsKeyExist(jsonResult, DOMAIN_NAME));
+    EXPECT_TRUE(IsKeyExist(jsonResult, DOMAIN_ACCOUNT_NAME));
+    EXPECT_TRUE(IsKeyExist(jsonResult, DOMAIN_ACCOUNT_ID));
+    EXPECT_TRUE(IsKeyExist(jsonResult, DOMAIN_ACCOUNT_STATUS));
+    EXPECT_TRUE(IsKeyExist(jsonResult, DOMAIN_ACCOUNT_CONFIG));
+    EXPECT_TRUE(IsKeyExist(jsonResult, DOMAIN_ACCOUNT_ADDITION));
+
+    EXPECT_EQ("test_domain", GetStringFromJson(jsonResult, DOMAIN_NAME));
+    EXPECT_EQ("test_name", GetStringFromJson(jsonResult, DOMAIN_ACCOUNT_NAME));
+    EXPECT_EQ("test_id", GetStringFromJson(jsonResult, DOMAIN_ACCOUNT_ID));
+    EXPECT_EQ("test_config_id", GetStringFromJson(jsonResult, DOMAIN_ACCOUNT_CONFIG));
+    EXPECT_EQ("test_addition", GetStringFromJson(jsonResult, DOMAIN_ACCOUNT_ADDITION));
+
+    int32_t retStatus = 0;
+    GetIntFromJson(jsonResult.get(), DOMAIN_ACCOUNT_STATUS, retStatus);
+    EXPECT_EQ(static_cast<int32_t>(DomainAccountStatus::LOGIN), retStatus);
+}
+
+/**
+ * @tc.name: DomainAccountInfo_ToJson_Empty_001
+ * @tc.desc: Test ToJson(DomainAccountInfo) with empty fields returns non-null.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountInfoTest, DomainAccountInfo_ToJson_Empty_001, TestSize.Level1)
+{
+    ACCOUNT_LOGI("DomainAccountInfo_ToJson_Empty_001");
+
+    DomainAccountInfo emptyDomainInfo;
+    auto jsonResult = ToJson(emptyDomainInfo);
+    ASSERT_NE(jsonResult, nullptr);
+    EXPECT_TRUE(IsObject(jsonResult));
+    EXPECT_EQ("", GetStringFromJson(jsonResult, DOMAIN_NAME));
+    EXPECT_EQ("", GetStringFromJson(jsonResult, DOMAIN_ACCOUNT_NAME));
+}
+
+/**
+ * @tc.name: DomainAccountInfo_ToJson_RoundTrip_001
+ * @tc.desc: Test ToJson -> FromJson round trip for DomainAccountInfo.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountInfoTest, DomainAccountInfo_ToJson_RoundTrip_001, TestSize.Level1)
+{
+    ACCOUNT_LOGI("DomainAccountInfo_ToJson_RoundTrip_001");
+
+    DomainAccountInfo original("domain1", "name1", "id1", true, "config1");
+    original.status_ = DomainAccountStatus::LOGIN_BACKGROUND;
+    original.additionInfo_ = "addition1";
+
+    auto jsonResult = ToJson(original);
+    ASSERT_NE(jsonResult, nullptr);
+
+    DomainAccountInfo roundTrip;
+    FromJson(jsonResult.get(), roundTrip);
+
+    EXPECT_EQ(original.domain_, roundTrip.domain_);
+    EXPECT_EQ(original.accountName_, roundTrip.accountName_);
+    EXPECT_EQ(original.accountId_, roundTrip.accountId_);
+    EXPECT_EQ(original.status_, roundTrip.status_);
+    EXPECT_EQ(original.serverConfigId_, roundTrip.serverConfigId_);
+    EXPECT_EQ(original.additionInfo_, roundTrip.additionInfo_);
+}
+
 #ifdef ENABLE_MULTIPLE_OS_ACCOUNTS
 /**
  * @tc.name: GetOsAccountName02

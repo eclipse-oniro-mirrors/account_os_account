@@ -15,6 +15,8 @@
 
 #include <gmock/gmock.h>
 #include <thread>
+#include <securec.h>
+
 #include "accesstoken_kit.h"
 #define private public
 #include "account_iam_client.h"
@@ -1286,8 +1288,8 @@ HWTEST_F(AccountIAMClientTest, SetDomainAuthUnlockEnabled_ForwardEnabled_001, Te
         TEST_USER_ID, token, secret, true);
     EXPECT_EQ(ret, ERR_OK);
     AccountIAMClient::GetInstance().proxy_ = savedProxy;
-    std::fill(token.begin(), token.end(), 0);
-    std::fill(secret.begin(), secret.end(), 0);
+    (void)memset_s(token.data(), token.size(), 0, token.size());
+    (void)memset_s(secret.data(), secret.size(), 0, secret.size());
 }
 
 /**
@@ -1310,8 +1312,8 @@ HWTEST_F(AccountIAMClientTest, SetDomainAuthUnlockEnabled_ForwardDisabled_001, T
         TEST_USER_ID, token, secret, false);
     EXPECT_EQ(ret, ERR_ACCOUNT_IAM_AUTH_TOKEN_INVALID);
     AccountIAMClient::GetInstance().proxy_ = savedProxy;
-    std::fill(token.begin(), token.end(), 0);
-    std::fill(secret.begin(), secret.end(), 0);
+    (void)memset_s(token.data(), token.size(), 0, token.size());
+    (void)memset_s(secret.data(), secret.size(), 0, secret.size());
 }
 #else
 /**
@@ -1327,8 +1329,8 @@ HWTEST_F(AccountIAMClientTest, SetDomainAuthUnlockEnabled_NotSupported_001, Test
     ErrCode ret = AccountIAMClient::GetInstance().SetDomainAuthUnlockEnabled(
         TEST_USER_ID, token, secret, true);
     EXPECT_EQ(ret, ERR_DOMAIN_ACCOUNT_NOT_SUPPORT);
-    std::fill(token.begin(), token.end(), 0);
-    std::fill(secret.begin(), secret.end(), 0);
+    (void)memset_s(token.data(), token.size(), 0, token.size());
+    (void)memset_s(secret.data(), secret.size(), 0, secret.size());
 }
 #endif
 
