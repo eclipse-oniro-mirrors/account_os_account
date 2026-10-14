@@ -157,6 +157,11 @@ private:
     bool VerifyWidget(const std::string &bundleName);
 
     ErrCode CheckPublicPermission(int32_t localId);
+    bool CheckPrivilegeEnumValid(const std::string &privilege, AuthorizationResult &authorizationResult,
+        const sptr<IAuthorizationCallback> &callback);
+    bool CheckKernelPermission(const PrivilegeBriefDef &def, const std::string &privilege,
+        int32_t localId, AuthorizationResult &authorizationResult,
+        const sptr<IAuthorizationCallback> &callback);
 
     /// OS account configuration
     OsAccountConfig config_;

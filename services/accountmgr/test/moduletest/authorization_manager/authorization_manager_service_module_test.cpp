@@ -958,21 +958,6 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_1500, T
 }
 
 /**
- * @tc.name: HasAuthorizationForPublicTest_0100
- * @tc.desc: test HasAuthorizationForPublic with empty privilege.
- * @tc.type: FUNC
- * @tc.require: issueIXXXXX
- */
-HWTEST_F(AuthorizationManagerServiceModuleTest, HasAuthorizationForPublicTest_0100, TestSize.Level0)
-{
-    ACCOUNT_LOGI("HasAuthorizationForPublicTest_0100");
-    bool isAuthorized = true;
-    ErrCode ret = service_->HasAuthorizationForPublic("", isAuthorized);
-    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
-    EXPECT_FALSE(isAuthorized);
-}
-
-/**
  * @tc.name: HasAuthorizationForPublicTest_0200
  * @tc.desc: test HasAuthorizationForPublic with GetPrivilegeBriefDef failure.
  * @tc.type: FUNC
@@ -984,7 +969,7 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, HasAuthorizationForPublicTest_02
     g_getPrivilegeBriefDef = false;
     bool isAuthorized = true;
     ErrCode ret = service_->HasAuthorizationForPublic(TEST_PUBLIC_PRIVILEGE, isAuthorized);
-    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+    EXPECT_EQ(ret, ERR_OK);
     EXPECT_FALSE(isAuthorized);
     g_getPrivilegeBriefDef = true;
 }
@@ -1024,7 +1009,7 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, HasAuthorizationForPublicTest_04
     g_transferPrivilegeToCode = false;
     bool isAuthorized = true;
     ErrCode ret = service_->HasAuthorizationForPublic(TEST_PUBLIC_PRIVILEGE, isAuthorized);
-    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+    EXPECT_EQ(ret, ERR_OK);
     EXPECT_FALSE(isAuthorized);
     g_transferPrivilegeToCode = true;
 }
@@ -1143,13 +1128,14 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTes
     auto requestObj = new MockAuthorizationCallbackStub();
     ErrCode ret = service_->AcquireAuthorizationForPublic(
         TEST_PUBLIC_PRIVILEGE, true, callbackObj->AsObject(), requestObj->AsObject());
-    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+    EXPECT_EQ(ret, ERR_OK);
+    EXPECT_EQ(callbackObj->result_.resultCode, AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED);
     g_getPrivilegeBriefDef = true;
 }
 
 /**
  * @tc.name: AcquireAuthorizationForPublicTest_0500
- * @tc.desc: test AcquireAuthorizationForPublic with empty kernelPermission (no longer rejected).
+ * @tc.desc: test AcquireAuthorizationForPublic with null kernelPermission, skip kernel check.
  * @tc.type: FUNC
  * @tc.require: issueIXXXXX
  */
@@ -1164,8 +1150,55 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTes
     auto requestObj = new MockAuthorizationCallbackStub();
     ErrCode ret = service_->AcquireAuthorizationForPublic(
         TEST_PUBLIC_PRIVILEGE, true, callbackObj->AsObject(), requestObj->AsObject());
-    EXPECT_NE(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+    EXPECT_EQ(ret, ERR_OK);
     g_kernelPermission = "test_kernel_perm";
+}
+
+/**
+ * @tc.name: AcquireAuthorizationForPublicTest_0800
+ * @tc.desc: test AcquireAuthorizationForPublic with kernel permission denied.
+ * @tc.type: FUNC
+ * @tc.require: issueIXXXXX
+ */
+HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0800, TestSize.Level0)
+{
+    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0800");
+    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
+        .WillOnce(Return(ERR_OK))
+        .WillOnce(Return(ERR_ACCOUNT_COMMON_PERMISSION_DENIED));
+    g_getPrivilegeBriefDef = true;
+    g_kernelPermission = "test_kernel_perm";
+    auto callbackObj = new MockAuthorizationCallbackStub();
+    auto requestObj = new MockAuthorizationCallbackStub();
+    ErrCode ret = service_->AcquireAuthorizationForPublic(
+        TEST_PUBLIC_PRIVILEGE, true, callbackObj->AsObject(), requestObj->AsObject());
+    EXPECT_EQ(ret, ERR_OK);
+    EXPECT_EQ(callbackObj->result_.resultCode, AuthorizationResultCode::AUTHORIZATION_DENIED);
+}
+
+/**
+ * @tc.name: AcquireAuthorizationForPublicTest_0900
+ * @tc.desc: test AcquireAuthorizationForPublic with HandleWhenReuse TransferPrivilegeToCode failure.
+ * @tc.type: FUNC
+ * @tc.require: issueIXXXXX
+ */
+HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0900, TestSize.Level0)
+{
+    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0900");
+    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
+        .WillRepeatedly(Return(ERR_OK));
+    g_getPrivilegeBriefDef = true;
+    g_kernelPermission = "test_kernel_perm";
+    g_transferPrivilegeToCode = false;
+    g_hasConnect = false;
+    g_hasExtensionConnect = false;
+    auto callbackObj = new MockAuthorizationCallbackStub();
+    auto requestObj = new MockAuthorizationCallbackStub();
+    ErrCode ret = service_->AcquireAuthorizationForPublic(
+        TEST_PUBLIC_PRIVILEGE, true, callbackObj->AsObject(), requestObj->AsObject());
+    EXPECT_EQ(ret, ERR_OK);
+    EXPECT_EQ(callbackObj->result_.resultCode, AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED);
+    g_transferPrivilegeToCode = true;
 }
 
 /**

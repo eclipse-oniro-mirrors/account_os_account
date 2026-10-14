@@ -221,3 +221,25 @@ HWTEST_F(AccountErrorCodeConvertTest, AccountErrorCodeConvertTest008, TestSize.L
     EXPECT_EQ(ConvertToJSErrCode(ERR_DOMAIN_ACCOUNT_SERVICE_ERR_CODE_LIMIT),
         ERR_JS_SYSTEM_SERVICE_EXCEPTION);
 }
+
+/**
+ * @tc.name: AccountErrorCodeConvertTest009
+ * @tc.desc: AuthorizationPublicConvertToJsErrCode test
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AccountErrorCodeConvertTest, AccountErrorCodeConvertTest009, TestSize.Level3)
+{
+    EXPECT_EQ(AuthorizationPublicConvertToJsErrCode(
+        ERR_JS_AUTHORIZATION_INTERACTION_NOT_ALLOWED), ERR_JS_AUTHORIZATION_INTERACTION_NOT_ALLOWED);
+    EXPECT_EQ(AuthorizationPublicConvertToJsErrCode(
+        ERR_JS_AUTHORIZATION_SERVICE_BUSY), ERR_JS_AUTHORIZATION_SERVICE_BUSY);
+    EXPECT_EQ(AuthorizationPublicConvertToJsErrCode(
+        ERR_ACCOUNT_COMMON_INVALID_PARAMETER), ERR_JS_SYSTEM_SERVICE_EXCEPTION);
+    EXPECT_EQ(AuthorizationPublicConvertToJsErrCode(
+        ERR_ACCOUNT_COMMON_PERMISSION_DENIED), ERR_JS_PERMISSION_DENIED);
+    EXPECT_EQ(AuthorizationPublicConvertToJsErrCode(
+        ERR_ACCOUNT_COMMON_NOT_SYSTEM_APP_ERROR), ERR_JS_IS_NOT_SYSTEM_APP);
+    EXPECT_EQ(AuthorizationPublicConvertToJsErrCode(ERR_OK), ERR_JS_SUCCESS);
+    EXPECT_EQ(AuthorizationPublicConvertToJsErrCode(-1), ERR_JS_SYSTEM_SERVICE_EXCEPTION);
+}

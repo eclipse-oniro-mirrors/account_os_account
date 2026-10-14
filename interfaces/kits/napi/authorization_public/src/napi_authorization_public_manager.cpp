@@ -190,7 +190,8 @@ static void HasAuthorizationPublicCompletedCB(napi_env env, napi_status status, 
         errJs = GenerateBusinessSuccess(env, true);
         napi_get_boolean(env, asyncContext->isAuthorized, &dataJS);
     } else {
-        errJs = GenerateAuthorizationBusinessError(env, asyncContext->errCode);
+        errJs = GenerateBusinessError(env, ERR_JS_SYSTEM_SERVICE_EXCEPTION,
+            ConvertToJsErrMsg(ERR_JS_SYSTEM_SERVICE_EXCEPTION));
         napi_get_null(env, &dataJS);
     }
     ProcessCallbackOrPromise(env, asyncContext, errJs, dataJS);

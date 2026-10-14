@@ -560,6 +560,39 @@ ErrCode AuthorizationManagerService::CheckPublicPermission(int32_t localId)
     return ERR_OK;
 }
 
+bool AuthorizationManagerService::CheckPrivilegeEnumValid(const std::string &privilege,
+    AuthorizationResult &authorizationResult, const sptr<IAuthorizationCallback> &callback)
+{
+    bool isValidPrivilege = false;
+    for (const auto &item : AccountSA::PRIVILEGE_MAP) {
+        if (privilege == item.second) {
+            isValidPrivilege = true;
+            break;
+        }
+    }
+    if (!isValidPrivilege) {
+        authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
+        callback->OnResult(ERR_OK, authorizationResult);
+        return false;
+    }
+    return true;
+}
+
+bool AuthorizationManagerService::CheckKernelPermission(const PrivilegeBriefDef &def, const std::string &privilege,
+    int32_t localId, AuthorizationResult &authorizationResult,
+    const sptr<IAuthorizationCallback> &callback)
+{
+    ErrCode permResult = AccountPermissionManager::VerifyPermission(def.kernelPermission);
+    if (permResult == ERR_OK) {
+        return true;
+    }
+    ACCOUNT_LOGE("Caller does not have kernel permission %{public}s for privilege %{public}s",
+        def.kernelPermission, privilege.c_str());
+    authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_DENIED;
+    callback->OnResult(ERR_OK, authorizationResult);
+    return false;
+}
+
 ErrCode AuthorizationManagerService::AcquireAuthorizationForPublic(const std::string &privilege,
     bool isContextValid, const sptr<IRemoteObject> &authorizationResultCallback,
     const sptr<IRemoteObject> &requestRemoteObj)
@@ -572,27 +605,29 @@ ErrCode AuthorizationManagerService::AcquireAuthorizationForPublic(const std::st
     AuthorizationResult authorizationResult;
     authorizationResult.privilege = privilege;
     auto callback = iface_cast<IAuthorizationCallback>(authorizationResultCallback);
+    if (callback == nullptr) {
+        ACCOUNT_LOGE("Callback is nullptr");
+        return ERR_AUTHORIZATION_GET_PROXY_ERROR;
+    }
     AcquireAuthorizationOptions options;
     options.hasContext = true;
     options.isContextValid = isContextValid;
     options.isPublicApi = true;
-    bool isValidPrivilege = false;
-    for (const auto &item : AccountSA::PRIVILEGE_MAP) {
-        if (privilege == item.second) {
-            isValidPrivilege = true;
-            break;
-        }
-    }
-    if (!isValidPrivilege) {
-        authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
-        callback->OnResult(ERR_OK, authorizationResult);
+    if (!CheckPrivilegeEnumValid(privilege, authorizationResult, callback)) {
         return ERR_OK;
     }
     PrivilegeBriefDef def;
     result = GetPrivilegeDefinition(authorizationResult, def, localId);
     if (result != ERR_OK) {
-        return result;
+        authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
+        callback->OnResult(ERR_OK, authorizationResult);
+        return ERR_OK;
     }
+    if (def.kernelPermission != nullptr &&
+        !CheckKernelPermission(def, privilege, localId, authorizationResult, callback)) {
+        return ERR_OK;
+    }
+
     result = CheckCallbackAndConnections(callback, options, localId, authorizationResult);
     if (result != ERR_OK) {
         return result;
@@ -602,21 +637,21 @@ ErrCode AuthorizationManagerService::AcquireAuthorizationForPublic(const std::st
         return ERR_OK;
     }
     result = HandleWhenReuse(authorizationResult, options, callback, localId);
-    if (result != ERR_AUTHORIZATION_NO_CACHE) {
-        return result;
+    if (result == ERR_AUTHORIZATION_NO_CACHE) {
+        return InnerAuthorizationManager::GetInstance().AcquireAuthorization(
+            def, options, config_, callback->AsObject(), requestRemoteObj);
     }
-    return InnerAuthorizationManager::GetInstance().AcquireAuthorization(
-        def, options, config_, callback->AsObject(), requestRemoteObj);
+    if (result != ERR_OK) {
+        authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
+        callback->OnResult(ERR_OK, authorizationResult);
+    }
+    return ERR_OK;
 }
 
 ErrCode AuthorizationManagerService::HasAuthorizationForPublic(const std::string &privilege,
     bool &isAuthorized)
 {
     isAuthorized = false;
-    if (privilege.empty()) {
-        ACCOUNT_LOGE("Privilege is empty");
-        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
-    }
     bool isValidPrivilege = false;
     for (const auto &item : AccountSA::PRIVILEGE_MAP) {
         if (privilege == item.second) {
@@ -630,12 +665,12 @@ ErrCode AuthorizationManagerService::HasAuthorizationForPublic(const std::string
     PrivilegeBriefDef def;
     if (!GetPrivilegeBriefDef(privilege, def)) {
         ACCOUNT_LOGE("Fail to check privilege, privilege:%{public}s", privilege.c_str());
-        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+        return ERR_OK;
     }
     uint32_t privilegeId = 0;
     if (!TransferPrivilegeToCode(privilege, privilegeId)) {
         ACCOUNT_LOGE("Failed to get privilegeId from privilege");
-        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+        return ERR_OK;
     }
     int32_t callingPid = IPCSkeleton::GetCallingPid();
     if (def.kernelPermission != nullptr) {
