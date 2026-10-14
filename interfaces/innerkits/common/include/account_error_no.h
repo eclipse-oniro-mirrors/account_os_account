@@ -460,6 +460,7 @@ bool CheckJsErrorCode(int32_t errCode);
 std::string ConvertToJsErrMsg(int32_t jsErrCode);
 int32_t AccountIAMConvertToJSErrCode(int32_t errCode);
 int32_t AuthorizationConvertToJsErrCode(int32_t nativeErrCode);
+int32_t AuthorizationPublicConvertToJsErrCode(int32_t nativeErrCode);
 std::string& NativeErrMsg();
 }  // namespace OHOS
 

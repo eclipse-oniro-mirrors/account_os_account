@@ -66,10 +66,7 @@ public:
         return ERR_OK;
     }
 
-    ErrCode IsOsAccountExists(const int id, bool &isOsAccountExits)
-    {
-        return ERR_OK;
-    }
+    ErrCode IsOsAccountExists(const int id, bool &isOsAccountExits);
 
     ErrCode GetOsAccountLocalIdFromDomain(const DomainAccountInfo &domainInfo, int &id)
     {

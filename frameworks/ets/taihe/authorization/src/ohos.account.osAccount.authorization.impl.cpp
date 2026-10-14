@@ -51,7 +51,7 @@ void SetAuthorizationBusinessError(int32_t nativeErrCode)
     if (nativeErrCode == ERR_OK) {
         return;
     }
-    int32_t jsErrCode = OHOS::AuthorizationConvertToJsErrCode(nativeErrCode);
+    int32_t jsErrCode = OHOS::AuthorizationPublicConvertToJsErrCode(nativeErrCode);
     std::string errMsg = OHOS::ConvertToJsErrMsg(jsErrCode);
     taihe::set_business_error(jsErrCode, errMsg.c_str());
 }
@@ -84,18 +84,9 @@ static ohos::account::osAccount::authorization::AuthorizationResult WaitForAutho
 
     if (callback->errCode_ != ERR_OK) {
         ACCOUNT_LOGE("AcquireAuthorization failed with errCode: %{public}d", callback->errCode_);
-        auto rc = callback->errCode_;
-        if (rc == static_cast<int32_t>(
-                AccountSA::AuthorizationResultCode::AUTHORIZATION_INTERACTION_NOT_ALLOWED)) {
-            std::string errMsg = ConvertToJsErrMsg(ERR_JS_AUTHORIZATION_INTERACTION_NOT_ALLOWED);
-            taihe::set_business_error(ERR_JS_AUTHORIZATION_INTERACTION_NOT_ALLOWED, errMsg.c_str());
-        } else if (rc == static_cast<int32_t>(
-                       AccountSA::AuthorizationResultCode::AUTHORIZATION_SERVICE_BUSY)) {
-            std::string errMsg = ConvertToJsErrMsg(ERR_JS_AUTHORIZATION_SERVICE_BUSY);
-            taihe::set_business_error(ERR_JS_AUTHORIZATION_SERVICE_BUSY, errMsg.c_str());
-        } else {
-            SetAuthorizationBusinessError(callback->errCode_);
-        }
+        int32_t jsErrCode = OHOS::AuthorizationPublicConvertToJsErrCode(callback->errCode_);
+        std::string errMsg = OHOS::ConvertToJsErrMsg(jsErrCode);
+        taihe::set_business_error(jsErrCode, errMsg.c_str());
         return InitializeAuthorizationResult();
     }
     return std::move(*callback->taiheResult_);

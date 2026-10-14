@@ -159,6 +159,7 @@ public:
 
     MOCK_METHOD2(GetOsAccountType, ErrCode(int32_t id, OsAccountType& type));
     MOCK_METHOD2(GetForegroundOsAccountLocalId, ErrCode(const uint64_t displayId, int32_t &localId));
+    MOCK_METHOD2(IsOsAccountExists, ErrCode(int32_t id, bool& isExists));
 };
 
 /**
@@ -223,6 +224,11 @@ ErrCode IInnerOsAccountManager::GetOsAccountType(int32_t id, OsAccountType& type
 ErrCode IInnerOsAccountManager::GetForegroundOsAccountLocalId(const uint64_t displayId, int32_t &localId)
 {
     return MockIInnerOsAccountManager::GetInstance().GetForegroundOsAccountLocalId(displayId, localId);
+}
+
+ErrCode IInnerOsAccountManager::IsOsAccountExists(const int id, bool &isExists)
+{
+    return MockIInnerOsAccountManager::GetInstance().IsOsAccountExists(id, isExists);
 }
 
 ErrCode OsAccountTeeAdapter::TaAcquireAuthorization(const ApplyUserTokenParam& param, ApplyUserTokenResult& result)
@@ -304,6 +310,8 @@ void InnerAuthorizationManagerModuleTest::SetUp()
         .WillRepeatedly(DoAll(SetArgReferee<1>(OsAccountType::ADMIN), Return(ERR_OK)));
     EXPECT_CALL(MockIInnerOsAccountManager::GetInstance(), GetForegroundOsAccountLocalId(_, _))
         .WillRepeatedly(Return(ERR_OK));
+    EXPECT_CALL(MockIInnerOsAccountManager::GetInstance(), IsOsAccountExists(_, _))
+        .WillRepeatedly(DoAll(SetArgReferee<1>(true), Return(ERR_OK)));
 
     EXPECT_CALL(MockOsAccountTeeAdapter::GetInstance(), TaAcquireAuthorization(_, _)).WillRepeatedly(Return(ERR_OK));
 }

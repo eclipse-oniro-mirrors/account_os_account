@@ -78,6 +78,12 @@ napi_value GenerateAuthorizationBusinessError(napi_env env, int32_t nativeErrCod
     return GenerateBusinessError(env, jsErrCode, jsErrMsg);
 }
 
+napi_value GenerateAuthorizationPublicBusinessError(napi_env env, int32_t nativeErrCode)
+{
+    int32_t jsErrCode = AuthorizationPublicConvertToJsErrCode(nativeErrCode);
+    return GenerateBusinessError(env, jsErrCode, ConvertToJsErrMsg(jsErrCode));
+}
+
 void AccountNapiThrow(napi_env env, int32_t nativeErrCode, bool throwErr)
 {
     if (throwErr) {

@@ -184,9 +184,9 @@ ErrCode NapiAuthorizationResultCallback::OnConnectAbility(const ConnectAbilityIn
 
 std::function<void()> OnAuthorizationResultTask(
     const std::shared_ptr<AcquireAuthorizationContext> &asyncContextPtr,
-    const NapiAuthorizationResultCallback::ResultToJsFunc &resultToJsFunc)
+    const NapiAuthorizationResultCallback::ResultToJsFunc &resultToJsFunc, bool isPublicApi)
 {
-    return [asyncContextPtr, resultToJsFunc] {
+    return [asyncContextPtr, resultToJsFunc, isPublicApi] {
         napi_handle_scope scope = nullptr;
         napi_open_handle_scope(asyncContextPtr->env, &scope);
         napi_value errJs = nullptr;
@@ -197,15 +197,8 @@ std::function<void()> OnAuthorizationResultTask(
                 resultToJsFunc(asyncContextPtr->env, asyncContextPtr->authorizationResult, resultJs);
             }
         } else {
-            auto rc = asyncContextPtr->errCode;
-            if (rc == static_cast<int32_t>(
-                    AccountSA::AuthorizationResultCode::AUTHORIZATION_INTERACTION_NOT_ALLOWED)) {
-                errJs = GenerateBusinessError(asyncContextPtr->env, ERR_JS_AUTHORIZATION_INTERACTION_NOT_ALLOWED,
-                    ConvertToJsErrMsg(ERR_JS_AUTHORIZATION_INTERACTION_NOT_ALLOWED));
-            } else if (rc == static_cast<int32_t>(
-                           AccountSA::AuthorizationResultCode::AUTHORIZATION_SERVICE_BUSY)) {
-                errJs = GenerateBusinessError(asyncContextPtr->env, ERR_JS_AUTHORIZATION_SERVICE_BUSY,
-                    ConvertToJsErrMsg(ERR_JS_AUTHORIZATION_SERVICE_BUSY));
+            if (isPublicApi) {
+                errJs = GenerateAuthorizationPublicBusinessError(asyncContextPtr->env, asyncContextPtr->errCode);
             } else {
                 errJs = GenerateAuthorizationBusinessError(asyncContextPtr->env, asyncContextPtr->errCode);
             }
@@ -234,7 +227,7 @@ ErrCode NapiAuthorizationResultCallback::OnResult(int32_t errCode, const Authori
     if (context_ != nullptr && context_->hasOptions && context_->options.hasContext) {
         UIExtensionCallbackBase::CloseUIExtension(GetUIContent(context_), context_->sessionId);
     }
-    auto task = OnAuthorizationResultTask(asyncContextPtr, resultToJsFunc_);
+    auto task = OnAuthorizationResultTask(asyncContextPtr, resultToJsFunc_, isPublicApi_);
     if (napi_ok != napi_send_event(asyncContextPtr->env, task, napi_eprio_vip, "AuthorizationCallback OnResult")) {
         ACCOUNT_LOGE("Post AuthorizationCallback OnResult failed.");
     }
