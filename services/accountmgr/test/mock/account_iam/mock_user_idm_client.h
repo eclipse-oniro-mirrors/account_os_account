@@ -55,6 +55,8 @@ public:
         (const std::shared_ptr<CredChangeEventListener> &listener), (override));
     MOCK_METHOD(int32_t, GetCredentialInfoSync, (int32_t userId, AuthType authType,
         std::vector<CredentialInfo> &credentialInfoList), (override));
+    MOCK_METHOD(int32_t, GetLatestEnrollmentTime, (int32_t userId, AuthType authType,
+        uint64_t &latestEnrollmentTime), (override));
 };
 } // namespace UserAuth
 } // namespace UserIam
