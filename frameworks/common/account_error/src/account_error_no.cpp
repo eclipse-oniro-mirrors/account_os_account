@@ -216,16 +216,13 @@ int32_t AuthorizationConvertToJsErrCode(int32_t nativeErrCode)
 
 int32_t AuthorizationPublicConvertToJsErrCode(int32_t nativeErrCode)
 {
-    switch (nativeErrCode) {
-        case ERR_JS_AUTHORIZATION_INTERACTION_NOT_ALLOWED:
-            return ERR_JS_AUTHORIZATION_INTERACTION_NOT_ALLOWED;
-        case ERR_JS_AUTHORIZATION_SERVICE_BUSY:
-            return ERR_JS_AUTHORIZATION_SERVICE_BUSY;
-        case ERR_ACCOUNT_COMMON_INVALID_PARAMETER:
-            return ERR_JS_SYSTEM_SERVICE_EXCEPTION;
-        default:
-            return AuthorizationConvertToJsErrCode(nativeErrCode);
+    if (CheckJsErrorCode(nativeErrCode)) {
+        return nativeErrCode;
     }
+    if (nativeErrCode == ERR_ACCOUNT_COMMON_INVALID_PARAMETER) {
+        return ERR_JS_SYSTEM_SERVICE_EXCEPTION;
+    }
+    return AuthorizationConvertToJsErrCode(nativeErrCode);
 }
 
 int32_t GenerateBusinessErrorCode(int32_t nativeErrCode)

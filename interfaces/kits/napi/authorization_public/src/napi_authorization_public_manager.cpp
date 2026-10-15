@@ -235,7 +235,7 @@ napi_value NapiAuthorizationPublicManager::PrivilegeConstructor(napi_env env)
     napi_value privilege = nullptr;
     NAPI_CALL(env, napi_create_object(env, &privilege));
     for (const auto &item : AccountSA::PRIVILEGE_MAP) {
-        SetNamedPropertyByStr(env, privilege, item.second, item.first.c_str());
+        SetNamedPropertyByStr(env, privilege, item.first, item.second.c_str());
     }
     return privilege;
 }

@@ -219,9 +219,10 @@ ErrCode NapiAuthorizationResultCallback::OnResult(int32_t errCode, const Authori
     }
     if (isPublicApi_ && errCode == ERR_OK) {
         auto rc = static_cast<int32_t>(result.resultCode);
-        if (rc == static_cast<int32_t>(AccountSA::AuthorizationResultCode::AUTHORIZATION_INTERACTION_NOT_ALLOWED) ||
-            rc == static_cast<int32_t>(AccountSA::AuthorizationResultCode::AUTHORIZATION_SERVICE_BUSY)) {
-            asyncContextPtr->errCode = rc;
+        if (rc == static_cast<int32_t>(AccountSA::AuthorizationResultCode::AUTHORIZATION_INTERACTION_NOT_ALLOWED)) {
+            asyncContextPtr->errCode = ERR_JS_AUTHORIZATION_INTERACTION_NOT_ALLOWED;
+        } else if (rc == static_cast<int32_t>(AccountSA::AuthorizationResultCode::AUTHORIZATION_SERVICE_BUSY)) {
+            asyncContextPtr->errCode = ERR_JS_AUTHORIZATION_SERVICE_BUSY;
         }
     }
     if (context_ != nullptr && context_->hasOptions && context_->options.hasContext) {
