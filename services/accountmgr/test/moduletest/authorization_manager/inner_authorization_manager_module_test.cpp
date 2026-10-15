@@ -56,6 +56,8 @@ const int32_t TEST_CALLING_UID = 200100; // UID for account 100
 const int32_t TEST_CALLING_PID = 12345;
 const int32_t ERR_PID = -1;
 const int32_t TEST_USER_ID = 100;
+const int32_t CALLBACK_MAP_LIMIT_PID_BASE = 60000;
+const int32_t CALLBACK_MAP_MAX_SIZE = 65535;
 static bool g_transferPrivilegeToCode = true;
 static bool g_getPrivilegeBriefDef = true;
 static bool g_hasAuthorizationFail = false;
@@ -249,6 +251,7 @@ PrivilegeCacheManager& PrivilegeCacheManager::GetInstance()
 }
 
 static bool g_addCacheFail = false;
+static bool g_kernelDeviceNotFound = false;
 
 ErrCode PrivilegeCacheManager::AddCache(const AuthenCallerInfo& callerInfo, uint32_t safeStartTime)
 {
@@ -261,6 +264,9 @@ ErrCode PrivilegeCacheManager::AddCache(const AuthenCallerInfo& callerInfo, uint
 ErrCode PrivilegeCacheManager::AddCacheAndNotifyKernel(const AuthenCallerInfo& callerInfo,
     const std::string& tokenResult)
 {
+    if (g_kernelDeviceNotFound) {
+        return ERR_AUTHORIZATION_KERNEL_DEVICE_NOT_FOUND;
+    }
     if (callerInfo.pid == ERR_PID || g_addCacheFail) {
         return ERR_AUTHORIZATION_CACHE_ERROR;
     }
@@ -1024,6 +1030,41 @@ HWTEST_F(InnerAuthorizationManagerModuleTest, ApplyTaAuthorizationTest_0300, Tes
 
     EXPECT_EQ(errCode, ERR_AUTHORIZATION_TA_ERROR);
     EXPECT_EQ(resultCode, AuthorizationResultCode::AUTHORIZATION_SUCCESS);
+}
+
+/**
+ * @tc.name: ApplyTaAuthorizationTest_0400
+ * @tc.desc: test ApplyTaAuthorization with kernel device not found and non-public API.
+ * @tc.type: FUNC
+ * @tc.require: issueIXXXXX
+ */
+HWTEST_F(InnerAuthorizationManagerModuleTest, ApplyTaAuthorizationTest_0400, TestSize.Level0)
+{
+    ACCOUNT_LOGI("ApplyTaAuthorizationTest_0400");
+
+    std::vector<uint8_t> iamToken = {1, 2, 3, 4, 5};
+    ConnectAbilityInfo info;
+    info.privilege = TEST_PRIVILEGE;
+    info.callingUid = TEST_CALLING_UID;
+    info.callingPid = TEST_CALLING_PID;
+    info.isPublicApi = false;
+    ApplyUserTokenResult tokenResult;
+
+    EXPECT_CALL(MockIInnerOsAccountManager::GetInstance(), GetOsAccountType(TEST_USER_ID, _))
+        .WillOnce(DoAll(SetArgReferee<1>(OsAccountType::ADMIN), Return(ERR_OK)));
+    EXPECT_CALL(MockOsAccountTeeAdapter::GetInstance(), TaAcquireAuthorization(_, _))
+        .WillOnce(Return(ERR_OK));
+
+    g_kernelPermission = "test_kernel_perm";
+    g_kernelDeviceNotFound = true;
+
+    auto [errCode, resultCode] = manager_.ApplyTaAuthorization(iamToken, TEST_USER_ID, tokenResult, info);
+
+    EXPECT_EQ(errCode, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+    EXPECT_EQ(resultCode, AuthorizationResultCode::AUTHORIZATION_SUCCESS);
+
+    g_kernelDeviceNotFound = false;
+    g_kernelPermission = "";
 }
 
 /**
@@ -1834,6 +1875,43 @@ HWTEST_F(InnerAuthorizationManagerModuleTest, AcquireAdminAuthorization_AsObject
     ErrCode ret = manager_.AcquireAdminAuthorization(
         TEST_USER_ID, challenge, callback, TEST_PRIVILEGE, TEST_CALLING_PID);
     EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_ADD_DEATH_RECIPIENT);
+}
+
+/**
+ * @tc.name: StoreCallbackMapsLimitTest_0100
+ * @tc.desc: test StoreCallbackMaps returns ERR_ACCOUNT_COMMON_BUSY when map size reaches limit.
+ * @tc.type: FUNC
+ * @tc.require: issueIXXXXX
+ */
+HWTEST_F(InnerAuthorizationManagerModuleTest, StoreCallbackMapsLimitTest_0100, TestSize.Level0)
+{
+    ACCOUNT_LOGI("StoreCallbackMapsLimitTest_0100");
+    ConnectAbilityInfo uiInfo;
+    uiInfo.callingUid = TEST_CALLING_UID;
+    sptr<IRemoteObject> requestRemoteObj = new MockAuthorizationCallbackStub();
+    sptr<ConnectAbilityCallback> connectCallback = new ConnectAbilityCallback(uiInfo,
+        [](int32_t, AuthorizationResult&, int32_t) { return ERR_OK; }, AuthorizationResult());
+
+    std::vector<int32_t> pids;
+    for (int32_t i = 0; i <= CALLBACK_MAP_MAX_SIZE; i++) {
+        int32_t pid = CALLBACK_MAP_LIMIT_PID_BASE + i;
+        uiInfo.callingPid = pid;
+        uiInfo.sessionId = "limit_test_" + std::to_string(pid);
+        sptr<IAuthorizationCallback> callback = new MockAuthorizationCallbackStub();
+        ErrCode ret = manager_.StoreCallbackMaps(uiInfo, callback, connectCallback, requestRemoteObj);
+        if (ret != ERR_OK) {
+            EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_BUSY);
+            break;
+        }
+        pids.push_back(pid);
+    }
+    EXPECT_GT(pids.size(), 0u);
+
+    uiInfo.callingPid = CALLBACK_MAP_LIMIT_PID_BASE + CALLBACK_MAP_MAX_SIZE + 1;
+    uiInfo.sessionId = "limit_test_overflow";
+    sptr<IAuthorizationCallback> callback = new MockAuthorizationCallbackStub();
+    ErrCode ret = manager_.StoreCallbackMaps(uiInfo, callback, connectCallback, requestRemoteObj);
+    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_BUSY);
 }
 } // namespace AccountSA
 } // namespace OHOS

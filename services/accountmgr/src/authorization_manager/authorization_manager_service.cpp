@@ -563,13 +563,7 @@ ErrCode AuthorizationManagerService::CheckPublicPermission(int32_t localId)
 bool AuthorizationManagerService::CheckPrivilegeEnumValid(const std::string &privilege,
     AuthorizationResult &authorizationResult, const sptr<IAuthorizationCallback> &callback)
 {
-    bool isValidPrivilege = false;
-    for (const auto &item : AccountSA::PRIVILEGE_MAP) {
-        if (privilege == item.second) {
-            isValidPrivilege = true;
-            break;
-        }
-    }
+    bool isValidPrivilege = AccountSA::PRIVILEGE_MAP.find(privilege) != AccountSA::PRIVILEGE_MAP.end();
     if (!isValidPrivilege) {
         authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
         callback->OnResult(ERR_OK, authorizationResult);
@@ -652,13 +646,7 @@ ErrCode AuthorizationManagerService::HasAuthorizationForPublic(const std::string
     bool &isAuthorized)
 {
     isAuthorized = false;
-    bool isValidPrivilege = false;
-    for (const auto &item : AccountSA::PRIVILEGE_MAP) {
-        if (privilege == item.second) {
-            isValidPrivilege = true;
-            break;
-        }
-    }
+    bool isValidPrivilege = AccountSA::PRIVILEGE_MAP.find(privilege) != AccountSA::PRIVILEGE_MAP.end();
     if (!isValidPrivilege) {
         return ERR_OK;
     }

@@ -65,10 +65,11 @@ public:
         if (context_ != nullptr && context_->isPublicApi && errCode == ERR_OK) {
             auto nativeRC = static_cast<int32_t>(result.resultCode);
             if (nativeRC == static_cast<int32_t>(
-                    AccountSA::AuthorizationResultCode::AUTHORIZATION_INTERACTION_NOT_ALLOWED) ||
-                nativeRC == static_cast<int32_t>(
+                    AccountSA::AuthorizationResultCode::AUTHORIZATION_INTERACTION_NOT_ALLOWED)) {
+                errCode_ = ERR_JS_AUTHORIZATION_INTERACTION_NOT_ALLOWED;
+            } else if (nativeRC == static_cast<int32_t>(
                     AccountSA::AuthorizationResultCode::AUTHORIZATION_SERVICE_BUSY)) {
-                errCode_ = nativeRC;
+                errCode_ = ERR_JS_AUTHORIZATION_SERVICE_BUSY;
             }
         }
         if (errCode_ == ERR_OK && buildResultFunc_ != nullptr) {

@@ -55,6 +55,7 @@
 namespace OHOS {
 namespace AccountSA {
 namespace {
+constexpr size_t MAX_CALLBACK_MAP_SIZE = 65535;
 std::mutex g_mutex;
 static std::map<int32_t, sptr<IAuthorizationCallback>> g_callbackMap;
 static std::map<int32_t, sptr<IRemoteObject>> g_requestRemoteObjectMap;
@@ -273,7 +274,7 @@ std::pair<ErrCode, AuthorizationResultCode> InnerAuthorizationManager::ApplyTaAu
         if (info.isPublicApi) {
             return {ERR_OK, AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED};
         }
-        return {ERR_OK, AuthorizationResultCode::AUTHORIZATION_DENIED};
+        return {ERR_ACCOUNT_COMMON_INVALID_PARAMETER, AuthorizationResultCode::AUTHORIZATION_SUCCESS};
     }
     return {errCode, AuthorizationResultCode::AUTHORIZATION_SUCCESS};
 }
@@ -769,6 +770,10 @@ ErrCode InnerAuthorizationManager::StoreCallbackMaps(const ConnectAbilityInfo &u
 {
     std::lock_guard<std::mutex> lock(g_mutex);
 
+    if (g_callbackMap.size() >= MAX_CALLBACK_MAP_SIZE) {
+        ACCOUNT_LOGE("Callback map size reached limit: %{public}zu", g_callbackMap.size());
+        return ERR_ACCOUNT_COMMON_BUSY;
+    }
     auto it = g_callbackMap.find(uiInfo.callingPid);
     if (it != g_callbackMap.end()) {
         ACCOUNT_LOGE("Callback already exists for pid:%{public}d, previous session not completed", uiInfo.callingPid);
