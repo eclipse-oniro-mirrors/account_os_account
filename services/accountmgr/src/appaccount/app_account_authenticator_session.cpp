@@ -148,8 +148,10 @@ ErrCode AppAccountAuthenticatorSession::Open()
     }
     AAFwk::Want want;
     want.SetElementName(request_.owner, info.abilityName);
-    auto task = [want, this] {
-        AbilityManagerAdapter::GetInstance()->ConnectAbility(want, this->conn_, nullptr, this->userId_);
+    auto conn = conn_;
+    auto userId = userId_;
+    auto task = [want, conn, userId] {
+        AbilityManagerAdapter::GetInstance()->ConnectAbility(want, conn, nullptr, userId);
     };
 #ifdef FUZZ_TEST
     task();
