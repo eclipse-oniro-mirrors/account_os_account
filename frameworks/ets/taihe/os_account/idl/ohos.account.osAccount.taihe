@@ -662,6 +662,7 @@ struct CreateOsAccountOptions {
     disallowedPreinstalledBundles: Optional<Array<String>>;
     allowedPreinstalledBundles: Optional<Array<String>>;
     token: Optional<@typedarray Array<u8>>;
+    localId: Optional<i32>;
 }
 
 struct RemoveOsAccountOptions {

@@ -383,7 +383,15 @@ bool CreateOsAccountOptions::Marshalling(Parcel &parcel) const
             return false;
         }
     }
-    return parcel.WriteStringVector(disallowedHapList) && parcel.WriteBool(hasShortName);
+    if (!parcel.WriteStringVector(disallowedHapList) || !parcel.WriteBool(hasShortName)) {
+        return false;
+    }
+    if (localId.has_value()) {
+        return parcel.WriteBool(true) && parcel.WriteInt32(localId.value());
+    } else {
+        return parcel.WriteBool(false);
+    }
+    return true;
 }
 
 CreateOsAccountOptions *CreateOsAccountOptions::Unmarshalling(Parcel &parcel)
@@ -429,7 +437,21 @@ bool CreateOsAccountOptions::ReadFromParcel(Parcel &parcel)
         }
         allowedHapList = std::make_optional<std::vector<std::string>>(list);
     }
-    return parcel.ReadStringVector(&disallowedHapList) && parcel.ReadBool(hasShortName);
+    if (!parcel.ReadStringVector(&disallowedHapList) || !parcel.ReadBool(hasShortName)) {
+        return false;
+    }
+    bool hasLocalId = false;
+    if (!parcel.ReadBool(hasLocalId)) {
+        return false;
+    }
+    if (hasLocalId) {
+        int32_t localIdValue = 0;
+        if (!parcel.ReadInt32(localIdValue)) {
+            return false;
+        }
+        localId = std::make_optional<int32_t>(localIdValue);
+    }
+    return true;
 }
 
 bool RemoveOsAccountOptions::Marshalling(Parcel &parcel) const

@@ -50,6 +50,7 @@ static const std::map<PluginMethodEnum, std::string> METHOD_NAME_MAP = {
     {PluginMethodEnum::CANCEL_AUTH, "CancelAuth"},
     {PluginMethodEnum::AUTH_WITH_UNLOCK_INTENT, "AuthWithUnlockIntent"},
     {PluginMethodEnum::GET_UNLOCK_DEVICE_CONFIG, "GetUnlockDeviceConfigResult"},
+    {PluginMethodEnum::GET_ACCOUNT_INFO_BY_LOCAL_ID, "GetAccountInfoByLocalId"},
 };
 
 std::string GetMethodNameByEnum(PluginMethodEnum methodEnum)

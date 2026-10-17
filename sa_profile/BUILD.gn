@@ -12,8 +12,13 @@
 # limitations under the License.
 
 import("//build/ohos/sa_profile/sa_profile.gni")
+import("//base/account/os_account/os_account.gni")
 
 ohos_sa_profile("account_sa_profile") {
-  sources = [ "accountmgr.json" ]
+  if (os_account_support_backup_restore) {
+    sources = [ "accountmgr_backup.json" ]
+  } else {
+    sources = [ "accountmgr.json" ]
+  }
   part_name = "os_account"
 }

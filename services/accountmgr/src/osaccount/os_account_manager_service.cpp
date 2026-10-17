@@ -327,6 +327,10 @@ ErrCode OsAccountManagerService::CreateOsAccount(const std::string &localName, c
     if (errCode != ERR_OK) {
         return errCode;
     }
+    errCode = ValidateLocalIdRange(options.localId);
+    if (errCode != ERR_OK) {
+        return errCode;
+    }
 
     if (options.hasShortName) {
         errCode = ValidateShortName(shortName);
@@ -415,6 +419,19 @@ ErrCode OsAccountManagerService::ValidateAccountCreateParamAndPermission(const s
     if (!isAllowedCreateAdmin && type == OsAccountType::ADMIN) {
         ACCOUNT_LOGE("Cannot create admin account error");
         return ERR_OSACCOUNT_SERVICE_MANAGER_CREATE_OSACCOUNT_TYPE_ERROR;
+    }
+    return ERR_OK;
+}
+
+ErrCode OsAccountManagerService::ValidateLocalIdRange(const std::optional<int32_t> &localId)
+{
+    if (!localId.has_value()) {
+        return ERR_OK;
+    }
+    int32_t specifiedId = localId.value();
+    if (specifiedId < Constants::START_USER_ID || specifiedId > Constants::MAX_CREATABLE_USER_ID) {
+        ACCOUNT_LOGE("Specified localId %{public}d is out of range.", specifiedId);
+        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
     }
     return ERR_OK;
 }
@@ -555,9 +572,13 @@ ErrCode OsAccountManagerService::CreateOsAccountForDomain(const OsAccountType &t
             return code;
         }
     }
+    ErrCode errCode = ValidateLocalIdRange(options.localId);
+    if (errCode != ERR_OK) {
+        return errCode;
+    }
 
     bool isAllowedCreateAdmin = false;
-    ErrCode errCode = innerManager_.IsAllowedCreateAdmin(isAllowedCreateAdmin);
+    errCode = innerManager_.IsAllowedCreateAdmin(isAllowedCreateAdmin);
     if (errCode != ERR_OK) {
         ACCOUNT_LOGE("Failed to get allowed create admin permission, code=%{public}d.", errCode);
         return errCode;

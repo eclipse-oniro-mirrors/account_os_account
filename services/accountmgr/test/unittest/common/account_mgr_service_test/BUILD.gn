@@ -350,6 +350,9 @@ ohos_unittest("account_mgr_test") {
   if (has_hiviewdfx_hisysevent_part) {
     cflags_cc += [ "-DHAS_HISYSEVENT_PART" ]
   }
+  if (os_account_support_backup_restore) {
+    cflags_cc += [ "-DSUPPORT_BACKUP_RESTORE" ]
+  }
   part_name = "os_account"
 }
 
@@ -684,6 +687,9 @@ ohos_unittest("OsAccountSubspaceServiceTest") {
   }
   if (has_hiviewdfx_hisysevent_part) {
     cflags_cc += [ "-DHAS_HISYSEVENT_PART" ]
+  }
+  if (os_account_support_backup_restore) {
+    cflags_cc += [ "-DSUPPORT_BACKUP_RESTORE" ]
   }
   part_name = "os_account"
 }

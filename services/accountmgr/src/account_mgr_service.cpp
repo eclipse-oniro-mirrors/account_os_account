@@ -62,6 +62,10 @@
 #ifdef SUPPORT_AUTHORIZATION
 #include "privilege_cache_manager.h"
 #endif // SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_BACKUP_RESTORE
+#include "account_backup_restore_manager.h"
+#include "account_error_no.h"
+#endif
 
 namespace OHOS {
 namespace AccountSA {
@@ -898,6 +902,30 @@ void AccountMgrService::OnStop()
     IAccountContext::SetInstance(nullptr);
     SelfClean();
 }
+
+#ifdef SUPPORT_BACKUP_RESTORE
+namespace {
+constexpr int32_t BACKUP_RESTORE_UID = 1089;
+constexpr const char *EXTENSION_ON_BACKUP = "backup";
+constexpr const char *EXTENSION_ON_RESTORE = "restore";
+}
+
+int32_t AccountMgrService::OnExtension(const std::string &extension, MessageParcel &data, MessageParcel &reply)
+{
+    if (GetCallingUid() != BACKUP_RESTORE_UID) {
+        ACCOUNT_LOGE("OnExtension uid check failed, uid=%{public}d", GetCallingUid());
+        return ERR_JS_PERMISSION_DENIED;
+    }
+    if (extension == EXTENSION_ON_BACKUP) {
+        return AccountBackupRestoreMgr::GetInstance().OnBackup(data, reply);
+    }
+    if (extension == EXTENSION_ON_RESTORE) {
+        return AccountBackupRestoreMgr::GetInstance().OnRestore(data, reply);
+    }
+    ACCOUNT_LOGE("OnExtension unknown extension: %{public}s", extension.c_str());
+    return ERR_JS_INVALID_PARAMETER;
+}
+#endif
 
 #if defined(HAS_APP_ACCOUNT_PART) && defined(ENABLE_MULTIPLE_OS_ACCOUNTS)
 void AccountMgrService::MoveAppAccountData()

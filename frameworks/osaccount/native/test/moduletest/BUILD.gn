@@ -266,6 +266,9 @@ ohos_moduletest("os_account_frameworks_module_mock_test") {
   if (has_hiviewdfx_hisysevent_part) {
     cflags_cc += [ "-DHAS_HISYSEVENT_PART" ]
   }
+  if (os_account_support_backup_restore) {
+    cflags_cc += [ "-DSUPPORT_BACKUP_RESTORE" ]
+  }
   part_name = "os_account"
 }
 

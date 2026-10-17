@@ -74,6 +74,9 @@
 #ifdef SUPPORT_AUTHORIZATION
 #include "tee_auth_adapter.h"
 #endif // SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_BACKUP_RESTORE
+#include "account_backup_restore_manager.h"
+#endif
 
 namespace OHOS {
 namespace AccountSA {
@@ -208,7 +211,6 @@ IInnerOsAccountManager::IInnerOsAccountManager() : subscribeManager_(OsAccountSu
     ParseAllDefaultActivateIds();
     osAccountControl_->GetOsAccountConfig(config_);
     SetParameter(PARAM_LOGIN_NAME_MAX, std::to_string(Constants::LOCAL_NAME_MAX_SIZE - 1).c_str());
-
     ACCOUNT_LOGI("Init end, maxOsAccountNum: %{public}d, maxLoggedInOsAccountNum: %{public}d",
         config_.maxOsAccountNum, config_.maxLoggedInOsAccountNum);
 }
@@ -719,13 +721,15 @@ void IInnerOsAccountManager::ResetAccountStatus(void)
 ErrCode IInnerOsAccountManager::PrepareOsAccountInfo(const std::string &name, const OsAccountType &type,
     const DomainAccountInfo &domainInfo, OsAccountInfo &osAccountInfo)
 {
-    return PrepareOsAccountInfo(name, "", type, domainInfo, osAccountInfo);
+    CreateOsAccountOptions options;
+    return PrepareOsAccountInfo(name, type, domainInfo, osAccountInfo, options);
 }
 
-ErrCode IInnerOsAccountManager::PrepareOsAccountInfo(const std::string &localName, const std::string &shortName,
-    const OsAccountType &type, const DomainAccountInfo &domainInfo, OsAccountInfo &osAccountInfo)
+ErrCode IInnerOsAccountManager::PrepareOsAccountInfo(const std::string &localName, const OsAccountType &type,
+    const DomainAccountInfo &domainInfo, OsAccountInfo &osAccountInfo,
+    const CreateOsAccountOptions &options)
 {
-    ErrCode errCode = FillOsAccountInfo(localName, shortName, type, domainInfo, osAccountInfo);
+    ErrCode errCode = FillOsAccountInfo(localName, type, domainInfo, osAccountInfo, options);
     if (errCode != ERR_OK) {
         return errCode;
     }
@@ -762,8 +766,9 @@ ErrCode IInnerOsAccountManager::PrepareOsAccountInfo(const std::string &localNam
     return ERR_OK;
 }
 
-ErrCode IInnerOsAccountManager::FillOsAccountInfo(const std::string &localName, const std::string &shortName,
-    const OsAccountType &type, const DomainAccountInfo &domainInfo, OsAccountInfo &osAccountInfo)
+ErrCode IInnerOsAccountManager::FillOsAccountInfo(const std::string &localName, const OsAccountType &type,
+    const DomainAccountInfo &domainInfo, OsAccountInfo &osAccountInfo,
+    const CreateOsAccountOptions &options)
 {
     int64_t serialNumber;
     ErrCode errCode = osAccountControl_->GetSerialNumber(serialNumber);
@@ -774,6 +779,11 @@ ErrCode IInnerOsAccountManager::FillOsAccountInfo(const std::string &localName, 
     int id = 0;
     if (type == OsAccountType::MAINTENANCE) {
         id = Constants::MAINTENANCE_MODE_ID;
+    } else if (options.localId.has_value()) {
+        errCode = AssignSpecifiedLocalId(options.localId.value(), id);
+        if (errCode != ERR_OK) {
+            return errCode;
+        }
     } else {
         errCode = osAccountControl_->GetAllowCreateId(id);
         if (errCode != ERR_OK) {
@@ -789,7 +799,7 @@ ErrCode IInnerOsAccountManager::FillOsAccountInfo(const std::string &localName, 
         return errCode;
     }
 
-    osAccountInfo = OsAccountInfo(id, localName, shortName, type, serialNumber);
+    osAccountInfo = OsAccountInfo(id, localName, options.shortName, type, serialNumber);
     if (AccountPermissionManager::CheckSaCall()) {
         osAccountInfo.SetCreatorType(TOKEN_NATIVE);
     }
@@ -801,6 +811,43 @@ ErrCode IInnerOsAccountManager::FillOsAccountInfo(const std::string &localName, 
     if (!osAccountInfo.SetDomainInfo(domainInfo)) {
         ACCOUNT_LOGE("Failed to SetDomainInfo");
         return ERR_OSACCOUNT_KIT_CREATE_OS_ACCOUNT_FOR_DOMAIN_ERROR;
+    }
+    return ERR_OK;
+}
+
+ErrCode IInnerOsAccountManager::AssignSpecifiedLocalId(int32_t specifiedId, int &id)
+{
+    if (specifiedId < Constants::START_USER_ID || specifiedId > Constants::MAX_CREATABLE_USER_ID) {
+        ACCOUNT_LOGE("Specified localId %{public}d is out of range.", specifiedId);
+        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+    }
+    bool isExists = false;
+    OsAccountInfo osAccountInfo;
+    ErrCode errCode = GetRealOsAccountInfoById(specifiedId, osAccountInfo);
+    if (errCode != ERR_OK && errCode != ERR_ACCOUNT_COMMON_ACCOUNT_NOT_EXIST_ERROR) {
+        ACCOUNT_LOGE("Failed to GetRealOsAccountInfoById, errCode %{public}d.", errCode);
+        return errCode;
+    }
+    if (errCode == ERR_OK && !osAccountInfo.GetToBeRemoved() && osAccountInfo.GetIsCreateCompleted()) {
+        ACCOUNT_LOGE("Specified localId %{public}d already exists.", specifiedId);
+        return ERR_OSACCOUNT_SERVICE_LOCAL_ID_ALREADY_EXISTS_ERROR;
+    } else {
+        CleanGarbageOsAccounts();
+    }
+    errCode = osAccountControl_->IsOsAccountExists(specifiedId, isExists);
+    if (errCode != ERR_OK) {
+        ACCOUNT_LOGE("Failed to check localId existence, errCode %{public}d.", errCode);
+        return errCode;
+    }
+    if (isExists) {
+        ACCOUNT_LOGE("Specified localId %{public}d already exists.", specifiedId);
+        return ERR_OSACCOUNT_SERVICE_LOCAL_ID_ALREADY_EXISTS_ERROR;
+    }
+    id = specifiedId;
+    errCode = osAccountControl_->SetNextLocalId(specifiedId + 1);
+    if (errCode != ERR_OK) {
+        ACCOUNT_LOGE("Failed to SetNextLocalId, errCode %{public}d.", errCode);
+        return errCode;
     }
     return ERR_OK;
 }
@@ -1084,28 +1131,11 @@ ErrCode IInnerOsAccountManager::InsertOsAccountTypeToTee(const int32_t localId, 
 }
 #endif // SUPPORT_AUTHORIZATION
 
-ErrCode IInnerOsAccountManager::CreateOsAccount(const std::string &localName, const std::string &shortName,
-    const OsAccountType &type, OsAccountInfo &osAccountInfo, const CreateOsAccountOptions &options)
-{
-    if (!activateLockPluginManager_.IsCreationAllowed()) {
-        ACCOUNT_LOGI("Not allow creation account.");
-        return ERR_OSACCOUNT_SERVICE_INNER_ACCOUNT_PLUGIN_NOT_ALLOWED_CREATION_ERROR;
-    }
-    std::lock_guard<std::mutex> createLock(createOsAccountMutex_);
-#ifdef HICOLLIE_ENABLE
-    AccountTimer timer;
-#endif // HICOLLIE_ENABLE
-    osAccountInfo.SetLocalName(localName);
-    if (!AccountPermissionManager::CheckSaCall() && !CheckAndCleanOsAccounts()) {
-        return ERR_OSACCOUNT_SERVICE_CONTROL_MAX_CAN_CREATE_ERROR;
-    }
-    DomainAccountInfo domainInfo;  // default empty domain info
-    ErrCode errCode = PrepareOsAccountInfo(localName, shortName, type, domainInfo, osAccountInfo);
-    if (errCode != ERR_OK) {
-        RemoveLocalIdToOperating(osAccountInfo.GetLocalId());
-        return errCode;
-    }
 #ifdef SUPPORT_AUTHORIZATION
+ErrCode IInnerOsAccountManager::HandleCreateOsAccountToken(
+    OsAccountInfo &osAccountInfo, const CreateOsAccountOptions &options)
+{
+    ErrCode errCode = ERR_OK;
     if (options.token.has_value()) {
         errCode = InsertOsAccountTypeToTee(osAccountInfo.GetLocalId(), osAccountInfo.GetType(), options.token.value());
         if (errCode != ERR_OK) {
@@ -1128,6 +1158,40 @@ ErrCode IInnerOsAccountManager::CreateOsAccount(const std::string &localName, co
         ACCOUNT_LOGE("Token is required for non-EDM calling.");
         RemoveLocalIdToOperating(osAccountInfo.GetLocalId());
         return ERR_AUTHORIZATION_PRIVILEGE_DENIED;
+    }
+    return ERR_OK;
+}
+#endif // SUPPORT_AUTHORIZATION
+
+ErrCode IInnerOsAccountManager::CreateOsAccount(const std::string &localName, const std::string &shortName,
+    const OsAccountType &type, OsAccountInfo &osAccountInfo, const CreateOsAccountOptions &options)
+{
+    if (!activateLockPluginManager_.IsCreationAllowed()) {
+        ACCOUNT_LOGI("Not allow creation account.");
+        return ERR_OSACCOUNT_SERVICE_INNER_ACCOUNT_PLUGIN_NOT_ALLOWED_CREATION_ERROR;
+    }
+    std::lock_guard<std::mutex> createLock(createOsAccountMutex_);
+#ifdef HICOLLIE_ENABLE
+    AccountTimer timer;
+#endif // HICOLLIE_ENABLE
+    osAccountInfo.SetLocalName(localName);
+    if (!AccountPermissionManager::CheckSaCall() && !CheckAndCleanOsAccounts()) {
+        return ERR_OSACCOUNT_SERVICE_CONTROL_MAX_CAN_CREATE_ERROR;
+    }
+    DomainAccountInfo domainInfo;
+    CreateOsAccountOptions actualOptions = options;
+    if (actualOptions.shortName.empty() && !shortName.empty()) {
+        actualOptions.shortName = shortName;
+    }
+    ErrCode errCode = PrepareOsAccountInfo(localName, type, domainInfo, osAccountInfo, actualOptions);
+    if (errCode != ERR_OK) {
+        RemoveLocalIdToOperating(osAccountInfo.GetLocalId());
+        return errCode;
+    }
+#ifdef SUPPORT_AUTHORIZATION
+    errCode = HandleCreateOsAccountToken(osAccountInfo, options);
+    if (errCode != ERR_OK) {
+        return errCode;
     }
 #endif // SUPPORT_AUTHORIZATION
     errCode = SendMsgForAccountCreate(osAccountInfo, options);
@@ -1352,8 +1416,11 @@ ErrCode IInnerOsAccountManager::BindDomainAccount(const OsAccountType &type,
     
     if (osAccountInfo.GetLocalId() != Constants::START_USER_ID) {
 #ifdef ENABLE_MULTIPLE_OS_ACCOUNTS
-        errCode = PrepareOsAccountInfo(domainAccountInfo.accountName_, options.shortName,
-            type, domainAccountInfo, osAccountInfo);
+        CreateOsAccountOptions createOptions;
+        createOptions.shortName = options.shortName;
+        createOptions.localId = options.localId;
+        errCode = PrepareOsAccountInfo(domainAccountInfo.accountName_,
+            type, domainAccountInfo, osAccountInfo, createOptions);
         RemoveLocalIdToOperating(osAccountInfo.GetLocalId());
         if (errCode != ERR_OK) {
             return errCode;
@@ -1787,6 +1854,9 @@ ErrCode IInnerOsAccountManager::SendMsgForAccountRemove(OsAccountInfo &osAccount
 
 bool IInnerOsAccountManager::Init(const std::set<int32_t> &initAccounts)
 {
+#ifdef SUPPORT_BACKUP_RESTORE
+    (void) CheckAndRecoverRestore();
+#endif // SUPPORT_BACKUP_RESTORE
     ACCOUNT_LOGI("Start to create base os accounts");
     CreateBaseAdminAccount();
     // 100 need created
@@ -2001,6 +2071,13 @@ ErrCode IInnerOsAccountManager::QueryMaxLoggedInOsAccountNumber(uint32_t &maxNum
 #endif
 ErrCode IInnerOsAccountManager::GetOsAccountAllConstraints(const int id, std::vector<std::string> &constraints)
 {
+#ifdef SUPPORT_BACKUP_RESTORE
+    ErrCode recoverRet = CheckAndRecoverRestore();
+    if (recoverRet != ERR_OK) {
+        ACCOUNT_LOGE("CheckAndRecoverRestore failed, errCode %{public}d.", recoverRet);
+        return ERR_ACCOUNT_COMMON_FILE_WRITE_FAILED;
+    }
+#endif // SUPPORT_BACKUP_RESTORE
     OsAccountInfo osAccountInfo;
     ErrCode errCode = GetRealOsAccountInfoById(id, osAccountInfo);
     if (errCode != ERR_OK) {
@@ -2093,6 +2170,13 @@ ErrCode IInnerOsAccountManager::QueryOsAccountConstraintSourceTypes(const int32_
 ErrCode IInnerOsAccountManager::SetBaseOsAccountConstraints(const int32_t id,
     const std::vector<std::string> &constraints, const bool enable)
 {
+#ifdef SUPPORT_BACKUP_RESTORE
+    ErrCode recoverRet = CheckAndRecoverRestore();
+    if (recoverRet != ERR_OK) {
+        ACCOUNT_LOGE("CheckAndRecoverRestore failed, errCode %{public}d.", recoverRet);
+        return ERR_ACCOUNT_COMMON_FILE_WRITE_FAILED;
+    }
+#endif // SUPPORT_BACKUP_RESTORE
     ErrCode errCode = SetOsAccountConstraints(id, constraints, enable);
     if (errCode != ERR_OK) {
         ACCOUNT_LOGE("Set os account %{public}d constraints failed! errCode %{public}d.", id, errCode);
@@ -2365,6 +2449,13 @@ ErrCode IInnerOsAccountManager::GetOsAccountLocalIdFromDomain(const DomainAccoun
 
 ErrCode IInnerOsAccountManager::GetOsAccountShortName(const int id, std::string &shortName)
 {
+#ifdef SUPPORT_BACKUP_RESTORE
+    ErrCode recoverRet = CheckAndRecoverRestore();
+    if (recoverRet != ERR_OK) {
+        ACCOUNT_LOGE("CheckAndRecoverRestore failed, errCode %{public}d.", recoverRet);
+        return ERR_ACCOUNT_COMMON_FILE_WRITE_FAILED;
+    }
+#endif // SUPPORT_BACKUP_RESTORE
     OsAccountInfo osAccountInfo;
     ErrCode errCode = osAccountControl_->GetOsAccountInfoById(id, osAccountInfo);
     if (errCode != ERR_OK) {
@@ -2376,6 +2467,13 @@ ErrCode IInnerOsAccountManager::GetOsAccountShortName(const int id, std::string 
 
 ErrCode IInnerOsAccountManager::GetOsAccountName(const int id, std::string &name)
 {
+#ifdef SUPPORT_BACKUP_RESTORE
+    ErrCode recoverRet = CheckAndRecoverRestore();
+    if (recoverRet != ERR_OK) {
+        ACCOUNT_LOGE("CheckAndRecoverRestore failed, errCode %{public}d.", recoverRet);
+        return ERR_ACCOUNT_COMMON_FILE_WRITE_FAILED;
+    }
+#endif // SUPPORT_BACKUP_RESTORE
     OsAccountInfo osAccountInfo;
     ErrCode errCode = osAccountControl_->GetOsAccountInfoById(id, osAccountInfo);
     if (errCode != ERR_OK) {
@@ -2399,6 +2497,13 @@ ErrCode IInnerOsAccountManager::GetOsAccountName(const int id, std::string &name
 
 ErrCode IInnerOsAccountManager::QueryOsAccountById(const int id, OsAccountInfo &osAccountInfo)
 {
+#ifdef SUPPORT_BACKUP_RESTORE
+    ErrCode recoverRet = CheckAndRecoverRestore();
+    if (recoverRet != ERR_OK) {
+        ACCOUNT_LOGE("CheckAndRecoverRestore failed, errCode %{public}d.", recoverRet);
+        return ERR_ACCOUNT_COMMON_FILE_WRITE_FAILED;
+    }
+#endif // SUPPORT_BACKUP_RESTORE
     ErrCode errCode = GetRealOsAccountInfoById(id, osAccountInfo);
     if (errCode != ERR_OK) {
         ACCOUNT_LOGE("Get osaccount info error, errCode %{public}d.", errCode);
@@ -2653,6 +2758,13 @@ ErrCode IInnerOsAccountManager::PreloadAccountTypesFromTee(const std::vector<int
 
 ErrCode IInnerOsAccountManager::GetOsAccountProfilePhoto(const int id, std::string &photo)
 {
+#ifdef SUPPORT_BACKUP_RESTORE
+    ErrCode recoverRet = CheckAndRecoverRestore();
+    if (recoverRet != ERR_OK) {
+        ACCOUNT_LOGE("CheckAndRecoverRestore failed, errCode %{public}d.", recoverRet);
+        return ERR_ACCOUNT_COMMON_FILE_WRITE_FAILED;
+    }
+#endif // SUPPORT_BACKUP_RESTORE
     OsAccountInfo osAccountInfo;
     ErrCode errCode = QueryOsAccountById(id, osAccountInfo);
     if (errCode != ERR_OK) {
@@ -2685,6 +2797,13 @@ ErrCode IInnerOsAccountManager::IsMultiOsAccountEnable(bool &isMultiOsAccountEna
 
 ErrCode IInnerOsAccountManager::SetOsAccountName(const int id, const std::string &name)
 {
+#ifdef SUPPORT_BACKUP_RESTORE
+    ErrCode recoverRet = CheckAndRecoverRestore();
+    if (recoverRet != ERR_OK) {
+        ACCOUNT_LOGE("CheckAndRecoverRestore failed, errCode %{public}d.", recoverRet);
+        return ERR_ACCOUNT_COMMON_FILE_WRITE_FAILED;
+    }
+#endif // SUPPORT_BACKUP_RESTORE
     OsAccountInfo osAccountInfo;
     ErrCode errCode = osAccountControl_->GetOsAccountInfoById(id, osAccountInfo);
     if (errCode != ERR_OK) {
@@ -2772,6 +2891,13 @@ ErrCode IInnerOsAccountManager::SetOsAccountConstraints(
 
 ErrCode IInnerOsAccountManager::SetOsAccountProfilePhoto(const int id, const std::string &photo)
 {
+#ifdef SUPPORT_BACKUP_RESTORE
+    ErrCode recoverRet = CheckAndRecoverRestore();
+    if (recoverRet != ERR_OK) {
+        ACCOUNT_LOGE("CheckAndRecoverRestore failed, errCode %{public}d.", recoverRet);
+        return ERR_ACCOUNT_COMMON_FILE_WRITE_FAILED;
+    }
+#endif // SUPPORT_BACKUP_RESTORE
     OsAccountInfo osAccountInfo;
     ErrCode errCode = osAccountControl_->GetOsAccountInfoById(id, osAccountInfo);
     if (errCode != ERR_OK) {
@@ -3556,6 +3682,9 @@ void IInnerOsAccountManager::CleanGarbageOsAccountsAsync()
     #ifdef SUPPORT_DOMAIN_ACCOUNTS
         InnerDomainAccountManager::GetInstance().CleanUnbindDomainAccount();
     #endif // SUPPORT_DOMAIN_ACCOUNTS
+    #ifdef SUPPORT_BACKUP_RESTORE
+        IInnerOsAccountManager::GetInstance().CheckAndRecoverRestore();
+    #endif // SUPPORT_BACKUP_RESTORE
     };
 #ifdef FUZZ_TEST
     task();
@@ -4468,5 +4597,42 @@ ErrCode IInnerOsAccountManager::InitOsAccountSubspaceForNewAccount(int32_t local
     return ERR_OK;
 }
 #endif  // ENABLE_MULTIPLE_OS_ACCOUNT_SUBSPACE
+
+#ifdef SUPPORT_BACKUP_RESTORE
+ErrCode IInnerOsAccountManager::CheckAndRecoverRestore()
+{
+    bool expected = true;
+    if (!isNeedRestoreRecover_.compare_exchange_strong(expected, false)) {
+        return ERR_OK;
+    }
+    std::vector<int32_t> allIds;
+    ErrCode errCode = GetOsAccountLocalIds(allIds);
+    if (errCode != ERR_OK) {
+        ACCOUNT_LOGE("CheckAndRecoverRestore: GetOsAccountLocalIds failed, errCode=%{public}d", errCode);
+        isNeedRestoreRecover_.store(true);
+        return errCode;
+    }
+    bool needRetry = false;
+    ErrCode ret = ERR_ACCOUNT_COMMON_FILE_WRITE_FAILED;
+    for (int32_t localId : allIds) {
+        if (!CheckAndAddLocalIdOperating(localId)) {
+            needRetry = true;
+            continue;
+        }
+        ret = AccountBackupRestoreMgr::GetInstance().RollbackFromBackupUnlocked(localId);
+        RemoveLocalIdToOperating(localId);
+        if (ret != ERR_OK) {
+            ACCOUNT_LOGE("CheckAndRecoverRestore: RollbackFromBackupUnlocked failed, "
+                "localId=%{public}d, errCode=%{public}d", localId, ret);
+            isNeedRestoreRecover_.store(true);
+            return ret;
+        }
+    }
+    if (needRetry) {
+        isNeedRestoreRecover_.store(true);
+    }
+    return ERR_OK;
+}
+#endif // SUPPORT_BACKUP_RESTORE
 }  // namespace AccountSA
 }  // namespace OHOS
