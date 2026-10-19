@@ -34,6 +34,9 @@
 #include "os_account_json_builder.h"
 #include "os_account_info_json_parser.h"
 #include "parameters.h"
+#ifdef SUPPORT_BACKUP_RESTORE
+#include "backup_restore_file_ops.h"
+#endif
 
 namespace OHOS {
 namespace AccountSA {
@@ -1266,6 +1269,9 @@ ErrCode OsAccountControlFileManager::DelOsAccount(const int id)
         ACCOUNT_LOGE("DeleteDirOrFile failed! path %{public}s.", path.c_str());
         return result;
     }
+#ifdef SUPPORT_BACKUP_RESTORE
+    BackupRestoreFileOps::DeleteBackup(id);
+#endif
 #if defined(HAS_KV_STORE_PART) && defined(DISTRIBUTED_FEATURE_ENABLED)
     osAccountDataBaseOperator_->DelOsAccountFromDatabase(id);
 #endif // defined(HAS_KV_STORE_PART) && defined(DISTRIBUTED_FEATURE_ENABLED)
@@ -2306,5 +2312,6 @@ ErrCode OsAccountPosixFileManager::TryUpdatePosixFileByAccountInfo(const OsAccou
     return ERR_OK;
 }
 #endif // SUPPORT_POSIX_ADAPTER
+
 }  // namespace AccountSA
 }  // namespace OHOS

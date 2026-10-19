@@ -748,6 +748,9 @@ ohos_unittest("OsAccountSubProfileManagerTest") {
     cflags_cc += [ "-DHAS_HISYSEVENT_PART" ]
     external_deps += [ "hisysevent:libhisysevent" ]
   }
+  if (os_account_support_backup_restore) {
+    cflags_cc += [ "-DSUPPORT_BACKUP_RESTORE" ]
+  }
 
   sources += [
     "${services_path}/accountmgr/test/mock/common/bundle_manager_adapter.cpp",
@@ -1107,6 +1110,9 @@ ohos_unittest("OsAccountSubspaceCoverageTest") {
     cflags_cc += [ "-DHAS_HISYSEVENT_PART" ]
     external_deps += [ "hisysevent:libhisysevent" ]
   }
+  if (os_account_support_backup_restore) {
+    cflags_cc += [ "-DSUPPORT_BACKUP_RESTORE" ]
+  }
 
   sources += [
     "${services_path}/accountmgr/test/mock/common/bundle_manager_adapter.cpp",
@@ -1257,6 +1263,9 @@ ohos_unittest("OhosAccountDfxCoverageTest") {
   if (has_storage_service_part) {
     cflags_cc += [ "-DHAS_STORAGE_PART" ]
     external_deps += [ "storage_service:storage_manager_sa_proxy" ]
+  }
+  if (os_account_support_backup_restore) {
+    cflags_cc += [ "-DSUPPORT_BACKUP_RESTORE" ]
   }
   part_name = "os_account"
 }

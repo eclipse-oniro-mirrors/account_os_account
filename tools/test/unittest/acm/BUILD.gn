@@ -181,6 +181,9 @@ ohos_unittest("account_command_test") {
       "${services_path}/accountmgr/src/distributed_account/os_account_subspace_manager.cpp",
     ]
   }
+  if (os_account_support_backup_restore) {
+    cflags_cc += [ "-DSUPPORT_BACKUP_RESTORE" ]
+  }
 }
 
 group("unittest") {

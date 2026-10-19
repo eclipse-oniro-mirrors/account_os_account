@@ -177,6 +177,7 @@ public:
 #endif // SUPPORT_DOMAIN_ACCOUNTS
     ErrCode CallbackEnter([[maybe_unused]] uint32_t code) override;
     ErrCode CallbackExit([[maybe_unused]] uint32_t code, [[maybe_unused]] int32_t result) override;
+    static ErrCode ValidateShortName(const std::string &shortName);
 
 private:
     virtual ErrCode DumpStateByAccounts(const std::vector<OsAccountInfo> &osAccountInfos,
@@ -184,10 +185,10 @@ private:
     bool PermissionCheck(const std::string& permissionName, const std::string& constraintName);
     bool CheckCreateOsAccountForDomainPermission();
     bool CheckCreateOsAccountWhiteList();
-    ErrCode ValidateShortName(const std::string &shortName);
     void GetCurrentLocalId(int32_t &localId);
     ErrCode GetOsAccountShortNameCommon(const int32_t id, std::string &shortName);
     ErrCode ValidateAccountCreateParamAndPermission(const std::string &localName, const OsAccountType &type);
+    ErrCode ValidateLocalIdRange(const std::optional<int32_t> &localId);
     void ConstraintPublish(const std::vector<std::string> &oldConstraints,
         const std::vector<std::string> &constraints, int32_t localId, bool enable);
     ErrCode CheckLocalIdRestricted(int32_t localId);

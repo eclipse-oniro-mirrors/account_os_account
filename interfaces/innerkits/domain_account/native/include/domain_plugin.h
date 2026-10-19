@@ -144,6 +144,8 @@ typedef PluginBusinessError* (*AuthWithUnlockIntentFunc)(const PluginDomainAccou
     PluginAuthResultInfoCallback callback, uint64_t *contextId);
 typedef PluginBusinessError* (*GetUnlockDeviceConfigResultFunc)(const PluginDomainAccountInfo *domainAccountInfo,
     PluginUnlockDeviceConfigResult **unlockDeviceConfigResult);
+typedef PluginBusinessError* (*GetAccountInfoByLocalIdFunc)(const int32_t localId,
+    PluginDomainAccountInfo **domainAccountInfo);
 
 enum PluginMethodEnum {
     ADD_SERVER_CONFIG = 0,
@@ -169,6 +171,7 @@ enum PluginMethodEnum {
     AUTH_WITH_SERVER_CONFIG,
     AUTH_WITH_UNLOCK_INTENT,
     GET_UNLOCK_DEVICE_CONFIG,
+    GET_ACCOUNT_INFO_BY_LOCAL_ID,
     //this is last just for count enum
     COUNT,
 };

@@ -951,6 +951,43 @@ HWTEST_F(DomainAccountClientMockPluginSoModuleTest, DomainAccountClientModuleTes
     EXPECT_EQ(OsAccountManager::RemoveOsAccount(userId), ERR_OK);
     EXPECT_EQ(OsAccountManager::RemoveOsAccount(osAccountInfo.GetLocalId()), ERR_OK);
 }
+
+/**
+ * @tc.name: CreateOsAccountForDomain_WithLocalId_001
+ * @tc.desc: Test CreateOsAccountForDomain with specified localId
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DomainAccountClientMockPluginSoModuleTest, CreateOsAccountForDomain_WithLocalId_001, TestSize.Level3)
+{
+    LoadPluginMethods();
+    DomainAccountInfo domainInfo;
+    domainInfo.accountName_ = "testaccount";
+    domainInfo.domain_ = "test.example.com";
+    domainInfo.accountId_ = "testid";
+
+    CreateOsAccountForDomainOptions options;
+    constexpr int32_t specifiedLocalId = 500;
+    options.localId = std::make_optional<int32_t>(specifiedLocalId);
+
+    auto callback = std::make_shared<MockPluginSoDomainCreateDomainAccountCallback>();
+    ASSERT_NE(callback, nullptr);
+    auto testCallback = std::make_shared<TestPluginSoCreateDomainAccountCallback>(callback);
+    ASSERT_NE(testCallback, nullptr);
+    EXPECT_CALL(*callback, OnResult(ERR_OK, "testaccount", "test.example.com", _)).Times(Exactly(1));
+
+    ErrCode errCode = OsAccountManager::CreateOsAccountForDomain(
+        OsAccountType::NORMAL, domainInfo, testCallback, options);
+    std::unique_lock<std::mutex> lock(testCallback->mutex);
+    testCallback->cv.wait_for(lock, std::chrono::seconds(WAIT_TIME),
+        [lockCallback = testCallback]() { return lockCallback->isReady; });
+    EXPECT_EQ(errCode, ERR_OK);
+
+    int32_t userId = -1;
+    EXPECT_EQ(OsAccountManager::GetOsAccountLocalIdFromDomain(domainInfo, userId), ERR_OK);
+    EXPECT_EQ(userId, specifiedLocalId);
+    EXPECT_EQ(OsAccountManager::RemoveOsAccount(userId), ERR_OK);
+}
 #endif // ENABLE_MULTIPLE_OS_ACCOUNTS
 
 /**

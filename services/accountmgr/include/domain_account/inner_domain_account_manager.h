@@ -70,6 +70,7 @@ public:
     bool IsPluginAvailable();
     bool IsSoPluginLoaded();
     bool IsJsPluginRegistered();
+    ErrCode PluginGetAccountInfoByLocalId(int32_t localId, DomainAccountInfo &info);
     ErrCode GetUnlockDeviceConfig(int32_t userId, bool &enableUnlockDevice, int32_t &unlockDeviceMode);
     ErrCode AuthUserWithUnlockOptions(int32_t localId, const std::vector<uint8_t> &password,
         const DomainAccountUnlockOptions &unlockOptions, const sptr<IDomainAccountCallback> &callback);

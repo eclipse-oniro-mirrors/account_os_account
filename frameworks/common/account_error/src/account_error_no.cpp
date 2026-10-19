@@ -84,6 +84,7 @@ static const std::unordered_map<uint32_t, std::string> g_errorStringMap = {
     {ERR_JS_OS_ACCOUNT_ALREADY_BOUND, "The OS account is already bound."},
     {ERR_JS_DOMAIN_ACCOUNT_ALREADY_BOUND, "The domain account is already bound."},
     {ERR_JS_ACCOUNT_TYPE_MAX_CAN_CREATED, "The number of accounts of the specified type has reached the upper limit."},
+    {ERR_JS_ACCOUNT_LOCAL_ID_ALREADY_EXISTS, "The specified OS account ID already exists."},
     {ERR_JS_AUTH_CANCELLED, "The authentication, enrollment, or update operation is canceled."},
     {ERR_JS_ACCOUNT_CROSS_DEVICE_CAPABILITY_NOT_SUPPORT, "Cross-device capability not supported"},
     {ERR_JS_ACCOUNT_CROSS_DEVICE_COMMUNICATION_FAILED, "Cross-device communication failed"},
@@ -343,6 +344,8 @@ int32_t OsAccountConvertToJSErrCode(int32_t errCode)
             return ERR_JS_OS_ACCOUNT_ALREADY_BOUND;
         case ERR_OSACCOUNT_SERVICE_INNER_DOMAIN_ACCOUNT_ALREADY_BOUND:
             return ERR_JS_DOMAIN_ACCOUNT_ALREADY_BOUND;
+        case ERR_OSACCOUNT_SERVICE_LOCAL_ID_ALREADY_EXISTS_ERROR:
+            return ERR_JS_ACCOUNT_LOCAL_ID_ALREADY_EXISTS;
         case ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR:
             return ERR_JS_FOREGROUND_OS_ACCOUNT_NOT_FOUND;
         case ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR:
