@@ -3927,18 +3927,6 @@ ErrCode IInnerOsAccountManager::GetForegroundOsAccountLocalId(const uint64_t dis
     }
 #endif // ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
     if (!foregroundAccountMap_.Find(primaryDisplayId, localId)) {
-#ifdef ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
-        if (displayId == Constants::DEFAULT_DISPLAY_ID) {
-            int32_t defaultLocalId = Constants::START_USER_ID;
-            defaultActivatedIds_.Find(Constants::DEFAULT_DISPLAY_ID, defaultLocalId);
-            if (defaultLocalId != Constants::INVALID_OS_ACCOUNT_ID) {
-                ACCOUNT_LOGW("Default display has no foreground account; return default activation target %{public}d",
-                    defaultLocalId);
-                localId = defaultLocalId;
-                return ERR_OK;
-            }
-        }
-#endif // ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
         return ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR;
     }
     return ERR_OK;
