@@ -21,19 +21,19 @@ sequenceable AppAccountCommon..OHOS.AccountSA.VerifyCredentialOptions;
 sequenceable OHOS.IRemoteObject;
 
 interface OHOS.AccountSA.IAppAccountAuthenticator {
-    void AddAccountImplicitly([in] String authType, [in] String callerBundleName,
-        [in] WantParams options, [in] IRemoteObject remoteObjCallback, [out] int funcResult);
-    void Authenticate([in] AppAccountAuthenticatorStringInfo appAccountAuthenticatorStringInfo,
-        [in] WantParams options, [in] IRemoteObject remoteObjCallback, [out] int funcResult);
-    void VerifyCredential([in] String name, [in] VerifyCredentialOptions options,
-        [in] IRemoteObject remoteObjCallback, [out] int funcResult);
-    void CheckAccountLabels([in] String name, [in] String[] labels,
-        [in] IRemoteObject remoteObjCallback, [out] int funcResult);
-    void SetProperties([in] SetPropertiesOptions options,
-        [in] IRemoteObject remoteObjCallback, [out] int funcResult);
-    void IsAccountRemovable([in] String name, [in] IRemoteObject remoteObjCallback, [out] int funcResult);
-    void CreateAccountImplicitly([in] CreateAccountImplicitlyOptions options,
-        [in] IRemoteObject remoteObjCallback, [out] int funcResult);
-    void Auth([in] String name, [in] String authType, [in] WantParams options,
-        [in] IRemoteObject remoteObjCallback, [out] int funcResult);
+    [oneway]void AddAccountImplicitly([in] String authType, [in] String callerBundleName,
+        [in] WantParams options, [in] IRemoteObject remoteObjCallback);
+    [oneway]void Authenticate([in] AppAccountAuthenticatorStringInfo appAccountAuthenticatorStringInfo,
+        [in] WantParams options, [in] IRemoteObject remoteObjCallback);
+    [oneway]void VerifyCredential([in] String name, [in] VerifyCredentialOptions options,
+        [in] IRemoteObject remoteObjCallback);
+    [oneway]void CheckAccountLabels([in] String name, [in] String[] labels,
+        [in] IRemoteObject remoteObjCallback);
+    [oneway]void SetProperties([in] SetPropertiesOptions options,
+        [in] IRemoteObject remoteObjCallback);
+    [oneway]void IsAccountRemovable([in] String name, [in] IRemoteObject remoteObjCallback);
+    [oneway]void CreateAccountImplicitly([in] CreateAccountImplicitlyOptions options,
+        [in] IRemoteObject remoteObjCallback);
+    [oneway]void Auth([in] String name, [in] String authType, [in] WantParams options,
+        [in] IRemoteObject remoteObjCallback);
 }

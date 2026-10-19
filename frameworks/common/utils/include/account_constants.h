@@ -43,6 +43,7 @@ const char OPERATION_UNSUBSCRIBE_SPACE_EVENT[] = "unsubscribeSpaceEvent";
 const char OPERATION_GET_SERVICE[] = "getService";
 const int32_t E_IPC_ERROR = 29189;
 const int32_t E_IPC_SA_DIED = 32;
+const int32_t BR_FAILED_REPLY = 29201;
 }
 } // namespace AccountSA
 } // namespace OHOS

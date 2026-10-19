@@ -18,7 +18,7 @@ sequenceable OHOS.AAFwk.Want;
 option_stub_hooks on;
 
 interface OHOS.AccountSA.IAppAccountAuthenticatorCallback {
-    void OnResult([in] int resultCode, [in] Want wantResult);
-    void OnRequestRedirected([in] Want request);
-    void OnRequestContinued();
+    [oneway]void OnResult([in] int resultCode, [in] Want wantResult);
+    [oneway]void OnRequestRedirected([in] Want request);
+    [oneway]void OnRequestContinued();
 }
