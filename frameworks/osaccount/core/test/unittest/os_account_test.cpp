@@ -1207,3 +1207,80 @@ HWTEST_F(OsAccountTest, CheckCreateOsAccountForDomainPermission_003, TestSize.Le
     ASSERT_TRUE(RecoveryPermission(tokenId, selfTokenId));
 }
 
+/**
+ * @tc.name: CreateOsAccount_WithSpecifiedLocalId_Success
+ * @tc.desc: AC-3.1 createOsAccount with specified localId succeeds
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountTest, CreateOsAccount_WithSpecifiedLocalId_Success, TestSize.Level1)
+{
+    constexpr int32_t specifiedLocalId = 200;
+    OsAccountInfo osAccountInfo;
+    CreateOsAccountOptions options;
+    options.localId = std::make_optional<int32_t>(specifiedLocalId);
+    ErrCode ret = CreateOsAccountForTest("TestSpecifiedId", "shortSpecified",
+        OsAccountType::NORMAL, options, osAccountInfo);
+    EXPECT_EQ(ret, ERR_OK);
+    EXPECT_EQ(osAccountInfo.GetLocalId(), specifiedLocalId);
+    g_osAccount->RemoveOsAccount(osAccountInfo.GetLocalId());
+}
+
+/**
+ * @tc.name: CreateOsAccount_SpecifiedLocalIdExists_Returns12300024
+ * @tc.desc: AC-3.2 createOsAccount with existing localId returns 12300024
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountTest, CreateOsAccount_SpecifiedLocalIdExists_Returns12300024, TestSize.Level1)
+{
+    constexpr int32_t existingLocalId = 201;
+    OsAccountInfo firstAccount;
+    CreateOsAccountOptions options;
+    options.localId = std::make_optional<int32_t>(existingLocalId);
+    ErrCode ret = CreateOsAccountForTest("TestExistingId", "shortExisting",
+        OsAccountType::NORMAL, options, firstAccount);
+    EXPECT_EQ(ret, ERR_OK);
+
+    OsAccountInfo secondAccount;
+    ErrCode dupRet = CreateOsAccountForTest("TestDupId", "shortDup",
+        OsAccountType::NORMAL, options, secondAccount);
+    EXPECT_EQ(dupRet, ERR_OSACCOUNT_SERVICE_LOCAL_ID_ALREADY_EXISTS_ERROR);
+
+    g_osAccount->RemoveOsAccount(firstAccount.GetLocalId());
+}
+
+/**
+ * @tc.name: CreateOsAccount_RestrictedLocalId_ReturnsInvalidParameter
+ * @tc.desc: AC-3.4 createOsAccount with restricted localId returns invalid parameter
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountTest, CreateOsAccount_RestrictedLocalId_ReturnsInvalidParameter, TestSize.Level1)
+{
+    constexpr int32_t restrictedLocalId = 50;
+    OsAccountInfo osAccountInfo;
+    CreateOsAccountOptions options;
+    options.localId = std::make_optional<int32_t>(restrictedLocalId);
+    ErrCode ret = CreateOsAccountForTest("TestRestrictedId", "shortRestricted",
+        OsAccountType::NORMAL, options, osAccountInfo);
+    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+}
+
+/**
+ * @tc.name: CreateOsAccount_WithoutLocalId_BackwardCompatible
+ * @tc.desc: AC-3.5 createOsAccount without localId auto-assigns ID
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountTest, CreateOsAccount_WithoutLocalId_BackwardCompatible, TestSize.Level1)
+{
+    OsAccountInfo osAccountInfo;
+    CreateOsAccountOptions options;
+    ErrCode ret = CreateOsAccountForTest("TestNoLocalId", "shortNoId",
+        OsAccountType::NORMAL, options, osAccountInfo);
+    EXPECT_EQ(ret, ERR_OK);
+    EXPECT_GE(osAccountInfo.GetLocalId(), Constants::START_USER_ID);
+    g_osAccount->RemoveOsAccount(osAccountInfo.GetLocalId());
+}
+

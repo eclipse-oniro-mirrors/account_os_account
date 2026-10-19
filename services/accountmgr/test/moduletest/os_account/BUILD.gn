@@ -1067,6 +1067,9 @@ ohos_moduletest("os_account_subspace_module_test") {
     cflags_cc += [ "-DHAS_HISYSEVENT_PART" ]
     external_deps += [ "hisysevent:libhisysevent" ]
   }
+  if (os_account_support_backup_restore) {
+    cflags_cc += [ "-DSUPPORT_BACKUP_RESTORE" ]
+  }
   sources += [ "${services_path}/accountmgr/test/mock/common/bundle_manager_adapter.cpp" ]
   part_name = "os_account"
 }

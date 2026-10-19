@@ -2380,6 +2380,22 @@ ErrCode InnerDomainAccountManager::PluginGetDomainAccountInfo(const GetDomainAcc
     return DomainPluginAdapter::GetAndCleanPluginBusinessError(&error, iter->first, -1, info);
 }
 
+ErrCode InnerDomainAccountManager::PluginGetAccountInfoByLocalId(
+    int32_t localId, DomainAccountInfo &info) __attribute__((no_sanitize("cfi")))
+{
+    auto iter = methodMap_.find(PluginMethodEnum::GET_ACCOUNT_INFO_BY_LOCAL_ID);
+    if (iter == methodMap_.end() || iter->second == nullptr) {
+        ACCOUNT_LOGE("Caller method=%{public}d not exist.",
+            PluginMethodEnum::GET_ACCOUNT_INFO_BY_LOCAL_ID);
+        return ConvertToJSErrCode(ERR_DOMAIN_ACCOUNT_SERVICE_PLUGIN_NOT_EXIST);
+    }
+    PluginDomainAccountInfo *accountInfoResult = nullptr;
+    PluginBusinessError *error =
+        (*reinterpret_cast<GetAccountInfoByLocalIdFunc>(iter->second))(localId, &accountInfoResult);
+    DomainPluginAdapter::GetAndCleanPluginDomainAccountInfo(info, &accountInfoResult);
+    return DomainPluginAdapter::GetAndCleanPluginBusinessError(&error, iter->first, localId, info);
+}
+
 ErrCode InnerDomainAccountManager::GetDomainAccountInfo(const DomainAccountInfo &info, DomainAccountInfo &result,
     int32_t localId)
 {

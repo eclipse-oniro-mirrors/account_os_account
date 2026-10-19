@@ -30,6 +30,7 @@
 #include "account_log_wrapper.h"
 #include "directory_ex.h"
 #include "account_hisysevent_adapter.h"
+#include "os_account_constants.h"
 #ifndef INCLUDE_FILE_OPT_ONLY
 #include "json_utils.h"
 #endif // INCLUDE_FILE_OPT_ONLY
@@ -39,7 +40,6 @@ namespace {
 #ifdef ENABLE_FILE_WATCHER
 constexpr char ACCOUNT_INFO_DIGEST_FILE_PATH[] = "account_info_digest.json";
 #endif // ENABLE_FILE_WATCHER
-const long MAX_FILE_SIZE = 16 * 1024 * 1024; // 16MB
 const unsigned long long BUFF_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const uint32_t RETRY_TIMES = 3;
 const uint32_t RETRY_SLEEP_MS = 5;
@@ -235,7 +235,7 @@ static ErrCode ReadFile(const std::string &path, std::string &content)
     flock(fd, LOCK_SH);
     (void)fseek(fp, 0, SEEK_END);
     long fileSize = ftell(fp);
-    if ((fileSize < 0) || (fileSize > MAX_FILE_SIZE)) {
+    if ((fileSize < 0) || (fileSize > Constants::MAX_FILE_SIZE)) {
         ACCOUNT_LOGE("The file(%{public}s) size is invalid, errno %{public}d.", path.c_str(), errno);
         flock(fd, LOCK_UN);
         (void)fclose(fp);

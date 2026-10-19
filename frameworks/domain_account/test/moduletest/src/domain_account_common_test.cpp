@@ -382,3 +382,41 @@ HWTEST_F(DomainAccountCommonModuleTest, DomainAccountCommonModuleTest_UnlockExtr
     extraInfo.successExtraInfo = {1, 2, 3};
     EXPECT_EQ(extraInfo.successExtraInfo.size(), 3);
 }
+
+/**
+ * @tc.name: DomainAccountCommonModuleTest_CreateOsAccountForDomainOptions_LocalId_001
+ * @tc.desc: CreateOsAccountForDomainOptions.localId Marshalling/ReadFromParcel with value.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DomainAccountCommonModuleTest, DomainAccountCommonModuleTest_CreateOsAccountForDomainOptions_LocalId_001,
+         TestSize.Level3)
+{
+    CreateOsAccountForDomainOptions options;
+    options.localId = std::make_optional<int32_t>(300);
+    Parcel parcel;
+    EXPECT_TRUE(options.Marshalling(parcel));
+    auto *unmarshalled = CreateOsAccountForDomainOptions::Unmarshalling(parcel);
+    ASSERT_NE(unmarshalled, nullptr);
+    EXPECT_TRUE(unmarshalled->localId.has_value());
+    EXPECT_EQ(unmarshalled->localId.value(), 300);
+    delete unmarshalled;
+}
+
+/**
+ * @tc.name: DomainAccountCommonModuleTest_CreateOsAccountForDomainOptions_LocalId_002
+ * @tc.desc: CreateOsAccountForDomainOptions.localId is nullopt by default after Unmarshalling.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DomainAccountCommonModuleTest, DomainAccountCommonModuleTest_CreateOsAccountForDomainOptions_LocalId_002,
+         TestSize.Level3)
+{
+    CreateOsAccountForDomainOptions emptyOptions;
+    Parcel emptyParcel;
+    EXPECT_TRUE(emptyOptions.Marshalling(emptyParcel));
+    auto *emptyUnmarshalled = CreateOsAccountForDomainOptions::Unmarshalling(emptyParcel);
+    ASSERT_NE(emptyUnmarshalled, nullptr);
+    EXPECT_FALSE(emptyUnmarshalled->localId.has_value());
+    delete emptyUnmarshalled;
+}

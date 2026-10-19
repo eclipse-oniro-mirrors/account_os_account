@@ -91,6 +91,9 @@ public:
     void OnStart() override;
     void OnStop() override;
     void OnAddSystemAbility(int32_t systemAbilityId, const std::string &deviceId) override;
+#ifdef SUPPORT_BACKUP_RESTORE
+    int32_t OnExtension(const std::string &extension, MessageParcel &data, MessageParcel &reply) override;
+#endif
     bool IsServiceStarted(void) const override;
     static AccountMgrService &GetInstance()
     {

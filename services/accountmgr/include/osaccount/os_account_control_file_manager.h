@@ -120,6 +120,7 @@ public:
         const std::string &userInfoPath, const std::string &accountInfoStr, std::string &digestStr);
     ErrCode DeleteAccountInfoDigest(const std::string &userInfoPath);
     ErrCode SetNextLocalId(const int32_t &nextLocalId) override;
+    ErrCode RemoveOABaseConstraintsInfo(const int32_t id);
     ErrCode SetDomainBoundFlag(
         const int32_t localId, const bool isBoundCompleted, const DomainAccountInfo domainInfo = {}) override;
     ErrCode GetDomainBoundFlag(const int32_t localId, bool &isBoundCompleted, DomainAccountInfo &domainInfo) override;
@@ -156,7 +157,6 @@ private:
     ErrCode SaveSpecificOAConstraintsToFile(const CJsonUnique &specificOAConstraints);
     void RemoveAllUsersConstraintsInfo(CJsonUnique &specificOAConstraintsJson, const int32_t id);
 
-    ErrCode RemoveOABaseConstraintsInfo(const int32_t id);
     ErrCode RemoveOAGlobalConstraintsInfo(const int32_t id);
     ErrCode RemoveOASpecificConstraintsInfo(const int32_t id);
     ErrCode GetAccountInfoDigestFromFile(const std::string &path, uint8_t *digest, uint32_t size);
