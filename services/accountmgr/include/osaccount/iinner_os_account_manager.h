@@ -176,6 +176,11 @@ public:
     ErrCode RestoreAllForegroundAccounts(std::map<uint64_t, int32_t> &pendingAccounts) override;
 #endif // ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
 
+    ErrCode ValidateOsAccount(const OsAccountInfo &osAccountInfo);
+#ifdef SUPPORT_BACKUP_RESTORE
+    ErrCode CheckAndRecoverRestore();
+#endif
+
 private:
     IInnerOsAccountManager();
     ~IInnerOsAccountManager() = default;
@@ -196,11 +201,17 @@ private:
     void CleanForegroundAccountMap(const OsAccountInfo &osAccountInfo);
     ErrCode PrepareOsAccountInfo(const std::string &name, const OsAccountType &type,
         const DomainAccountInfo &domainAccount, OsAccountInfo &osAccountInfo);
-    ErrCode PrepareOsAccountInfo(const std::string &localName, const std::string &shortName, const OsAccountType &type,
-        const DomainAccountInfo &domainAccount, OsAccountInfo &osAccountInfo);
-    ErrCode FillOsAccountInfo(const std::string &localName, const std::string &shortName, const OsAccountType &type,
-        const DomainAccountInfo &domainAccount, OsAccountInfo &osAccountInfo);
+    ErrCode PrepareOsAccountInfo(const std::string &localName, const OsAccountType &type,
+        const DomainAccountInfo &domainAccount, OsAccountInfo &osAccountInfo,
+        const CreateOsAccountOptions &options);
+    ErrCode FillOsAccountInfo(const std::string &localName, const OsAccountType &type,
+        const DomainAccountInfo &domainAccount, OsAccountInfo &osAccountInfo,
+        const CreateOsAccountOptions &options = {});
+    ErrCode AssignSpecifiedLocalId(int32_t specifiedId, int &id);
     ErrCode PrepareOsAccountInfoWithFullInfo(OsAccountInfo &osAccountInfo);
+#ifdef SUPPORT_AUTHORIZATION
+    ErrCode HandleCreateOsAccountToken(OsAccountInfo &osAccountInfo, const CreateOsAccountOptions &options);
+#endif // SUPPORT_AUTHORIZATION
     ErrCode SendMsgForAccountActivate(OsAccountInfo &osAccountInfo, const bool startStorage = true,
                                       const uint64_t dispalyId = 0, const bool isAppRecovery = false);
     void ActivateSubprofile(const OsAccountInfo &osAccountInfo);
@@ -213,7 +224,6 @@ private:
     void SendMsgForAccountSwitched(OsAccountInfo &osAccountInfo);
     ErrCode SendMsgForAccountStop(OsAccountInfo &osAccountInfo);
     ErrCode SendMsgForAccountRemove(OsAccountInfo &osAccountInfo);
-    ErrCode ValidateOsAccount(const OsAccountInfo &osAccountInfo);
     ErrCode DealWithDeviceOwnerId(const bool isDeviceOwner, const int32_t localId);
     void CheckAndRefreshLocalIdRecord(const int id);
     void RollBackToEarlierAccount(int32_t fromId, int32_t toId, uint64_t displayId = 0);
@@ -313,6 +323,9 @@ private:
     ErrCode PrepareForDefaultAccount(int32_t activatedId, OsAccountInfo &osAccountInfo);
     ErrCode SetAccountReadyParamWithRetry(const OsAccountInfo &osAccountInfo);
     bool IsValidActivateOsAccountId(int32_t id);
+#ifdef SUPPORT_BACKUP_RESTORE
+    std::atomic<bool> isNeedRestoreRecover_ = true;
+#endif
 
 public:
     void ParseAllDefaultActivateIds();

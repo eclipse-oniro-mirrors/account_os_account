@@ -192,6 +192,10 @@ AccountSA::CreateOsAccountOptions ConvertToInnerOptions(optional_view<CreateOsAc
         innerOptions.token = std::nullopt;
     }
 
+    if (opts.localId.has_value()) {
+        innerOptions.localId = std::make_optional<int32_t>(opts.localId.value());
+    }
+
     return innerOptions;
 }
 
@@ -1396,6 +1400,9 @@ public:
             auto tokenView = options.value().options.token.value();
             innerOptions.token = std::vector<uint8_t>(tokenView.begin(), tokenView.end());
             innerOptions.hasToken = true;
+        }
+        if (options.has_value() && options.value().options.localId.has_value()) {
+            innerOptions.localId = std::make_optional<int32_t>(options.value().options.localId.value());
         }
         std::shared_ptr<THCreateDomainCallback> createDomainCallback = std::make_shared<THCreateDomainCallback>();
         ErrCode errCode = AccountSA::OsAccountManager::CreateOsAccountForDomain(innerType, innerDomainAccountInfo,

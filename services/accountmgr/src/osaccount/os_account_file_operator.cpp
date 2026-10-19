@@ -184,7 +184,7 @@ bool OsAccountFileOperator::CheckConstraints(const std::vector<std::string> &con
         return false;
     }
     for (auto it = constraints.begin(); it != constraints.end(); it++) {
-        if (std::find(constraintSet.begin(), constraintSet.end(), *it) == constraintSet.end()) {
+        if (constraintSet.find(*it) == constraintSet.end()) {
             ACCOUNT_LOGE("Invalid constraint: %{public}s", (*it).c_str());
             return false;
         }

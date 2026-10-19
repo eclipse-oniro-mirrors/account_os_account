@@ -38,6 +38,7 @@ const char DOMAIN_OPT_AUTH_POP[] = "authWithPop";
 const char DOMAIN_OPT_AUTH_TOKEN[] = "authWithToken";
 const char DOMAIN_OPT_UPDATE_INFO[] = "updateInfo";
 const char DOMAIN_OPT_GET_INFO[] = "getInfo";
+const char DOMAIN_OPT_GET_INFO_BY_LOCAL_ID[] = "getInfoByLocalId";
 const char DOMAIN_OPT_ADD_CONFIG[] = "addServerConfig";
 const char DOMAIN_OPT_REMOVE_CONFIG[] = "removeServerConfig";
 const char DOMAIN_OPT_GET_CONFIG[] = "getServerConfig";

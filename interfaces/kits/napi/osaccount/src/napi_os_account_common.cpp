@@ -20,6 +20,7 @@
 #include "napi_common_want.h"
 #include "napi/native_common.h"
 #include "napi_os_account.h"
+#include "os_account_constants.h"
 #include "want.h"
 
 namespace OHOS {
@@ -685,46 +686,100 @@ static bool ParseToken(napi_env env, napi_value object, CreateOAAsyncContext *as
     return true;
 }
 
+static bool ParseCreateOAConstraints(napi_env env, napi_value optionsObj, CreateOAAsyncContext *asyncContext)
+{
+    bool hasDisallowedBundleNames = false;
+    NAPI_CALL_BASE(env, napi_has_named_property(env, optionsObj, "disallowedBundleNames",
+        &hasDisallowedBundleNames), false);
+    if (hasDisallowedBundleNames) {
+        GetStringArrayPropertyByKey(env, optionsObj, "disallowedBundleNames",
+            asyncContext->disallowedHapList, true);
+    } else {
+        GetStringArrayPropertyByKey(env, optionsObj, "disallowedPreinstalledBundles",
+            asyncContext->disallowedHapList, true);
+    }
+    bool hasAllowedPreinstalledBundles = false;
+    NAPI_CALL_BASE(env, napi_has_named_property(env, optionsObj, "allowedPreinstalledBundles",
+        &hasAllowedPreinstalledBundles), false);
+    if (hasAllowedPreinstalledBundles) {
+        std::vector<std::string> list;
+        GetStringArrayPropertyByKey(env, optionsObj, "allowedPreinstalledBundles", list, true);
+        asyncContext->allowedHapList = std::make_optional<std::vector<std::string>>(list);
+    }
+    return true;
+}
+
+static bool ParseLocalIdFromOptions(napi_env env, napi_value optionsObj, bool throwErr,
+    std::optional<int32_t> &outLocalId)
+{
+    bool hasLocalId = false;
+    NAPI_CALL_BASE(env, napi_has_named_property(env, optionsObj, "localId", &hasLocalId), false);
+    if (!hasLocalId) {
+        return true;
+    }
+    napi_value localIdJs = nullptr;
+    NAPI_CALL_BASE(env, napi_get_named_property(env, optionsObj, "localId", &localIdJs), false);
+    napi_valuetype localIdType = napi_undefined;
+    NAPI_CALL_BASE(env, napi_typeof(env, localIdJs, &localIdType), false);
+    if (localIdType == napi_undefined || localIdType == napi_null) {
+        return true;
+    }
+    int32_t localIdInt = 0;
+    if (!GetIntProperty(env, localIdJs, localIdInt)) {
+        ACCOUNT_LOGE("Get localId failed");
+        std::string errMsg = "Parameter error. The type of localId must be number";
+        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, throwErr);
+        return false;
+    }
+    if (localIdInt < Constants::START_USER_ID || localIdInt > Constants::MAX_CREATABLE_USER_ID) {
+        ACCOUNT_LOGE("localId is out of range");
+        std::string errMsg = "Parameter invalid. The value of option.localId should be between " +
+            std::to_string(Constants::START_USER_ID) + " and " + std::to_string(Constants::MAX_CREATABLE_USER_ID);
+        AccountNapiThrow(env, ERR_JS_INVALID_PARAMETER, errMsg, throwErr);
+        return false;
+    }
+    outLocalId = std::make_optional<int32_t>(localIdInt);
+    return true;
+}
+
+static bool ParseCreateOALocalId(napi_env env, napi_value optionsObj, CreateOAAsyncContext *asyncContext)
+{
+    return ParseLocalIdFromOptions(env, optionsObj, asyncContext->throwErr, asyncContext->localId);
+}
+
+static bool ParseCreateOAOptions(napi_env env, napi_value optionsObj, CreateOAAsyncContext *asyncContext)
+{
+    NAPI_CALL_BASE(env, napi_has_named_property(env, optionsObj, "shortName",
+        &asyncContext->hasShortName), false);
+    if (asyncContext->hasShortName &&
+        !GetStringPropertyByKey(env, optionsObj, "shortName", asyncContext->shortName)) {
+        ACCOUNT_LOGE("get CreateOsAccountOptions's shortName failed");
+        std::string errMsg = "Parameter error. The type of arg 3 must be function or CreateOsAccountOptions";
+        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+        return false;
+    }
+    if (!ParseCreateOAConstraints(env, optionsObj, asyncContext)) {
+        return false;
+    }
+    bool hasToken = false;
+    NAPI_CALL_BASE(env, napi_has_named_property(env, optionsObj, "token", &hasToken), false);
+    if (hasToken && !ParseToken(env, optionsObj, asyncContext)) {
+        ACCOUNT_LOGE("Get CreateOsAccountOptions's token failed");
+        std::string errMsg = "Parameter error. The type of arg 3 must be CreateOsAccountOptions";
+        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+        return false;
+    }
+    return ParseCreateOALocalId(env, optionsObj, asyncContext);
+}
+
 bool ParseParaCreateOA(napi_env env, napi_callback_info cbInfo, CreateOAAsyncContext *asyncContext)
 {
     size_t argc = ARGS_SIZE_THREE;
     napi_value argv[ARGS_SIZE_THREE] = {0};
-    napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr);
-    if (argc == ARGS_SIZE_THREE) {
-        if (!GetCallbackProperty(env, argv[PARAMTWO], asyncContext->callbackRef, 1)) {
-            napi_has_named_property(env, argv[PARAMTWO], "shortName", &asyncContext->hasShortName);
-            if (asyncContext->hasShortName &&
-                !GetStringPropertyByKey(env, argv[PARAMTWO], "shortName", asyncContext->shortName)) {
-                ACCOUNT_LOGE("get CreateOsAccountOptions's shortName failed");
-                std::string errMsg = "Parameter error. The type of arg 3 must be function or CreateOsAccountOptions";
-                AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
-                return false;
-            }
-            bool hasDisallowedBundleNames = false;
-            napi_has_named_property(env, argv[PARAMTWO], "disallowedBundleNames", &hasDisallowedBundleNames);
-            if (hasDisallowedBundleNames) {
-                GetStringArrayPropertyByKey(env, argv[PARAMTWO], "disallowedBundleNames",
-                    asyncContext->disallowedHapList, true);
-            } else {
-                GetStringArrayPropertyByKey(env, argv[PARAMTWO], "disallowedPreinstalledBundles",
-                    asyncContext->disallowedHapList, true);
-            }
-            bool hasAllowedPreinstalledBundles = false;
-            napi_has_named_property(
-                env, argv[PARAMTWO], "allowedPreinstalledBundles", &hasAllowedPreinstalledBundles);
-            if (hasAllowedPreinstalledBundles) {
-                std::vector<std::string> list;
-                GetStringArrayPropertyByKey(env, argv[PARAMTWO], "allowedPreinstalledBundles", list, true);
-                asyncContext->allowedHapList = std::make_optional<std::vector<std::string>>(list);
-            }
-            bool hasToken = false;
-            napi_has_named_property(env, argv[PARAMTWO], "token", &hasToken);
-            if (hasToken && !ParseToken(env, argv[PARAMTWO], asyncContext)) {
-                ACCOUNT_LOGE("Get CreateOsAccountOptions's token failed");
-                std::string errMsg = "Parameter error. The type of arg 3 must be CreateOsAccountOptions";
-                AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
-                return false;
-            }
+    NAPI_CALL_BASE(env, napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr), false);
+    if (argc == ARGS_SIZE_THREE && !GetCallbackProperty(env, argv[PARAMTWO], asyncContext->callbackRef, 1)) {
+        if (!ParseCreateOAOptions(env, argv[PARAMTWO], asyncContext)) {
+            return false;
         }
     }
     if (!GetStringProperty(env, argv[PARAMZERO], asyncContext->name)) {
@@ -811,44 +866,57 @@ static bool ParseDomainOptionInfo(napi_env env, napi_value object, CreateOsAccou
     return true;
 }
 
+static bool ParseCreateOAForDomainConstraints(napi_env env, napi_value optionsObj,
+    CreateOsAccountForDomainOptions &domainOptions)
+{
+    bool hasDisallowedBundleNames = false;
+    NAPI_CALL_BASE(env, napi_has_named_property(env, optionsObj, "disallowedBundleNames",
+        &hasDisallowedBundleNames), false);
+    if (hasDisallowedBundleNames) {
+        GetStringArrayPropertyByKey(env, optionsObj, "disallowedBundleNames",
+            domainOptions.disallowedHapList, true);
+    } else {
+        GetStringArrayPropertyByKey(env, optionsObj, "disallowedPreinstalledBundles",
+            domainOptions.disallowedHapList, true);
+    }
+    bool hasAllowedPreinstalledBundles = false;
+    NAPI_CALL_BASE(env, napi_has_named_property(env, optionsObj, "allowedPreinstalledBundles",
+        &hasAllowedPreinstalledBundles), false);
+    if (hasAllowedPreinstalledBundles) {
+        std::vector<std::string> list;
+        GetStringArrayPropertyByKey(env, optionsObj, "allowedPreinstalledBundles", list, true);
+        domainOptions.allowedHapList = std::make_optional<std::vector<std::string>>(list);
+    }
+    return true;
+}
+
+static bool ParseCreateOAForDomainOptions(napi_env env, napi_value optionsObj,
+    CreateOAForDomainAsyncContext *asyncContext)
+{
+    if (!ParseDomainOptionInfo(env, optionsObj, asyncContext->domainOptions)) {
+        ACCOUNT_LOGE("Failed to get domainOptions");
+        std::string errMsg =
+            "Parameter error. The type of arg 3 must be function or CreateOsAccountForDomainOptions";
+        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+        return false;
+    }
+    if (!ParseCreateOAForDomainConstraints(env, optionsObj, asyncContext->domainOptions)) {
+        return false;
+    }
+    return ParseLocalIdFromOptions(env, optionsObj, asyncContext->throwErr, asyncContext->domainOptions.localId);
+}
+
 bool ParseParaCreateOAForDomain(napi_env env, napi_callback_info cbInfo,
     CreateOAForDomainAsyncContext *asyncContext)
 {
     size_t argc = ARGS_SIZE_THREE;
     napi_value argv[ARGS_SIZE_THREE] = {0};
-    napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr);
-
-    napi_valuetype valueType = napi_undefined;
-    if (argc == ARGS_SIZE_THREE) {
-        napi_typeof(env, argv[ARGS_SIZE_TWO], &valueType);
-        if (!GetCallbackProperty(env, argv[PARAMTWO], asyncContext->callbackRef, 1)) {
-            if (!ParseDomainOptionInfo(env, argv[PARAMTWO], asyncContext->domainOptions)) {
-                ACCOUNT_LOGE("Failed to get domainOptions");
-                std::string errMsg =
-                    "Parameter error. The type of arg 3 must be function or CreateOsAccountForDomainOptions";
-                AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
-                return false;
-            }
-            bool hasDisallowedBundleNames = false;
-            napi_has_named_property(env, argv[PARAMTWO], "disallowedBundleNames", &hasDisallowedBundleNames);
-            if (hasDisallowedBundleNames) {
-                GetStringArrayPropertyByKey(env, argv[PARAMTWO], "disallowedBundleNames",
-                    asyncContext->domainOptions.disallowedHapList, true);
-            } else {
-                GetStringArrayPropertyByKey(env, argv[PARAMTWO], "disallowedPreinstalledBundles",
-                    asyncContext->domainOptions.disallowedHapList, true);
-            }
-            bool hasAllowedPreinstalledBundles = false;
-            napi_has_named_property(
-                env, argv[PARAMTWO], "allowedPreinstalledBundles", &hasAllowedPreinstalledBundles);
-            if (hasAllowedPreinstalledBundles) {
-                std::vector<std::string> list;
-                GetStringArrayPropertyByKey(env, argv[PARAMTWO], "allowedPreinstalledBundles", list, true);
-                asyncContext->domainOptions.allowedHapList = std::make_optional<std::vector<std::string>>(list);
-            }
+    NAPI_CALL_BASE(env, napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr), false);
+    if (argc == ARGS_SIZE_THREE && !GetCallbackProperty(env, argv[PARAMTWO], asyncContext->callbackRef, 1)) {
+        if (!ParseCreateOAForDomainOptions(env, argv[PARAMTWO], asyncContext)) {
+            return false;
         }
     }
-
     int32_t id = 0;
     if (!GetIntProperty(env, argv[PARAMZERO], id)) {
         ACCOUNT_LOGE("Get type failed");
@@ -857,7 +925,6 @@ bool ParseParaCreateOAForDomain(napi_env env, napi_callback_info cbInfo,
         return false;
     }
     asyncContext->type = static_cast<OsAccountType>(id);
-
     if (!ParseDomainAccountInfo(env, argv[PARAMONE], asyncContext->domainInfo)) {
         ACCOUNT_LOGE("get domainInfo failed");
         std::string errMsg = "Parameter error. The type of \"domainInfo\" must be DomainAccountInfo";
@@ -876,6 +943,7 @@ void CreateOAExecuteCB(napi_env env, void *data)
     options.allowedHapList = asyncContext->allowedHapList;
     options.hasShortName = asyncContext->hasShortName;
     options.token = asyncContext->token;
+    options.localId = asyncContext->localId;
     asyncContext->errCode = OsAccountManager::CreateOsAccount(asyncContext->name, asyncContext->shortName,
         asyncContext->type, options, asyncContext->osAccountInfos);
     asyncContext->status = (asyncContext->errCode == 0) ? napi_ok : napi_generic_failure;

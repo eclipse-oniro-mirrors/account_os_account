@@ -189,6 +189,9 @@ ohos_moduletest("domain_account_frameworks_module_mock_test") {
       "${services_path}/accountmgr/src/distributed_account/os_account_subspace_manager.cpp",
     ]
   }
+  if (os_account_support_backup_restore) {
+    cflags_cc += [ "-DSUPPORT_BACKUP_RESTORE" ]
+  }
 }
 
 ohos_moduletest("domain_account_client_mock_plugin_so_module_test") {
@@ -341,6 +344,9 @@ ohos_moduletest("domain_account_client_mock_plugin_so_module_test") {
   }
   if (has_hiviewdfx_hisysevent_part) {
     cflags_cc += [ "-DHAS_HISYSEVENT_PART" ]
+  }
+  if (os_account_support_backup_restore) {
+    cflags_cc += [ "-DSUPPORT_BACKUP_RESTORE" ]
   }
 }
 

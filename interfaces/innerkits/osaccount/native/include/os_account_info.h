@@ -72,6 +72,7 @@ struct CreateOsAccountOptions : public EdmAuthorizationOption, public Parcelable
     static CreateOsAccountOptions *Unmarshalling(Parcel &parcel);
     std::string shortName;
     bool hasShortName = true;
+    std::optional<int32_t> localId = std::nullopt;
 
     ~CreateOsAccountOptions()
     {

@@ -102,6 +102,7 @@ struct CreateOAAsyncContext : public CommonAsyncContext {
     std::optional<std::vector<std::string>> allowedHapList = std::nullopt;
     OsAccountInfo osAccountInfos;
     bool hasShortName = false;
+    std::optional<int32_t> localId = std::nullopt;
 };
 
 struct CreateOAForDomainAsyncContext : public CommonAsyncContext {
@@ -110,6 +111,7 @@ struct CreateOAForDomainAsyncContext : public CommonAsyncContext {
     OsAccountInfo osAccountInfos;
     CreateOsAccountForDomainOptions domainOptions;
     ThreadLockInfo *lockInfo;
+    std::optional<int32_t> localId = std::nullopt;
 };
 
 struct GetOACountAsyncContext : public CommonAsyncContext {

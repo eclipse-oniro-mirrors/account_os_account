@@ -478,7 +478,10 @@ bool CreateOsAccountForDomainOptions::Marshalling(Parcel &parcel) const
         ACCOUNT_LOGE("Failed to write token.");
         return false;
     }
-    return true;
+    if (localId.has_value()) {
+        return parcel.WriteBool(true) && parcel.WriteInt32(localId.value());
+    }
+    return parcel.WriteBool(false);
 }
 
 CreateOsAccountForDomainOptions *CreateOsAccountForDomainOptions::Unmarshalling(Parcel &parcel)
@@ -490,6 +493,24 @@ CreateOsAccountForDomainOptions *CreateOsAccountForDomainOptions::Unmarshalling(
         options = nullptr;
     }
     return options;
+}
+
+static bool ReadLocalIdFromParcel(Parcel &parcel, std::optional<int32_t> &localId)
+{
+    bool hasLocalId = false;
+    if (!parcel.ReadBool(hasLocalId)) {
+        ACCOUNT_LOGE("Failed to read hasLocalId.");
+        return false;
+    }
+    if (hasLocalId) {
+        int32_t localIdValue = 0;
+        if (!parcel.ReadInt32(localIdValue)) {
+            ACCOUNT_LOGE("Failed to read localId.");
+            return false;
+        }
+        localId = std::make_optional<int32_t>(localIdValue);
+    }
+    return true;
 }
 
 bool CreateOsAccountForDomainOptions::ReadFromParcel(Parcel &parcel)
@@ -536,7 +557,6 @@ bool CreateOsAccountForDomainOptions::ReadFromParcel(Parcel &parcel)
         ACCOUNT_LOGE("Failed to read token.");
         return false;
     }
-    return true;
-}
-}  // namespace AccountSA
+    return ReadLocalIdFromParcel(parcel, localId);
+}}  // namespace AccountSA
 }  // namespace OHOS

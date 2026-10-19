@@ -50,6 +50,8 @@ static std::string GetOperationName(PluginMethodEnum methodEnum)
         case PluginMethodEnum::IS_ACCOUNT_TOKEN_VALID:
         case PluginMethodEnum::GET_ACCESS_TOKEN:
             return Constants::DOMAIN_OPT_GET_INFO;
+        case PluginMethodEnum::GET_ACCOUNT_INFO_BY_LOCAL_ID:
+            return Constants::DOMAIN_OPT_GET_INFO_BY_LOCAL_ID;
         case PluginMethodEnum::UPDATE_ACCOUNT_INFO:
             return Constants::DOMAIN_OPT_UPDATE_INFO;
         case PluginMethodEnum::BIND_ACCOUNT:
@@ -93,6 +95,7 @@ void DomainHisyseventUtils::ReportStatistic(const std::string &optName, int32_t 
         return;
     }
     if (optName == Constants::DOMAIN_OPT_GET_CONFIG || optName == Constants::DOMAIN_OPT_GET_INFO ||
+        optName == Constants::DOMAIN_OPT_GET_INFO_BY_LOCAL_ID ||
         optName == Constants::DOMAIN_OPT_GET_POLICY) {
         return;
     }

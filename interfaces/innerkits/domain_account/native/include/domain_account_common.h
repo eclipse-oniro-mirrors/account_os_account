@@ -67,6 +67,7 @@ struct CreateOsAccountForDomainOptions: public EdmAuthorizationOption, public Pa
     bool hasShortName = false;
     bool hasToken = false;
     std::vector<uint8_t> token;
+    std::optional<int32_t> localId = std::nullopt;
 
     ~CreateOsAccountForDomainOptions()
     {

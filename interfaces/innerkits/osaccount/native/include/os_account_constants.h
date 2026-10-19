@@ -83,6 +83,16 @@ const char OPERATION_SET_TYPE[] = "setType";
 const char OPERATION_SET_TO_BE_REMOVED[] = "setToBeRemoved";
 const char OPERATION_MIGRATE_TYPE_TO_TEE[] = "migrateOSAccountTypeToTee";
 
+// Backup restore DFX flag
+const char OPERATION_BACKUP[] = "backup";
+const char OPERATION_RESTORE[] = "restore";
+
+// Crash recovery
+const char RESTORE_BACKUP_DIR_PREFIX[] = ".";
+const char RESTORE_BACKUP_COMPLETE_FILE[] = ".complete";
+constexpr int32_t RESTORE_BACKUP_MAX_RETRY = 3;
+constexpr int32_t RESTORE_BACKUP_RETRY_DELAY_MS = 20;
+
 // Domain account DFX flag
 const char OPERATION_BIND_DOMAIN_ACCOUNT[] = "bindDomainAccount";
 const char OPERATION_RECOVER_BIND_DOMAIN_ACCOUNT[] = "recoverBindDomainAccount";
@@ -107,6 +117,7 @@ const unsigned int LOCAL_NAME_MAX_SIZE = sysconf(_SC_LOGIN_NAME_MAX);
 const unsigned int LOCAL_PHOTO_MAX_SIZE = 1024 * 1024;
 const uint32_t SHORT_NAME_MAX_SIZE = 255;
 const uint32_t IPC_WRITE_RAW_DATA_MAX_SIZE = 1024 * 1024 * 128;
+const int64_t MAX_FILE_SIZE = 16 * 1024 * 1024; // 16MB
 
 // domain info limits
 const unsigned int DOMAIN_NAME_MAX_SIZE = 128;
