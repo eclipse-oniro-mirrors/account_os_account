@@ -1373,11 +1373,11 @@ void RestoreForegroundAccountFallback(IInnerOsAccountManager *innerMgrService,
 } // namespace
 
 /**
- * @tc.name: GetForegroundOsAccountLocalIdDefaultFallback001
- * @tc.desc: Only the default display may use its default activation target when foreground state is absent.
+ * @tc.name: GetForegroundOsAccountLocalIdDefaultNoFallback001
+ * @tc.desc: The default activation target must not substitute for missing foreground state.
  * @tc.type: FUNC
  */
-HWTEST_F(IInnerOsAccountManagerTest, GetForegroundOsAccountLocalIdDefaultFallback001, TestSize.Level1)
+HWTEST_F(IInnerOsAccountManagerTest, GetForegroundOsAccountLocalIdDefaultNoFallback001, TestSize.Level1)
 {
     const auto state = PrepareForegroundAccountFallback(innerMgrService_);
     const uint64_t defaultDisplay = Constants::DEFAULT_DISPLAY_ID;
@@ -1385,8 +1385,8 @@ HWTEST_F(IInnerOsAccountManagerTest, GetForegroundOsAccountLocalIdDefaultFallbac
     constexpr int32_t targetId = TEST_DEFAULT_ACTIVATED_ACCOUNT_ID;
     constexpr int32_t foregroundId = TEST_FOREGROUND_ACCOUNT_ID;
     int32_t localId = Constants::INVALID_OS_ACCOUNT_ID;
-    EXPECT_EQ(innerMgrService_->GetForegroundOsAccountLocalId(defaultDisplay, localId), ERR_OK);
-    EXPECT_EQ(localId, targetId);
+    EXPECT_EQ(innerMgrService_->GetForegroundOsAccountLocalId(defaultDisplay, localId),
+        ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR);
     EXPECT_EQ(innerMgrService_->GetForegroundOsAccountLocalId(otherDisplay, localId),
         ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR);
     innerMgrService_->foregroundAccountMap_.EnsureInsert(otherDisplay, foregroundId);
@@ -1394,10 +1394,10 @@ HWTEST_F(IInnerOsAccountManagerTest, GetForegroundOsAccountLocalIdDefaultFallbac
     EXPECT_EQ(localId, foregroundId);
     innerMgrService_->foregroundAccountMap_.Erase(otherDisplay);
 
-    // Match default-account activation when no default target has been saved yet.
+    // Missing or invalid default targets must not substitute for foreground state either.
     innerMgrService_->defaultActivatedIds_.Erase(defaultDisplay);
-    EXPECT_EQ(innerMgrService_->GetForegroundOsAccountLocalId(defaultDisplay, localId), ERR_OK);
-    EXPECT_EQ(localId, Constants::START_USER_ID);
+    EXPECT_EQ(innerMgrService_->GetForegroundOsAccountLocalId(defaultDisplay, localId),
+        ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR);
     innerMgrService_->defaultActivatedIds_.EnsureInsert(defaultDisplay, Constants::INVALID_OS_ACCOUNT_ID);
     EXPECT_EQ(innerMgrService_->GetForegroundOsAccountLocalId(defaultDisplay, localId),
         ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR);
@@ -1408,10 +1408,10 @@ HWTEST_F(IInnerOsAccountManagerTest, GetForegroundOsAccountLocalIdDefaultFallbac
     EXPECT_EQ(innerMgrService_->GetForegroundOsAccountLocalId(defaultDisplay, localId), ERR_OK);
     EXPECT_EQ(localId, foregroundId);
 
-    // With no foreground account, query the default activation target again.
+    // Removing foreground state must not expose the saved default activation target.
     innerMgrService_->foregroundAccountMap_.Erase(defaultDisplay);
-    EXPECT_EQ(innerMgrService_->GetForegroundOsAccountLocalId(defaultDisplay, localId), ERR_OK);
-    EXPECT_EQ(localId, targetId);
+    EXPECT_EQ(innerMgrService_->GetForegroundOsAccountLocalId(defaultDisplay, localId),
+        ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR);
 
     RestoreForegroundAccountFallback(innerMgrService_, state);
 }
@@ -1439,6 +1439,8 @@ HWTEST_F(IInnerOsAccountManagerTest, GetForegroundOsAccountLocalIdSecondaryNoFal
     secondaryInfo.userZone = defaultDisplay;
     config.logicalIdMap_[otherDisplay] = secondaryInfo;
     config.userZonePrimaryMap_[defaultDisplay] = defaultDisplay;
+    EXPECT_EQ(innerMgrService_->GetForegroundOsAccountLocalId(defaultDisplay, localId),
+        ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR);
     EXPECT_EQ(innerMgrService_->GetForegroundOsAccountLocalId(otherDisplay, localId),
         ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR);
     config.configFormatError_ = true;
