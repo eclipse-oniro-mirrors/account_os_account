@@ -76,6 +76,7 @@
         "constraint.font.set",
         "constraint.enterprise.bundles.local.install.disallow",
         "constraint.multiWindow",
-        "constraint.distributed.transmission"
+        "constraint.distributed.transmission",
+        "constraint.freeWindow"
     ]
 }
