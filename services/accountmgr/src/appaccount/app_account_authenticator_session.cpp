@@ -136,7 +136,6 @@ ErrCode AppAccountAuthenticatorSession::Open()
     request_.authenticatorAppIndex = authenticatorAppIndex;
     AAFwk::Want want;
     want.SetElementName(request_.owner, info.abilityName);
-    want.SetParam(AAFwk::Want::PARAM_APP_CLONE_INDEX_KEY, static_cast<int32_t>(request_.appIndex));
     auto conn = conn_;
     auto userId = userId_;
     auto task = [want, conn, userId] {
