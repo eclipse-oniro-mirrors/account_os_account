@@ -38,6 +38,10 @@ ohos_fuzztest("GetAssociatedDataStubFuzzTest") {
     "-Wno-unused-variable",
     "-fno-omit-frame-pointer",
   ]
+  cflags_cc = []
+  if (has_ces_part) {
+    cflags_cc += [ "-DHAS_CES_PART" ]
+  }
   if (target_cpu == "arm") {
     cflags += [ "-DBINDER_IPC_32BIT" ]
   }
