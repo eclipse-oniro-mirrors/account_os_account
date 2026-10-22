@@ -1180,3 +1180,43 @@ HWTEST_F(AppAccountControlManagerSubspaceModuleTest,
     g_mockGetAccountInfoByIdCustom = false;
     g_mockAccountInfoJson.clear();
 }
+
+/**
+ * @tc.name: Subspace_GetAccountsByOwner_CrossAppIndexAuthorized_001
+ * @tc.desc: Cross-appIndex authorized access: caller appIndex=1 queries an owner account at
+ *           appIndex=0 authorized to caller bundleKey; must not be wrongly dropped.
+ * @tc.type: FUNC
+ */
+HWTEST_F(AppAccountControlManagerSubspaceModuleTest,
+    Subspace_GetAccountsByOwner_CrossAppIndexAuthorized_001, TestSize.Level1)
+{
+    AppAccountInfo testAccount;
+    testAccount.owner_ = STRING_OWNER;
+    testAccount.name_ = "cross_index_account";
+    testAccount.appIndex_ = 0;
+    testAccount.authorizedApps_.emplace(AppAccountInfo::EncodeAuthorizedApp("com.example.appb", 1));
+
+    auto jsonObject = ToJson(testAccount);
+    ASSERT_NE(jsonObject, nullptr);
+    std::string jsonStr = PackJsonToString(jsonObject);
+    ASSERT_FALSE(jsonStr.empty());
+    g_mockGetAccountInfoByIdCustom = true;
+    g_mockAccountInfoJson = jsonStr;
+
+    auto &ctrl = AppAccountControlManager::GetInstance();
+    auto dataStoragePtr = ctrl.GetDataStorage(0, false);
+    ASSERT_NE(dataStoragePtr, nullptr);
+    std::vector<std::string> accessibleAccounts = {testAccount.GetPrimeKey()};
+    std::vector<AppAccountInfo> result;
+    ErrCode filterRet = ctrl.FilterAccessibleAccountsByOwner(
+        accessibleAccounts, STRING_OWNER, 1, dataStoragePtr, result);
+    EXPECT_EQ(filterRet, ERR_OK);
+    EXPECT_EQ(result.size(), 1u);
+    if (result.size() == 1) {
+        EXPECT_EQ(result[0].GetAppIndex(), 0u);
+        EXPECT_EQ(result[0].GetOwner(), STRING_OWNER);
+    }
+
+    g_mockGetAccountInfoByIdCustom = false;
+    g_mockAccountInfoJson.clear();
+}

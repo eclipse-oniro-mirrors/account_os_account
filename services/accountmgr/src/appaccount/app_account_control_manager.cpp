@@ -1356,6 +1356,7 @@ ErrCode AppAccountControlManager::FilterAccessibleAccountsByOwner(
     const std::vector<std::string> &accessibleAccounts, const std::string &owner, uint32_t appIndex,
     const std::shared_ptr<AppAccountDataStorage> &dataStoragePtr, std::vector<AppAccountInfo> &appAccounts)
 {
+    (void)appIndex;
     for (auto account : accessibleAccounts) {
         AppAccountInfo appAccountInfo;
         ErrCode result = dataStoragePtr->GetAccountInfoById(account, appAccountInfo);
@@ -1366,12 +1367,8 @@ ErrCode AppAccountControlManager::FilterAccessibleAccountsByOwner(
         if (appAccountInfo.GetOwner() != owner) {
             continue;
         }
-#ifdef ENABLE_MULTIPLE_OS_ACCOUNT_SUBSPACE
-        if (appAccountInfo.GetAppIndex() != appIndex) {
-            continue;
-        }
-#else
-        // Only main application (appIndex=0 or 10000) can be accessed
+#ifndef ENABLE_MULTIPLE_OS_ACCOUNT_SUBSPACE
+        // Dual Mode: only main application (appIndex=0 or 10000) can be accessed
         int32_t localId = static_cast<int32_t>(IPCSkeleton::GetCallingUid() / UID_TRANSFORM_DIVISOR);
         if (!IsAppIndexVisibleToCaller(appAccountInfo.GetOwner(), localId, appIndex, appAccountInfo.GetAppIndex())) {
             continue;
