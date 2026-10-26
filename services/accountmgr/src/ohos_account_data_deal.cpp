@@ -396,9 +396,6 @@ ErrCode OhosAccountDataDeal::GetAccountInfoFromJson(
     });
 
     GetDataByType<int64_t>(jsonData, DATADEAL_JSON_KEY_CREATE_TIME, accountInfo.createTime_);
-    if (accountInfo.createTime_ == 0) {
-        ACCOUNT_LOGW("createTime not set in account.json for userId=%{public}d, using default 0", userId);
-    }
 
     GetJsonField<std::string>(jsonData, DATADEAL_JSON_KEY_OHOSACCOUNT_NAME, [&](const std::string &value) {
         accountInfo.ohosAccountInfo_.name_ = value;
