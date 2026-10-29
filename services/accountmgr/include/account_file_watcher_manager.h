@@ -59,6 +59,9 @@ public:
     void AddFileWatcher(
         int32_t id, CheckNotifyEventCallbackFunc checkCallbackFunc, const std::string &filePath = "");
     void RemoveFileWatcher(int32_t id, const std::string &filePath);
+    bool DealRenameEvent(
+        const std::string &fileName, const int32_t id, const uint32_t event,
+        const CheckNotifyEventCallbackFunc &callback);
     ErrCode GetAccountInfoDigestFromFile(const std::string &path, uint8_t *digest, uint32_t size);
     ErrCode GenerateAccountInfoDigestStr(
         const std::string &userInfoPath, const std::string &accountInfoStr, std::string &digestStr);
@@ -68,6 +71,7 @@ public:
 private:
     void DealWithFileEvent();
     void GetNotifyEvent();
+    void RebuildFileWatcher(int32_t id, const CheckNotifyEventCallbackFunc &callback, const std::string &filePath);
     AccountFileWatcherMgr();
     ~AccountFileWatcherMgr();
     DISALLOW_COPY_AND_MOVE(AccountFileWatcherMgr);

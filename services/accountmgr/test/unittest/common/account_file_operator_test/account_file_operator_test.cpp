@@ -15,12 +15,17 @@
 
 #include <memory>
 #include <string>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <gtest/gtest.h>
 #include "account_error_no.h"
 #include "account_log_wrapper.h"
 #define private public
+#define protected public
 #include "account_file_operator.h"
 #undef private
+#undef protected
 
 namespace OHOS {
 namespace AccountSA {
@@ -181,6 +186,112 @@ HWTEST_F(AccountFileOperatorTest, AccountFileOperatorTest009, TestSize.Level3)
 
     EXPECT_EQ(osAccountFileOperator_.IsFileSizeExceedsLimit(testPath, 1), true);
     EXPECT_EQ(osAccountFileOperator_.IsFileSizeExceedsLimit(testPath, 100), false);
+
+    EXPECT_EQ(osAccountFileOperator_.DeleteDirOrFile(TEST_DIR_1), ERR_OK);
+}
+
+/**
+ * @tc.name: AccountFileOperatorTest010
+ * @tc.desc: Test BeginWriteTransaction failure resets isOpenTransaction_ for retry.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFI
+ */
+HWTEST_F(AccountFileOperatorTest, AccountFileOperatorTest010, TestSize.Level3)
+{
+    EXPECT_EQ(osAccountFileOperator_.CreateDir(TEST_DIR_1), ERR_OK);
+    std::string realPath = TEST_DIR_1 + "/" + TEST_FILE_1;
+    std::string tmpPath = realPath + ".tmp";
+    auto transaction = osAccountFileOperator_.GetFileTransaction(realPath);
+    ASSERT_NE(transaction, nullptr);
+
+    EXPECT_EQ(::mkdir(tmpPath.c_str(), S_IRWXU), 0);
+    EXPECT_NE(transaction->BeginWriteTransaction(), ERR_OK);
+    EXPECT_FALSE(transaction->isOpenTransaction_);
+    EXPECT_EQ(::rmdir(tmpPath.c_str()), 0);
+
+    EXPECT_EQ(transaction->BeginWriteTransaction(), ERR_OK);
+    (void)transaction->Rollback();
+    EXPECT_EQ(osAccountFileOperator_.DeleteDirOrFile(TEST_DIR_1), ERR_OK);
+}
+
+/**
+ * @tc.name: AccountFileOperatorTest011
+ * @tc.desc: Test BeginWriteTransaction truncates stale temp file via fopen.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFI
+ */
+HWTEST_F(AccountFileOperatorTest, AccountFileOperatorTest011, TestSize.Level3)
+{
+    EXPECT_EQ(osAccountFileOperator_.CreateDir(TEST_DIR_1), ERR_OK);
+    std::string path = TEST_DIR_1 + "/" + TEST_FILE_1;
+    EXPECT_EQ(osAccountFileOperator_.InputFileByPathAndContent(path, "first"), ERR_OK);
+
+    std::string tmpPath = path + ".tmp";
+    EXPECT_EQ(::unlink(tmpPath.c_str()), -1);
+
+    int fd = ::open(tmpPath.c_str(), O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
+    ASSERT_GE(fd, 0);
+    EXPECT_EQ(::write(fd, "stale", 5), 5);
+    ::close(fd);
+
+    auto tx = osAccountFileOperator_.GetFileTransaction(path);
+    ASSERT_NE(tx, nullptr);
+    EXPECT_EQ(tx->BeginWriteTransaction(), ERR_OK);
+    EXPECT_EQ(tx->WriteFile("second"), ERR_OK);
+    EXPECT_EQ(tx->EndTransaction(), ERR_OK);
+
+    std::string content;
+    EXPECT_EQ(osAccountFileOperator_.GetFileContentByPath(path, content), ERR_OK);
+    EXPECT_EQ(content, "second");
+    EXPECT_EQ(osAccountFileOperator_.DeleteDirOrFile(TEST_DIR_1), ERR_OK);
+}
+
+/**
+ * @tc.name: AccountFileOperatorTest012
+ * @tc.desc: Test repeated atomic writes to same path preserve data integrity.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFI
+ */
+HWTEST_F(AccountFileOperatorTest, AccountFileOperatorTest012, TestSize.Level3)
+{
+    EXPECT_EQ(osAccountFileOperator_.CreateDir(TEST_DIR_1), ERR_OK);
+    std::string path = TEST_DIR_1 + "/" + TEST_FILE_1;
+
+    EXPECT_EQ(osAccountFileOperator_.InputFileByPathAndContent(path, "v1"), ERR_OK);
+    std::string c1;
+    EXPECT_EQ(osAccountFileOperator_.GetFileContentByPath(path, c1), ERR_OK);
+    EXPECT_EQ(c1, "v1");
+
+    EXPECT_EQ(osAccountFileOperator_.InputFileByPathAndContent(path, "v2"), ERR_OK);
+    std::string c2;
+    EXPECT_EQ(osAccountFileOperator_.GetFileContentByPath(path, c2), ERR_OK);
+    EXPECT_EQ(c2, "v2");
+
+    EXPECT_EQ(osAccountFileOperator_.InputFileByPathAndContent(path, "v3"), ERR_OK);
+    std::string c3;
+    EXPECT_EQ(osAccountFileOperator_.GetFileContentByPath(path, c3), ERR_OK);
+    EXPECT_EQ(c3, "v3");
+
+    EXPECT_EQ(osAccountFileOperator_.DeleteDirOrFile(TEST_DIR_1), ERR_OK);
+}
+
+/**
+ * @tc.name: AccountFileOperatorTest013
+ * @tc.desc: Test first-time write (target file does not exist) succeeds via rename.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFI
+ */
+HWTEST_F(AccountFileOperatorTest, AccountFileOperatorTest013, TestSize.Level3)
+{
+    EXPECT_EQ(osAccountFileOperator_.CreateDir(TEST_DIR_1), ERR_OK);
+    std::string path = TEST_DIR_1 + "/" + TEST_FILE_1;
+    EXPECT_FALSE(osAccountFileOperator_.IsExistFile(path));
+
+    EXPECT_EQ(osAccountFileOperator_.InputFileByPathAndContent(path, "first_write"), ERR_OK);
+
+    std::string content;
+    EXPECT_EQ(osAccountFileOperator_.GetFileContentByPath(path, content), ERR_OK);
+    EXPECT_EQ(content, "first_write");
 
     EXPECT_EQ(osAccountFileOperator_.DeleteDirOrFile(TEST_DIR_1), ERR_OK);
 }

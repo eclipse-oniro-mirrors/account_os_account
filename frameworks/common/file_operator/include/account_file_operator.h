@@ -102,6 +102,8 @@ public:
     bool SetDirDelFlags(const std::string &dirpath);
 
     TransactionShared GetFileTransaction(const std::string &path, const mode_t mode = S_IRUSR | S_IWUSR);
+    ErrCode WriteFileWithTransaction(
+        const std::string &path, const std::string &content, const mode_t mode = S_IRUSR | S_IWUSR);
     std::shared_ptr<Utils::RWLock> GetRWLock(const std::string &path);
 public:
     mutable std::shared_timed_mutex fileLock_;
