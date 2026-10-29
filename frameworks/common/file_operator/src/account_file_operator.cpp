@@ -46,6 +46,10 @@ const uint32_t RETRY_SLEEP_MS = 5;
 #define HMFS_MONITOR_FL 0x00000002
 #define HMFS_IOCTL_HW_GET_FLAGS _IOR(0XF5, 70, unsigned int)
 #define HMFS_IOCTL_HW_SET_FLAGS _IOR(0XF5, 71, unsigned int)
+// Account service runs as the 'account' system user (uid 3058, gid 3058).
+// Defined in base/startup/init/services/etc/passwd, fixed across all devices.
+const uid_t ACCOUNT_UID = 3058;
+const gid_t ACCOUNT_GID = 3058;
 const uint64_t FDSAN_DIR_TAG = fdsan_create_owner_tag(FDSAN_OWNER_TYPE_DIRECTORY, 0xC01B00);
 static std::map<std::string, std::shared_ptr<Utils::RWLock>> g_rwLockMap;
 static std::mutex g_rwLockMapMutex;
@@ -107,6 +111,7 @@ ErrCode FileTransaction::BeginWriteTransaction()
         ErrCode errCode = tempFileOperator.CreateDir(folderPath);
         if (errCode != ERR_OK) {
             ACCOUNT_LOGE("Failed to create dir, str = %{public}s errCode %{public}d.", folderPath.c_str(), errCode);
+            isOpenTransaction_ = false;
             rwlock_->UnLockWrite();
             return errCode;
         }
@@ -114,6 +119,7 @@ ErrCode FileTransaction::BeginWriteTransaction()
     FILE *tempFile = fopen(tempFilePath.c_str(), "wb");
     if (tempFile == nullptr) {
         ACCOUNT_LOGE("Failed to open %{public}s, errno %{public}d.", tempFilePath.c_str(), errno);
+        isOpenTransaction_ = false;
         rwlock_->UnLockWrite();
         return ERR_ACCOUNT_COMMON_FILE_OPEN_FAILED;
     }
@@ -154,16 +160,13 @@ ErrCode FileTransaction::EndTransaction()
         ErrCode ret = SwapFileNames();
         if (ret != ERR_OK) {
             ACCOUNT_LOGE("SwapFileNames failed.");
+            ForceUnlock();
             return ret;
         }
+        ForceUnlock();
+    } else {
+        Rollback();
     }
-    // if file delete not ok, return ok, write is success.
-    ErrCode ret = DeleteTempFile();
-    if (ret != ERR_OK) {
-        ACCOUNT_LOGE("Delete temp file failed, ret = %{public}d.", ret);
-        return ret;
-    }
-    ForceUnlock();
     return ERR_OK;
 }
 
@@ -192,7 +195,10 @@ static ErrCode WriteFile(const std::string &path, const std::string &content, co
         }
         flock(fd, LOCK_UN);
         (void)fclose(fp);
-        // change mode
+        if (chown(path.c_str(), ACCOUNT_UID, ACCOUNT_GID) != 0) {
+            ACCOUNT_LOGE("Failed to chown %{public}s, errno = %{public}d.", path.c_str(), errno);
+            return ERR_OHOSACCOUNT_SERVICE_FILE_CHANGE_DIR_MODE_ERROR;
+        }
         if (!ChangeModeFile(path, mode)) {
             ACCOUNT_LOGW("Failed to change mode for file %{public}s, errno = %{public}d.", path.c_str(), errno);
             return ERR_OHOSACCOUNT_SERVICE_FILE_CHANGE_DIR_MODE_ERROR;
@@ -310,37 +316,25 @@ ErrCode FileTransaction::SwapFileNames()
 
     bool isTempFileExist = FileExists(tempFileName);
     if (!isTempFileExist) {
-        ACCOUNT_LOGI("Temp file does not exist, path = %{public}s.", tempFileName.c_str());
-        return ERR_OK;
-    }
-    bool isTargetFileExist = FileExists(path_);
-    uint32_t mode = RENAME_NOREPLACE;
-    if (isTargetFileExist) {
-        if (!ChangeModeFile(path_, mode_)) {
-            int32_t ret = errno;
-            ACCOUNT_LOGW("Failed to change mode for file %{public}s, errno = %{public}d.", path_.c_str(), errno);
-            REPORT_OS_ACCOUNT_FAIL(-1, OPERATION_FILE, ret, "Chmod for " + path_ + " failed");
-            return ERR_OHOSACCOUNT_SERVICE_FILE_CHANGE_DIR_MODE_ERROR;
-        }
-        mode = RENAME_EXCHANGE;
+        ACCOUNT_LOGE("Temp file does not exist, path = %{public}s.", tempFileName.c_str());
+        return ERR_ACCOUNT_COMMON_FILE_NOT_EXIST;
     }
     for (uint32_t i = 0; i <= RETRY_TIMES; i++) {
-        int32_t ret = renameat2(AT_FDCWD, tempFileName.c_str(), 0, path_.c_str(), mode);
+        int32_t ret = renameat2(AT_FDCWD, tempFileName.c_str(), 0, path_.c_str(), 0);
         if (ret == ERR_OK) {
             return ERR_OK;
         }
         if ((ret != ERR_OK) && (errno != EAGAIN)) {
             int32_t err = errno;
-            ACCOUNT_LOGE("Failed to swap file names, errno = %{public}d, errMsg = %{public}s", err, strerror(err));
-            std::string errMsg = "Failed to swap file " + tempFileName + " and " +
-                path_ + ", errMsg = %{public}s" + strerror(err);
+            ACCOUNT_LOGE("Failed to rename file, errno = %{public}d, errMsg = %{public}s", err, strerror(err));
+            std::string errMsg = "Failed to rename " + tempFileName + " to " + path_;
             REPORT_OS_ACCOUNT_FAIL(-1, OPERATION_FILE, err, errMsg);
             return ERR_ACCOUNT_COMMON_FILE_SWAP_FAILED;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(RETRY_SLEEP_MS));
     }
     std::string errMsg =
-        "Failed to swap file " + tempFileName + " and " + path_ + ", with retry";
+        "Failed to rename " + tempFileName + " to " + path_ + ", with retry";
     REPORT_OS_ACCOUNT_FAIL(-1, OPERATION_FILE, EAGAIN, errMsg);
     return ERR_ACCOUNT_COMMON_FILE_SWAP_FAILED;
 }
@@ -535,6 +529,17 @@ ErrCode AccountFileOperator::InputFileByPathAndContentWithTransaction(
         return ERR_ACCOUNT_COMMON_DATA_NO_SPACE;
     }
     std::unique_lock<std::shared_timed_mutex> lock(fileLock_);
+    return WriteFileWithTransaction(path, content, mode);
+}
+
+ErrCode AccountFileOperator::WriteFileWithTransaction(
+    const std::string &path, const std::string &content, const mode_t mode)
+{
+    if (access(path.c_str(), F_OK) == 0 && access(path.c_str(), R_OK | W_OK) != 0) {
+        ACCOUNT_LOGE("No read/write permission on target file, path = %{public}s, errno = %{public}d.",
+            path.c_str(), errno);
+        return ERR_ACCOUNT_COMMON_PERMISSION_DENIED;
+    }
     auto transaction = GetFileTransaction(path, mode);
     if (transaction == nullptr) {
         ACCOUNT_LOGE("GetFileTransaction failed, get nullptr.");
@@ -576,7 +581,7 @@ ErrCode AccountFileOperator::InputFileByPathAndContent(const std::string &path, 
 #ifdef ENABLE_FILE_WATCHER
     SetValidModifyFileOperationFlag(path, true);
 #endif // ENABLE_FILE_WATCHER
-    ErrCode ret = WriteFile(path, content);
+    ErrCode ret = WriteFileWithTransaction(path, content);
     if (ret != ERR_OK) {
         ACCOUNT_LOGE("WriteFile failed, path = %{public}s.", path.c_str());
         REPORT_OS_ACCOUNT_FAIL(-1, OPERATION_FILE, ret, "Write " + path + " failed");

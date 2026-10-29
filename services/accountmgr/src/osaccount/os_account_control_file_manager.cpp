@@ -298,6 +298,9 @@ bool OsAccountControlFileManager::DealWithFileDeleteEvent(const std::string &fil
             return true;
         }
     }
+    if (accountFileWatcherMgr_.DealRenameEvent(fileName, id, IN_DELETE_SELF, eventCallbackFunc_)) {
+        return true;
+    }
     ReportOsAccountDataTampered(id, fileName, "OS_ACCOUNT_INFO");
     std::lock_guard<std::mutex> lock(accountInfoFileLock_);
     if (!RecoverAccountData(fileName, id)) {

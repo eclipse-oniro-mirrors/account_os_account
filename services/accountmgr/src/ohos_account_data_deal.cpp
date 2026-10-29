@@ -138,6 +138,9 @@ void OhosAccountDataDeal::DealWithFileDeleteEvent(const std::string &fileName, c
             return;
         }
     }
+    if (accountFileWatcherMgr_.DealRenameEvent(fileName, id, IN_DELETE_SELF, checkCallbackFunc_)) {
+        return;
+    }
     std::string fileDir = configFileDir_ + std::to_string(id);
     if (!accountFileOperator_->IsExistDir(fileDir)) {
         ACCOUNT_LOGI("this id is already removed.");

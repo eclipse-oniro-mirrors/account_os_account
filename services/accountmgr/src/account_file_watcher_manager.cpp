@@ -324,6 +324,7 @@ void AccountFileWatcherMgr::AddFileWatcher(
         ACCOUNT_LOGE("Notify event callback is nullptr");
         return;
     }
+    std::unique_lock<std::shared_timed_mutex> fileLock(accountFileOperator_->fileLock_);
     std::lock_guard<std::mutex> lock(fileWatcherMgrLock_);
     if (inotifyFd_ < 0) {
         inotifyFd_ = inotify_init();
@@ -347,10 +348,7 @@ void AccountFileWatcherMgr::AddFileWatcher(
         return;
     }
     fileNameMgrMap_[fileWatcher->GetWd()] = fileWatcher;
-    {
-        std::unique_lock<std::shared_timed_mutex> fileLock(accountFileOperator_->fileLock_);
-        accountFileOperator_->SetValidModifyFileOperationFlag(filePath, false);
-    }
+    accountFileOperator_->SetValidModifyFileOperationFlag(filePath, false);
 
     StartWatch();
 }
@@ -370,6 +368,56 @@ void AccountFileWatcherMgr::RemoveFileWatcher(int32_t id, const std::string &fil
     }
     fileNameMgrMap_[targetWd]->CloseNotify(inotifyFd_);
     fileNameMgrMap_.erase(targetWd);
+}
+
+bool AccountFileWatcherMgr::DealRenameEvent(
+    const std::string &fileName, const int32_t id, const uint32_t event,
+    const CheckNotifyEventCallbackFunc &callback)
+{
+    std::unique_lock<std::shared_timed_mutex> lock(accountFileOperator_->fileLock_);
+    if (!accountFileOperator_->GetValidModifyFileOperationFlag(fileName)) {
+        return false;
+    }
+    ACCOUNT_LOGI("Rename IN_DELETE_SELF, rebuild watch, fileName = %{public}s.", fileName.c_str());
+    accountFileOperator_->SetValidModifyFileOperationFlag(fileName, false);
+    RebuildFileWatcher(id, callback, fileName);
+    return true;
+}
+
+void AccountFileWatcherMgr::RebuildFileWatcher(
+    int32_t id, const CheckNotifyEventCallbackFunc &callback, const std::string &filePath)
+{
+    if (callback == nullptr) {
+        ACCOUNT_LOGE("Notify event callback is nullptr");
+        return;
+    }
+    if (inotifyFd_ < 0) {
+        inotifyFd_ = inotify_init();
+        if (inotifyFd_ < 0) {
+            ACCOUNT_LOGE("failed to init notify, errCode:%{public}d", errno);
+            return;
+        }
+    }
+    std::lock_guard<std::mutex> lock(fileWatcherMgrLock_);
+    for (auto it = fileNameMgrMap_.begin(); it != fileNameMgrMap_.end();) {
+        if ((it->second->GetLocalId() == id) && (it->second->GetFilePath() == filePath)) {
+            it->second->CloseNotify(inotifyFd_);
+            it = fileNameMgrMap_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (fileNameMgrMap_.size() > FILE_WATCHER_LIMIT) {
+        ACCOUNT_LOGW("the fileWatcher limit has been reached, fileName = %{public}s", filePath.c_str());
+        return;
+    }
+    auto fileWatcher = std::make_shared<FileWatcher>(id, filePath, callback);
+    if (!fileWatcher->StartNotify(inotifyFd_, IN_MODIFY | IN_DELETE_SELF | IN_MOVE_SELF)) {
+        ACCOUNT_LOGI("fileWatcher StartNotify failed, fileName = %{public}s", filePath.c_str());
+        return;
+    }
+    fileNameMgrMap_[fileWatcher->GetWd()] = fileWatcher;
+    StartWatch();
 }
 
 ErrCode AccountFileWatcherMgr::GetAccountInfoDigestFromFile(const std::string &path, uint8_t *digest, uint32_t size)
