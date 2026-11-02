@@ -2592,5 +2592,123 @@ HWTEST_F(OsAccountInnerAccmgrMockTest, IsOsAccountExists_AdminLocalId_001, TestS
 
     innerMgrService_->osAccountControl_ = oldControl;
 }
+
+/*
+ * @tc.name: PrepareActivateOsAccount_Eacces_FirstUser_001
+ * @tc.desc: EACCES + no foreground (first user) → tolerate, return ERR_OK
+ * @tc.type: FUNC
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, PrepareActivateOsAccount_Eacces_FirstUser_001, TestSize.Level3)
+{
+    auto ptr = std::make_shared<MockOsAccountControlFileManager>();
+    innerMgrService_->osAccountControl_ = ptr;
+    int32_t id = 101;
+    OsAccountInfo osAccountInfo;
+    EXPECT_CALL(*ptr, GetOsAccountInfoById(id, _))
+        .WillOnce(Return(ERR_ACCOUNT_COMMON_FILE_ACCESS_DENIED));
+    innerMgrService_->foregroundAccountMap_.Clear();
+
+    int32_t foregroundId = -1;
+    ErrCode ret = innerMgrService_->PrepareActivateOsAccount(id, Constants::DEFAULT_DISPLAY_ID,
+        osAccountInfo, foregroundId);
+    EXPECT_EQ(ret, ERR_OK);
+    EXPECT_EQ(osAccountInfo.GetLocalId(), id);
+}
+
+/*
+ * @tc.name: PrepareActivateOsAccount_Eacces_NotFirstUser_001
+ * @tc.desc: EACCES + has foreground (not first user) → return ACCESS_DENIED
+ * @tc.type: FUNC
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, PrepareActivateOsAccount_Eacces_NotFirstUser_001, TestSize.Level3)
+{
+    auto ptr = std::make_shared<MockOsAccountControlFileManager>();
+    innerMgrService_->osAccountControl_ = ptr;
+    int32_t id = 101;
+    innerMgrService_->foregroundAccountMap_.Clear();
+    innerMgrService_->foregroundAccountMap_.EnsureInsert(Constants::DEFAULT_DISPLAY_ID, 100);
+    OsAccountInfo osAccountInfo;
+    EXPECT_CALL(*ptr, GetOsAccountInfoById(id, _))
+        .WillOnce(Return(ERR_ACCOUNT_COMMON_FILE_ACCESS_DENIED));
+
+    int32_t foregroundId = -1;
+    ErrCode ret = innerMgrService_->PrepareActivateOsAccount(id, Constants::DEFAULT_DISPLAY_ID,
+        osAccountInfo, foregroundId);
+    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_FILE_ACCESS_DENIED);
+}
+
+/*
+ * @tc.name: PrepareActivateOsAccount_ForegroundVerified_001
+ * @tc.desc: foreground==id && isVerified → ALREADY_ACTIVE
+ * @tc.type: FUNC
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, PrepareActivateOsAccount_ForegroundVerified_001, TestSize.Level3)
+{
+    auto ptr = std::make_shared<MockOsAccountControlFileManager>();
+    innerMgrService_->osAccountControl_ = ptr;
+    int32_t id = 100;
+    innerMgrService_->foregroundAccountMap_.Clear();
+    innerMgrService_->foregroundAccountMap_.EnsureInsert(Constants::DEFAULT_DISPLAY_ID, id);
+    innerMgrService_->verifiedAccounts_.Clear();
+    innerMgrService_->verifiedAccounts_.EnsureInsert(id, true);
+    OsAccountInfo osAccountInfo;
+    osAccountInfo.SetLocalId(id);
+    osAccountInfo.SetIsCreateCompleted(true);
+    EXPECT_CALL(*ptr, GetOsAccountInfoById(id, _))
+        .WillOnce(DoAll(SetArgReferee<1>(osAccountInfo), Return(ERR_OK)));
+
+    int32_t foregroundId = -1;
+    ErrCode ret = innerMgrService_->PrepareActivateOsAccount(id, Constants::DEFAULT_DISPLAY_ID,
+        osAccountInfo, foregroundId);
+    EXPECT_EQ(ret, ERR_OSACCOUNT_SERVICE_INNER_ACCOUNT_ALREADY_ACTIVE_ERROR);
+}
+
+/*
+ * @tc.name: PrepareActivateOsAccount_ForegroundNotVerified_001
+ * @tc.desc: foreground==id but NOT verified → continue activation (not ALREADY_ACTIVE)
+ * @tc.type: FUNC
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, PrepareActivateOsAccount_ForegroundNotVerified_001, TestSize.Level3)
+{
+    auto ptr = std::make_shared<MockOsAccountControlFileManager>();
+    innerMgrService_->osAccountControl_ = ptr;
+    int32_t id = 100;
+    innerMgrService_->foregroundAccountMap_.Clear();
+    innerMgrService_->foregroundAccountMap_.EnsureInsert(Constants::DEFAULT_DISPLAY_ID, id);
+    innerMgrService_->verifiedAccounts_.Clear();
+    OsAccountInfo osAccountInfo;
+    osAccountInfo.SetLocalId(id);
+    osAccountInfo.SetIsCreateCompleted(true);
+    EXPECT_CALL(*ptr, GetOsAccountInfoById(id, _))
+        .WillOnce(DoAll(SetArgReferee<1>(osAccountInfo), Return(ERR_OK)));
+
+    int32_t foregroundId = -1;
+    ErrCode ret = innerMgrService_->PrepareActivateOsAccount(id, Constants::DEFAULT_DISPLAY_ID,
+        osAccountInfo, foregroundId);
+    EXPECT_NE(ret, ERR_OSACCOUNT_SERVICE_INNER_ACCOUNT_ALREADY_ACTIVE_ERROR);
+}
+
+/*
+ * @tc.name: CleanGarbageOsAccounts_Eacces_ClearsOperating_001
+ * @tc.desc: GetRealOsAccountInfoById returns ACCESS_DENIED → operating flag cleared (no leak)
+ * @tc.type: FUNC
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, CleanGarbageOsAccounts_Eacces_ClearsOperating_001, TestSize.Level3)
+{
+    auto ptr = std::make_shared<MockOsAccountControlFileManager>();
+    innerMgrService_->osAccountControl_ = ptr;
+    int32_t id = 101;
+    std::vector<int32_t> idList = {id};
+    EXPECT_CALL(*ptr, GetOsAccountIdList(_))
+        .WillOnce(DoAll(SetArgReferee<0>(idList), Return(ERR_OK)));
+    EXPECT_CALL(*ptr, GetOsAccountInfoById(id, _))
+        .WillRepeatedly(Return(ERR_ACCOUNT_COMMON_FILE_ACCESS_DENIED));
+
+    innerMgrService_->CleanGarbageOsAccounts();
+
+    bool added = innerMgrService_->CheckAndAddLocalIdOperating(id);
+    EXPECT_TRUE(added);
+    innerMgrService_->RemoveLocalIdToOperating(id);
+}
 }  // namespace AccountSA
 }  // namespace OHOS

@@ -174,8 +174,9 @@ static ErrCode WriteFile(const std::string &path, const std::string &content, co
 {
     FILE *fp = fopen(path.c_str(), "wb");
     if (fp == nullptr) {
-        ACCOUNT_LOGE("Failed to open %{public}s, errno = %{public}d.", path.c_str(), errno);
-        return ERR_ACCOUNT_COMMON_FILE_OPEN_FAILED;
+        int savedErrno = errno;
+        ACCOUNT_LOGE("Failed to open %{public}s, errno = %{public}d.", path.c_str(), savedErrno);
+        return savedErrno == EACCES ? ERR_ACCOUNT_COMMON_FILE_ACCESS_DENIED : ERR_ACCOUNT_COMMON_FILE_OPEN_FAILED;
     }
     int fd = fileno(fp);
     do {
@@ -234,8 +235,9 @@ static ErrCode ReadFile(const std::string &path, std::string &content)
     }
     FILE *fp = fopen(path.c_str(), "rb");
     if (fp == nullptr) {
-        ACCOUNT_LOGE("Cannot open file %{public}s, errno %{public}d.", path.c_str(), errno);
-        return ERR_ACCOUNT_COMMON_FILE_OPEN_FAILED;
+        int savedErrno = errno;
+        ACCOUNT_LOGE("Cannot open file %{public}s, errno %{public}d.", path.c_str(), savedErrno);
+        return savedErrno == EACCES ? ERR_ACCOUNT_COMMON_FILE_ACCESS_DENIED : ERR_ACCOUNT_COMMON_FILE_OPEN_FAILED;
     }
     int fd = fileno(fp);
     flock(fd, LOCK_SH);
@@ -648,14 +650,16 @@ ErrCode AccountFileOperator::CheckFileExistence(const std::string &path)
             ACCOUNT_LOGE("S_ISREG failed, errno=%{public}d.", errno);
             return ERR_ACCOUNT_COMMON_FILE_OTHER_ERROR;
         }
-        if (errno != ENOENT) {
-            ACCOUNT_LOGE("Stat %{public}s failed, errno=%{public}d. Retrying...", path.c_str(), errno);
-            std::this_thread::sleep_for(std::chrono::milliseconds(RETRY_SLEEP_MS));
-            retryCount++;
-        } else {
-            ACCOUNT_LOGE("Stat %{public}s failed, errno=%{public}d.", path.c_str(), errno);
+        int savedErrno = errno;
+        if (savedErrno == EACCES) {
+            return ERR_ACCOUNT_COMMON_FILE_ACCESS_DENIED;
+        }
+        if (savedErrno == ENOENT) {
             return ERR_ACCOUNT_COMMON_FILE_NOT_EXIST;
         }
+        ACCOUNT_LOGE("Stat %{public}s failed, errno=%{public}d. Retrying...", path.c_str(), savedErrno);
+        std::this_thread::sleep_for(std::chrono::milliseconds(RETRY_SLEEP_MS));
+        retryCount++;
     }
     return ERR_ACCOUNT_COMMON_FILE_OTHER_ERROR;
 }

@@ -1111,6 +1111,7 @@ HWTEST_F(OsAccountSubspaceModuleTest, LoadSubProfileInfo_ReadFailed_001, TestSiz
     // If process is root (CAP_DAC_READ_SEARCH bypasses DAC), this may still
     // succeed. In that case the branch is only covered in real error scenarios.
     EXPECT_TRUE(ret == ERR_ACCOUNT_COMMON_ACCOUNT_NOT_EXIST_ERROR ||
+                ret == ERR_ACCOUNT_COMMON_FILE_ACCESS_DENIED ||
                 ret == ERR_ACCOUNT_COMMON_FILE_OPEN_FAILED ||
                 ret == ERR_OSACCOUNT_SERVICE_FILE_FIND_FILE_ERROR ||
                 ret == ERR_OK);
