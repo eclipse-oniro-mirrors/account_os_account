@@ -538,7 +538,9 @@ ErrCode IInnerOsAccountManager::PrepareForDefaultAccount(int32_t activatedId, Os
     ErrCode errCode = GetRealOsAccountInfoById(activatedId, osAccountInfo);
     if ((errCode != ERR_OK) || (IsValidOsAccount(osAccountInfo) != ERR_OK)) {
         ACCOUNT_LOGE("Account not found, localId: %{public}d, error: %{public}d", activatedId, errCode);
-        RetryToGetAccount(osAccountInfo);
+        if (errCode != ERR_ACCOUNT_COMMON_FILE_ACCESS_DENIED) {
+            RetryToGetAccount(osAccountInfo);
+        }
         errCode = SetDefaultActivatedOsAccount(osAccountInfo.GetLocalId());
         if (errCode != ERR_OK) {
             ACCOUNT_LOGE("Set default activated osAccount failed, localId: %{public}d, error: %{public}d",
@@ -597,6 +599,7 @@ ErrCode IInnerOsAccountManager::ActivateDefaultOsAccount()
     }
     // Validate and prepare default account
     OsAccountInfo osAccountInfo;
+    osAccountInfo.SetLocalId(Constants::START_USER_ID);
     PrepareForDefaultAccount(activatedId, osAccountInfo);
 
     bool preActivated = osAccountInfo.GetIsActived();
@@ -2375,6 +2378,7 @@ int32_t IInnerOsAccountManager::CleanGarbageOsAccounts(int32_t excludeId)
         OsAccountInfo osAccountInfo;
         ErrCode ret = GetRealOsAccountInfoById(id, osAccountInfo);
         if (ret != ERR_OK && ret != ERR_ACCOUNT_COMMON_ACCOUNT_NOT_EXIST_ERROR) {
+            RemoveLocalIdToOperating(id);
             continue;
         }
         osAccountInfo.SetLocalId(id);
@@ -3132,9 +3136,22 @@ ErrCode IInnerOsAccountManager::ValidateDisplayForActivation(const int id, const
 ErrCode IInnerOsAccountManager::PrepareActivateOsAccount(
     const int id, const uint64_t displayId, OsAccountInfo &osAccountInfo, int32_t &foregroundId)
 {
-    // Get account information
     ErrCode errCode = GetRealOsAccountInfoById(id, osAccountInfo);
-    if (errCode != ERR_OK) {
+    bool skipValidityCheck = false;
+    foregroundId = -1;
+    bool hasForeground = foregroundAccountMap_.Find(displayId, foregroundId);
+    if (hasForeground && foregroundId == id && osAccountInfo.GetIsVerified()) {
+        return ERR_OSACCOUNT_SERVICE_INNER_ACCOUNT_ALREADY_ACTIVE_ERROR;
+    }
+    if (errCode == ERR_ACCOUNT_COMMON_FILE_ACCESS_DENIED) {
+        if (hasForeground) {
+            ACCOUNT_LOGE("EACCES on account %{public}d, not first user, foreground=%{public}d.", id, foregroundId);
+            return ERR_ACCOUNT_COMMON_FILE_ACCESS_DENIED;
+        }
+        ACCOUNT_LOGW("EACCES on account %{public}d, first user, proceed with localId-only.", id);
+        osAccountInfo.SetLocalId(id);
+        skipValidityCheck = true;
+    } else if (errCode != ERR_OK) {
         ACCOUNT_LOGE("Cannot find os account info by id:%{public}d, errCode %{public}d.", id, errCode);
         return ERR_ACCOUNT_COMMON_ACCOUNT_NOT_EXIST_ERROR;
     }
@@ -3147,22 +3164,17 @@ ErrCode IInnerOsAccountManager::PrepareActivateOsAccount(
     }
 #else
     if (displayId != Constants::DEFAULT_DISPLAY_ID && displayId != Constants::INVALID_DISPLAY_ID) {
-        ReportOsAccountOperationFail(id, Constants::OPERATION_ACTIVATE,
-            ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR,
+        ReportOsAccountOperationFail(id, Constants::OPERATION_ACTIVATE, ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR,
             "Display not supported in non-multi-foreground environment");
         return ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR;
     }
 #endif // ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
 
-    foregroundId = -1;
-    if (foregroundAccountMap_.Find(displayId, foregroundId) && (foregroundId == id) && osAccountInfo.GetIsVerified()) {
-        ACCOUNT_LOGI("Account %{public}d already is foreground", id);
-        return ERR_OSACCOUNT_SERVICE_INNER_ACCOUNT_ALREADY_ACTIVE_ERROR;
-    }
-
-    errCode = IsValidOsAccount(osAccountInfo);
-    if (errCode != ERR_OK) {
-        return errCode;
+    if (!skipValidityCheck) {
+        errCode = IsValidOsAccount(osAccountInfo);
+        if (errCode != ERR_OK) {
+            return errCode;
+        }
     }
 
     if (!osAccountInfo.GetIsActived() && IsLoggedInAccountsOversize()) {
@@ -3546,6 +3558,9 @@ ErrCode  IInnerOsAccountManager::SendToStorageAccountStart(OsAccountInfo &osAcco
         subscribeManager_.Publish(localId, OS_ACCOUNT_SUBSCRIBE_TYPE::UNLOCKED);
         ReportOsAccountLifeCycle(localId, Constants::OPERATION_UNLOCK);
 
+        if (!osAccountInfo.GetIsCreateCompleted()) {
+            return ERR_OK;
+        }
         err = osAccountControl_->UpdateOsAccount(osAccountInfo);
         if (err != ERR_OK) {
             ACCOUNT_LOGE("Update account info failed, errCode: %{public}d, id: %{public}d", err, localId);
@@ -4255,15 +4270,19 @@ ErrCode IInnerOsAccountManager::UpdateAccountInfoByDomainAccountInfo(
 ErrCode IInnerOsAccountManager::UpdateAccountToBackground(int32_t oldId)
 {
     OsAccountInfo oldOsAccountInfo;
+    oldOsAccountInfo.SetLocalId(oldId);
+    OsAccountInterface::PublishCommonEvent(oldOsAccountInfo,
+        OHOS::EventFwk::CommonEventSupport::COMMON_EVENT_USER_BACKGROUND, Constants::OPERATION_SWITCH);
     {
         std::lock_guard<std::mutex> lock(*GetOrInsertUpdateLock(oldId));
         ErrCode errCode = osAccountControl_->GetOsAccountInfoById(oldId, oldOsAccountInfo);
         if (errCode != ERR_OK) {
-            return ERR_ACCOUNT_COMMON_ACCOUNT_NOT_EXIST_ERROR;
+            ACCOUNT_LOGE("Get old os account info failed, localId=%{public}d, errCode=%{public}d", oldId, errCode);
+            REPORT_OS_ACCOUNT_FAIL(oldId, Constants::OPERATION_SWITCH, errCode,
+                "UpdateAccountToBackground failed during switch");
+            return ERR_OK;
         }
     }
-    OsAccountInterface::PublishCommonEvent(oldOsAccountInfo,
-        OHOS::EventFwk::CommonEventSupport::COMMON_EVENT_USER_BACKGROUND, Constants::OPERATION_SWITCH);
 #ifdef ENABLE_MULTIPLE_ACTIVE_ACCOUNTS
 #ifndef SUPPORT_STOP_MAIN_OS_ACCOUNT
     if (oldId == Constants::START_USER_ID) {

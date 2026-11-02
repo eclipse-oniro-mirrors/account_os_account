@@ -703,16 +703,19 @@ ErrCode OsAccountControlFileManager::GetOsAccountInfoById(const int id, OsAccoun
             InsertOsAccount(osAccountInfo);
             return ERR_OK;
         }
-        return err == ERR_ACCOUNT_COMMON_FILE_NOT_EXIST ?
-            ERR_ACCOUNT_COMMON_ACCOUNT_NOT_EXIST_ERROR : ERR_ACCOUNT_COMMON_FILE_READ_FAILED;
+        if (err == ERR_ACCOUNT_COMMON_FILE_NOT_EXIST) {
+            return ERR_ACCOUNT_COMMON_ACCOUNT_NOT_EXIST_ERROR;
+        }
+        return err;
     }
     std::string accountInfoStr;
-    if (accountFileOperator_->GetFileContentByPath(path, accountInfoStr) != ERR_OK) {
-        ACCOUNT_LOGE("Get content from file %{public}s failed!", path.c_str());
+    ErrCode readErr = accountFileOperator_->GetFileContentByPath(path, accountInfoStr);
+    if (readErr != ERR_OK) {
+        ACCOUNT_LOGE("Get content from file %{public}s failed, err=%{public}d!", path.c_str(), readErr);
         if (GetOsAccountFromDatabase("", id, osAccountInfo) == ERR_OK) {
             return ERR_OK;
         }
-        return ERR_ACCOUNT_COMMON_FILE_READ_FAILED;
+        return readErr;
     }
     auto osAccountInfoJson = CreateJsonFromString(accountInfoStr);
     if (osAccountInfoJson == nullptr || !FromJson(osAccountInfoJson.get(), osAccountInfo)) {
@@ -1905,13 +1908,6 @@ ErrCode OsAccountControlFileManager::IsOsAccountExists(const int id, bool &isExi
         ACCOUNT_LOGI("IsOsAccountExists path %{public}s does not exist!", path.c_str());
         return ERR_OK;
     }
-
-    // check format
-    if (!accountFileOperator_->IsJsonFormat(path)) {
-        ACCOUNT_LOGI("IsOsAccountExists path %{public}s wrong format!", path.c_str());
-        return ERR_OK;
-    }
-
     isExists = true;
     return ERR_OK;
 }
