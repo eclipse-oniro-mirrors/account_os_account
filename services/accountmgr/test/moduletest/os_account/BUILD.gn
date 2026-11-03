@@ -43,18 +43,67 @@ ohos_moduletest("inner_os_account_manager_test") {
   module_out_path = module_output_path
 
   sources = [ "inner_os_account_manager_test.cpp" ]
+  sources += account_service_sources
+  sources += account_iam_source
+  sources += [
+    "${os_account_dfx_path}/hitrace_adapter/hitrace_adapter.cpp",
+    "${os_account_dfx_path}/hisysevent_adapter/account_hisysevent_adapter.cpp",
+    "${os_account_dfx_path}/hidumper_adapter/account_dump_helper.cpp",
+    "${common_path}/log/src/account_log_wrapper.cpp",
+    "${common_path}/file_operator/src/account_file_operator.cpp",
+    "${common_path}/json_utils/src/json_utils.cpp",
+    "${common_path}/json_utils/src/os_account_info_json_parser.cpp",
+    "${common_path}/account_error/src/account_error_no.cpp",
+    "${services_path}/accountmgr/src/common/database/kvstore/kvstore_adapter_impl.cpp",
+    "${services_path}/accountmgr/src/ability_manager_adapter/ability_manager_adapter.cpp",
+    "${services_path}/accountmgr/test/mock/common/bundle_manager_adapter.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_database_operator.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_data_storage.cpp",
+    "${services_path}/accountmgr/src/account_data_storage.cpp",
+  ]
 
-  configs = [ "${services_path}/accountmgr/test:accountmgr_test_config" ]
+  configs = [
+    "${services_path}/accountmgr/test:accountmgr_test_config",
+    "${services_path}/accountmgr:accountmgr_config",
+  ]
 
   include_dirs = [
     "${services_path}/accountmgr/include",
     "${services_path}/accountmgr/include/osaccount",
+    "${services_path}/accountmgr/include/domain_account",
+    "${services_path}/accountmgr/include/appaccount",
+    "${services_path}/accountmgr/include/account_iam",
+    "${services_path}/accountmgr/include/distributed_account",
+    "${services_path}/accountmgr/include/os_account_subprofile",
+    "${services_path}/accountmgr/include/common/kernel",
+    "${services_path}/accountmgr/include/ability_manager_adapter",
     "${common_path}/log/include",
     "${common_path}/perf_stat/include",
+    "${common_path}/file_operator/include",
+    "${common_path}/json_utils/include",
+    "${common_path}/utils/include",
+    "${common_path}/privileges/include",
+    "${common_path}/include",
     "${innerkits_common}/include",
     "${innerkits_path}/include",
     "${services_path}/accountmgr/include/common/database/kvstore",
     "${services_path}/accountmgr/include/common/database",
+    "${services_path}/accountmgr/test/mock/include",
+    "${services_path}/accountmgr/test/mock/common",
+    "${services_path}/accountmgr/test/moduletest/os_account/mock",
+    "${domain_account_framework_path}/include",
+    "${domain_account_interfaces_native_path}/include",
+    "${os_account_dfx_path}/hisysevent_adapter",
+    "${os_account_dfx_path}/data_dfx",
+    "${os_account_dfx_path}/hitrace_adapter",
+    "${os_account_dfx_path}/hidumper_adapter",
+    "${account_iam_interfaces_native_path}/include",
+    "${os_account_core_path}/include",
+    "${os_account_interfaces_native_path}/include",
+    "${app_account_interfaces_native_path}/include",
+    "${app_account_innerkits_native_path}/include",
+    "${os_account_subspace_interfaces_native_path}/include",
+    "${os_account_path}/frameworks/ohosaccount/native/include",
   ]
 
   deps = [
@@ -63,7 +112,20 @@ ohos_moduletest("inner_os_account_manager_test") {
     "${account_test_common}:account_test_common_source_set",
     "${common_path}:libaccount_common",
     "${os_account_innerkits_native_path}:os_account_innerkits",
-    "${services_path}/accountmgr:accountmgr",
+    "${domain_account_framework_path}:domain_account_innerkits",
+    "${domain_account_framework_path}:domain_account_stub",
+    "${innerkits_native_path}:account_stub",
+    "${innerkits_native_path}:libaccountkits",
+    "${os_account_innerkits_native_path}:os_account_constraint_event_stub",
+    "${os_account_innerkits_native_path}:os_account_event_proxy",
+    "${os_account_innerkits_native_path}:os_account_proxy",
+    "${os_account_innerkits_native_path}:os_account_state_reply_callback_proxy",
+    "${os_account_innerkits_native_path}:os_account_state_reply_callback_stub",
+    "${os_account_innerkits_native_path}:os_account_stub",
+    "${os_account_subspace_framework_path}:os_account_sub_profile_event_stub",
+    "${os_account_subspace_framework_path}:os_account_subspace_stub",
+    "${os_account_subspace_framework_path}:os_account_sub_profile_event_proxy",
+    "${os_account_subspace_framework_path}:os_account_subspace_proxy_source",
   ]
   external_deps = [
     "ability_runtime:ability_manager",
@@ -77,6 +139,10 @@ ohos_moduletest("inner_os_account_manager_test") {
     "hilog:libhilog",
     "ipc:ipc_single",
     "kv_store:distributeddata_inner",
+    "openssl:libcrypto_shared",
+    "storage_service:storage_manager_sa_proxy",
+    "safwk:system_ability_fwk",
+    "samgr:samgr_proxy",
   ]
 
   cflags_cc = []
@@ -110,6 +176,8 @@ ohos_moduletest("inner_os_account_manager_test") {
 
   if (has_hiviewdfx_hitrace_part) {
     cflags_cc += [ "-DHAS_HISYSEVENT_PART" ]
+    external_deps += [ "hitrace:hitrace_meter" ]
+    external_deps += [ "hisysevent:libhisysevent" ]
   }
 
   if (hicollie_enable == true) {
@@ -816,7 +884,7 @@ ohos_moduletest("os_account_subspace_module_test") {
   sources = [
     "os_account_subspace_module_test.cpp",
     "${services_path}/accountmgr/test/unittest/ohos_account/mock/mock_space_dependencies.cpp",
-    "${services_path}/accountmgr/test/mock/account_iam/mock_user_idm_client.cpp",
+    "mock/mock_user_idm_client_direct.cpp",
   ]
 
   sources += [
@@ -861,7 +929,16 @@ ohos_moduletest("os_account_subspace_module_test") {
     "${services_path}/accountmgr/include",
     "${services_path}/accountmgr/include/osaccount",
     "${services_path}/accountmgr/include/distributed_account",
+    "${services_path}/accountmgr/include/domain_account",
+    "${services_path}/accountmgr/include/appaccount",
+    "${services_path}/accountmgr/include/account_iam",
+    "${services_path}/accountmgr/include/os_account_subprofile",
+    "${services_path}/accountmgr/include/ability_manager_adapter",
+    "${services_path}/accountmgr/include/common/kernel",
     "${services_path}/accountmgr/test/unittest/ohos_account/mock",
+    "${services_path}/accountmgr/test/mock/common",
+    "${services_path}/accountmgr/test/mock/include",
+    "${services_path}/accountmgr/test/moduletest/os_account/mock",
     "${os_account_subspace_interfaces_native_path}/include",
     "${common_path}/account_error",
     "${common_path}/log/include",
@@ -878,9 +955,16 @@ ohos_moduletest("os_account_subspace_module_test") {
     "${innerkits_path}/include",
     "${os_account_dfx_path}/hisysevent_adapter",
     "${os_account_dfx_path}/data_dfx",
+    "${os_account_dfx_path}/hidumper_adapter",
+    "${os_account_dfx_path}/hitrace_adapter",
     "${account_iam_interfaces_native_path}/include",
     "${services_path}/accountmgr/include/os_account_subprofile",
     "${services_path}/accountmgr/test/mock/account_iam",
+    "${domain_account_framework_path}/include",
+    "${domain_account_interfaces_native_path}/include",
+    "${os_account_path}/frameworks/ohosaccount/native/include",
+    "${app_account_interfaces_native_path}/include",
+    "${app_account_innerkits_native_path}/include",
   ]
 
   deps = [
@@ -900,7 +984,9 @@ ohos_moduletest("os_account_subspace_module_test") {
     "${os_account_innerkits_native_path}:os_account_state_reply_callback_stub",
     "${os_account_innerkits_native_path}:os_account_proxy",
     "${os_account_innerkits_native_path}:os_account_stub",
-    "${services_path}/accountmgr:accountmgr",
+    "${os_account_innerkits_native_path}:os_account_constraint_event_stub",
+    "${account_iam_framework_path}:account_iam_innerkits",
+    "${domain_account_framework_path}:domain_account_innerkits",
   ]
 
   if (has_kv_store_part) {

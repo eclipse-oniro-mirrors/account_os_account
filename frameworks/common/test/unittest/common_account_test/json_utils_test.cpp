@@ -22,6 +22,8 @@ using namespace OHOS;
 using namespace testing::ext;
 using namespace OHOS::AccountSA;
 
+constexpr double MAX_SAFE_INTEGER_DOUBLE = 9007199254740991.0;  // 2^53 - 1
+
 typedef enum {
     LOGOUT = 0,
     LOGIN_BACKGROUND,
@@ -744,24 +746,24 @@ HWTEST_F(JsonUtilsTest, Uint64StringToJsonTest006, TestSize.Level4)
 HWTEST_F(JsonUtilsTest, AddDoubleToJsonTest001, TestSize.Level4)
 {
     std::string key = "test_key";
-    uint64_t value = 1234567890;
+    double value = 1234567890.0;
     EXPECT_FALSE(AddDoubleToJson(nullptr, key, value));
 
     auto jsonObj = CreateJson();
     EXPECT_TRUE(AddDoubleToJson(jsonObj, key, value));
     uint64_t retrievedValue = 0;
     EXPECT_TRUE(GetUint64FromJson(jsonObj.get(), key, retrievedValue));
-    EXPECT_EQ(retrievedValue, value);
+    EXPECT_EQ(retrievedValue, static_cast<uint64_t>(value));
 
-    uint64_t maxValue = UINT64_MAX;
+    double maxValue = MAX_SAFE_INTEGER_DOUBLE;
     EXPECT_TRUE(AddDoubleToJson(jsonObj, "max_key", maxValue));
     GetUint64FromJson(jsonObj.get(), "max_key", retrievedValue);
-    EXPECT_EQ(retrievedValue, maxValue);
+    EXPECT_EQ(retrievedValue, static_cast<uint64_t>(maxValue));
 
-    uint64_t zeroValue = 0;
+    double zeroValue = 0.0;
     EXPECT_TRUE(AddDoubleToJson(jsonObj, "zero_key", zeroValue));
     GetUint64FromJson(jsonObj.get(), "zero_key", retrievedValue);
-    EXPECT_EQ(retrievedValue, zeroValue);
+    EXPECT_EQ(retrievedValue, static_cast<uint64_t>(zeroValue));
 
     EXPECT_FALSE(AddDoubleToJson(jsonObj, "", value));
 }
