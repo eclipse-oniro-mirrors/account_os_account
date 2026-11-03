@@ -42,7 +42,7 @@
 #include "accesstoken_kit.h"
 #include "bundle_manager_adapter.h"
 #include "mock_space_dependencies.h"
-#include "mock_user_idm_client.h"
+#include "mock/mock_user_idm_client_direct.h"
 #include "os_account_constants.h"
 #include "token_setproc.h"
 
@@ -803,20 +803,10 @@ HWTEST_F(OsAccountSubspaceModuleTest, RemoveSpace_Success_WithIamCredCleanup_001
 
     // Mock DeleteSubProfile to return SUCCESS (invoke callback synchronously)
     auto &mockIdm = OHOS::UserIam::UserAuth::MockUserIdmClient::GetMock();
-    ::testing::Mock::AllowLeak(&mockIdm);
-    EXPECT_CALL(mockIdm, DeleteSubProfile(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Invoke([](int32_t, int32_t,
-            const std::shared_ptr<OHOS::UserIam::UserAuth::UserIdmClientCallback> &callback) {
-            callback->OnResult(OHOS::UserIam::UserAuth::ResultCode::SUCCESS,
-                OHOS::UserIam::UserAuth::Attributes());
-        }));
+    mockIdm.deleteSubProfileResult_ = OHOS::UserIam::UserAuth::ResultCode::SUCCESS;
 
     ErrCode ret = mgr.RemoveSubProfile(OS_ACCOUNT_ID_A, distId);
     EXPECT_EQ(ret, ERR_OK);
-
-    // Cleanup mock expectations so they don't leak to subsequent tests
-    // (MockUserIdmClient is a static singleton shared across tests).
-    ::testing::Mock::VerifyAndClearExpectations(&mockIdm);
 }
 
 /**
@@ -843,18 +833,10 @@ HWTEST_F(OsAccountSubspaceModuleTest, RemoveSpace_IamNotEnrolled_001, TestSize.L
     ASSERT_EQ(mgr.subProfileDataDeal_->SaveSubProfileInfo(info), ERR_OK);
 
     auto &mockIdm = OHOS::UserIam::UserAuth::MockUserIdmClient::GetMock();
-    ::testing::Mock::AllowLeak(&mockIdm);
-    EXPECT_CALL(mockIdm, DeleteSubProfile(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Invoke([](int32_t, int32_t,
-            const std::shared_ptr<OHOS::UserIam::UserAuth::UserIdmClientCallback> &callback) {
-            callback->OnResult(OHOS::UserIam::UserAuth::ResultCode::NOT_ENROLLED,
-                OHOS::UserIam::UserAuth::Attributes());
-        }));
+    mockIdm.deleteSubProfileResult_ = OHOS::UserIam::UserAuth::ResultCode::NOT_ENROLLED;
 
     ErrCode ret = mgr.RemoveSubProfile(OS_ACCOUNT_ID_A, distId);
     EXPECT_EQ(ret, ERR_OK);
-
-    ::testing::Mock::VerifyAndClearExpectations(&mockIdm);
 }
 
 /**
@@ -881,18 +863,10 @@ HWTEST_F(OsAccountSubspaceModuleTest, RemoveSpace_IamFailure_001, TestSize.Level
     ASSERT_EQ(mgr.subProfileDataDeal_->SaveSubProfileInfo(info), ERR_OK);
 
     auto &mockIdm = OHOS::UserIam::UserAuth::MockUserIdmClient::GetMock();
-    ::testing::Mock::AllowLeak(&mockIdm);
-    EXPECT_CALL(mockIdm, DeleteSubProfile(::testing::_, ::testing::_, ::testing::_))
-        .WillOnce(::testing::Invoke([](int32_t, int32_t,
-            const std::shared_ptr<OHOS::UserIam::UserAuth::UserIdmClientCallback> &callback) {
-            callback->OnResult(OHOS::UserIam::UserAuth::ResultCode::GENERAL_ERROR,
-                OHOS::UserIam::UserAuth::Attributes());
-        }));
+    mockIdm.deleteSubProfileResult_ = OHOS::UserIam::UserAuth::ResultCode::GENERAL_ERROR;
 
     ErrCode ret = mgr.RemoveSubProfile(OS_ACCOUNT_ID_A, distId);
     EXPECT_EQ(ret, OHOS::UserIam::UserAuth::ResultCode::GENERAL_ERROR);
-
-    ::testing::Mock::VerifyAndClearExpectations(&mockIdm);
 }
 #endif // HAS_USER_AUTH_PART
 

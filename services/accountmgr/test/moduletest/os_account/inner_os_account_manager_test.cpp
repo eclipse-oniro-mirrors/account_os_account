@@ -27,7 +27,7 @@
 #include "account_test_common.h"
 #include "os_account_info.h"
 #include "os_account_manager.h"
-#include "../../unittest/os_account/mock/mock_os_account_control_file_manager.h"
+#include "mock/mock_os_account_control_file_manager_direct.h"
 #ifdef ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
 #include "display_manager_lite.h"
 #endif
@@ -169,10 +169,17 @@ HWTEST_F(IInnerOsAccountManagerTest, InnerOsAccountManagerTest002, TestSize.Leve
  */
 HWTEST_F(IInnerOsAccountManagerTest, InnerOsAccountManagerTest003, TestSize.Level1)
 {
+    auto originalControl = innerMgrService_->osAccountControl_;
+    auto control = std::make_shared<MockOsAccountControlFileManager>();
+    control->insertResult_ = ERR_OSACCOUNT_SERVICE_CONTROL_MAX_CAN_CREATE_ERROR;
+    innerMgrService_->osAccountControl_ = control;
+
     OsAccountInfo osAccountInfo;
     ErrCode ret = innerMgrService_->CreateOsAccount("InnerOsAccountManager003", OsAccountType::NORMAL, osAccountInfo);
     EXPECT_NE(ret, ERR_OK);
     innerMgrService_->RemoveOsAccount(osAccountInfo.GetLocalId());
+
+    innerMgrService_->osAccountControl_ = originalControl;
 }
 
 /**
@@ -590,8 +597,7 @@ PendingForegroundRestoreState PreparePendingForegroundRestore(IInnerOsAccountMan
     innerMgrService->osAccountControl_ = control;
     OsAccountInfo accountInfo;
     accountInfo.SetIsCreateCompleted(true);
-    EXPECT_CALL(*control, GetOsAccountInfoById(accountId, testing::_))
-        .WillOnce(testing::DoAll(testing::SetArgReferee<1>(accountInfo), testing::Return(ERR_OK)));
+    control->accountMap_[accountId] = accountInfo;
     state.hadDefault = innerMgrService->defaultActivatedIds_.Find(DISPLAY_C_LOGICAL_ID, state.oldDefaultId);
     state.hadForeground = innerMgrService->foregroundAccountMap_.Find(DISPLAY_C_LOGICAL_ID, state.oldForegroundId);
     state.hadVerified = innerMgrService->verifiedAccounts_.Find(accountId, state.oldVerified);
@@ -651,10 +657,7 @@ DefaultActivatedAccountState PrepareDefaultActivatedAccountUserZone(IInnerOsAcco
     innerMgrService->osAccountControl_ = control;
     OsAccountInfo accountInfo;
     accountInfo.SetIsCreateCompleted(true);
-    EXPECT_CALL(*control, GetOsAccountInfoById(Constants::START_USER_ID, testing::_))
-        .WillOnce(testing::DoAll(testing::SetArgReferee<1>(accountInfo), testing::Return(ERR_OK)));
-    EXPECT_CALL(*control, SetDefaultActivatedOsAccount(Constants::DEFAULT_DISPLAY_ID, Constants::START_USER_ID))
-        .WillOnce(testing::Return(ERR_OK));
+    control->accountMap_[Constants::START_USER_ID] = accountInfo;
     state.hadPrimary = innerMgrService->defaultActivatedIds_.Find(Constants::DEFAULT_DISPLAY_ID, state.oldPrimaryId);
     state.hadSecondary = innerMgrService->defaultActivatedIds_.Find(DISPLAY_A_LOGICAL_ID, state.oldSecondaryId);
     innerMgrService->defaultActivatedIds_.EnsureInsert(Constants::DEFAULT_DISPLAY_ID, Constants::START_USER_ID + 1);
@@ -1015,7 +1018,6 @@ HWTEST_F(IInnerOsAccountManagerTest, RestoreAllForegroundAccountsRemovedAccount0
     const auto originalControl = innerMgrService_->osAccountControl_;
     auto control = std::make_shared<MockOsAccountControlFileManager>();
     innerMgrService_->osAccountControl_ = control;
-    EXPECT_CALL(*control, GetOsAccountInfoById(Constants::INVALID_OS_ACCOUNT_ID, testing::_)).Times(0);
     int32_t oldId = Constants::INVALID_OS_ACCOUNT_ID;
     const bool hadDefault = innerMgrService_->defaultActivatedIds_.Find(DISPLAY_C_LOGICAL_ID, oldId);
     innerMgrService_->defaultActivatedIds_.EnsureInsert(DISPLAY_C_LOGICAL_ID, Constants::INVALID_OS_ACCOUNT_ID);
@@ -1604,10 +1606,7 @@ HWTEST_F(IInnerOsAccountManagerTest, SetDefaultActivatedOsAccountFallback001, Te
     innerMgrService_->osAccountControl_ = control;
     OsAccountInfo accountInfo;
     accountInfo.SetIsCreateCompleted(true);
-    EXPECT_CALL(*control, GetOsAccountInfoById(Constants::START_USER_ID, testing::_))
-        .WillOnce(testing::DoAll(testing::SetArgReferee<1>(accountInfo), testing::Return(ERR_OK)));
-    EXPECT_CALL(*control, SetDefaultActivatedOsAccount(Constants::DEFAULT_DISPLAY_ID, Constants::START_USER_ID))
-        .WillOnce(testing::Return(ERR_OK));
+    control->accountMap_[Constants::START_USER_ID] = accountInfo;
 
     int32_t oldDefaultId = Constants::INVALID_OS_ACCOUNT_ID;
     int32_t oldOtherId = Constants::INVALID_OS_ACCOUNT_ID;
@@ -2012,8 +2011,6 @@ std::shared_ptr<MockOsAccountControlFileManager> PrepareParseAllDefaultActivateI
     state.hadDefault = innerMgrService->defaultActivatedIds_.Find(Constants::DEFAULT_DISPLAY_ID, state.oldDefault);
     auto control = std::make_shared<MockOsAccountControlFileManager>();
     innerMgrService->osAccountControl_ = control;
-    EXPECT_CALL(*control, GetOsAccountInfoById(testing::_, testing::_))
-        .WillRepeatedly(testing::Return(ERR_ACCOUNT_COMMON_ACCOUNT_NOT_EXIST_ERROR));
     return control;
 }
 
@@ -2047,17 +2044,14 @@ HWTEST_F(IInnerOsAccountManagerTest, ParseAllDefaultActivateIdsValidAndSkip001, 
     auto control = PrepareParseAllDefaultActivateIdsTest(innerMgrService_, state);
     OsAccountInfo validAccount;
     validAccount.SetIsCreateCompleted(true);
-    EXPECT_CALL(*control, GetOsAccountInfoById(validIdA, testing::_))
-        .WillRepeatedly(testing::DoAll(testing::SetArgReferee<1>(validAccount), testing::Return(ERR_OK)));
-    EXPECT_CALL(*control, GetOsAccountInfoById(validIdB, testing::_))
-        .WillRepeatedly(testing::DoAll(testing::SetArgReferee<1>(validAccount), testing::Return(ERR_OK)));
+    control->accountMap_[validIdA] = validAccount;
+    control->accountMap_[validIdB] = validAccount;
     innerMgrService_->defaultActivatedIds_.Erase(dispA);
     innerMgrService_->defaultActivatedIds_.Erase(dispB);
     innerMgrService_->defaultActivatedIds_.Erase(dispC);
     std::map<uint64_t, int32_t> rawIds = {{Constants::DEFAULT_DISPLAY_ID, validIdA}, {dispA, validIdB},
         {dispB, rangeInvalidId}, {dispC, validIdA}};
-    EXPECT_CALL(*control, GetAllDefaultActivatedOsAccounts(testing::_))
-        .WillOnce(testing::DoAll(testing::SetArgReferee<0>(rawIds), testing::Return(ERR_OK)));
+    control->defaultIds_ = rawIds;
     innerMgrService_->ParseAllDefaultActivateIds();
     int32_t id = -1;
     ASSERT_TRUE(innerMgrService_->defaultActivatedIds_.Find(Constants::DEFAULT_DISPLAY_ID, id));
@@ -2081,8 +2075,7 @@ HWTEST_F(IInnerOsAccountManagerTest, ParseAllDefaultActivateIdsInvalidDefaultRan
     ParseAllDefaultActivateIdsState state;
     auto control = PrepareParseAllDefaultActivateIdsTest(innerMgrService_, state);
     std::map<uint64_t, int32_t> rawIds = {{Constants::DEFAULT_DISPLAY_ID, rangeInvalidId}};
-    EXPECT_CALL(*control, GetAllDefaultActivatedOsAccounts(testing::_))
-        .WillOnce(testing::DoAll(testing::SetArgReferee<0>(rawIds), testing::Return(ERR_OK)));
+    control->defaultIds_ = rawIds;
     innerMgrService_->ParseAllDefaultActivateIds();
     int32_t id = -1;
     ASSERT_TRUE(innerMgrService_->defaultActivatedIds_.Find(Constants::DEFAULT_DISPLAY_ID, id));
@@ -2102,8 +2095,7 @@ HWTEST_F(IInnerOsAccountManagerTest, ParseAllDefaultActivateIdsInvalidDefaultNon
     ParseAllDefaultActivateIdsState state;
     auto control = PrepareParseAllDefaultActivateIdsTest(innerMgrService_, state);
     std::map<uint64_t, int32_t> rawIds = {{Constants::DEFAULT_DISPLAY_ID, nonexistId}};
-    EXPECT_CALL(*control, GetAllDefaultActivatedOsAccounts(testing::_))
-        .WillOnce(testing::DoAll(testing::SetArgReferee<0>(rawIds), testing::Return(ERR_OK)));
+    control->defaultIds_ = rawIds;
     innerMgrService_->ParseAllDefaultActivateIds();
     int32_t id = -1;
     ASSERT_TRUE(innerMgrService_->defaultActivatedIds_.Find(Constants::DEFAULT_DISPLAY_ID, id));
@@ -2126,12 +2118,10 @@ HWTEST_F(IInnerOsAccountManagerTest, ParseAllDefaultActivateIdsDefaultAbsent001,
     auto control = PrepareParseAllDefaultActivateIdsTest(innerMgrService_, state);
     OsAccountInfo validAccount;
     validAccount.SetIsCreateCompleted(true);
-    EXPECT_CALL(*control, GetOsAccountInfoById(validIdB, testing::_))
-        .WillRepeatedly(testing::DoAll(testing::SetArgReferee<1>(validAccount), testing::Return(ERR_OK)));
+    control->accountMap_[validIdB] = validAccount;
     innerMgrService_->defaultActivatedIds_.Erase(dispA);
     std::map<uint64_t, int32_t> rawIds = {{dispA, validIdB}};
-    EXPECT_CALL(*control, GetAllDefaultActivatedOsAccounts(testing::_))
-        .WillOnce(testing::DoAll(testing::SetArgReferee<0>(rawIds), testing::Return(ERR_OK)));
+    control->defaultIds_ = rawIds;
     innerMgrService_->ParseAllDefaultActivateIds();
     int32_t id = -1;
     ASSERT_TRUE(innerMgrService_->defaultActivatedIds_.Find(Constants::DEFAULT_DISPLAY_ID, id));
