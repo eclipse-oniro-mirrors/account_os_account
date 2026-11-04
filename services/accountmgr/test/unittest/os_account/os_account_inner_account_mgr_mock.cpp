@@ -446,11 +446,11 @@ HWTEST_F(OsAccountInnerAccmgrMockTest, CreateOsAccount001, TestSize.Level1)
     // constraints has been saved to base_os_account_constraints.json
     std::vector<std::string> constraintsByType;
     EXPECT_EQ(ERR_OK, innerMgrService_->osAccountControl_->GetConstraintsByType(NORMAL, constraintsByType));
-    EXPECT_THAT(accountInfo.GetConstraints(), testing::ElementsAreArray(constraintsByType));
+    EXPECT_EQ(accountInfo.GetConstraints(), constraintsByType);
     auto constraintsFromFileJson = CreateJson();
     EXPECT_EQ(ERR_OK, g_controlManager->GetBaseOAConstraintsFromFile(constraintsFromFileJson));
     std::vector<std::string> constraintsFromFile = GetVectorStringFromJson(constraintsFromFileJson, std::to_string(accountInfo.GetLocalId()));
-    EXPECT_THAT(accountInfo.GetConstraints(), testing::ElementsAreArray(constraintsFromFile));
+    EXPECT_EQ(accountInfo.GetConstraints(), constraintsFromFile);
 
     EXPECT_EQ(ERR_OK, innerMgrService_->RemoveOsAccount(accountInfo.GetLocalId()));
 }
@@ -492,11 +492,11 @@ HWTEST_F(OsAccountInnerAccmgrMockTest, CreateOsAccount002, TestSize.Level1)
     // constraints has been saved to base_os_account_constraints.json
     std::vector<std::string> constraintsByType;
     EXPECT_EQ(ERR_OK, innerMgrService_->osAccountControl_->GetConstraintsByType(NORMAL, constraintsByType));
-    EXPECT_THAT(accountInfo.GetConstraints(), testing::ElementsAreArray(constraintsByType));
+    EXPECT_EQ(accountInfo.GetConstraints(), constraintsByType);
     auto constraintsFromFileJson = CreateJson();
     EXPECT_EQ(ERR_OK, g_controlManager->GetBaseOAConstraintsFromFile(constraintsFromFileJson));
     std::vector<std::string> constraintsFromFile = GetVectorStringFromJson(constraintsFromFileJson, std::to_string(accountInfo.GetLocalId()));
-    EXPECT_THAT(accountInfo.GetConstraints(), testing::ElementsAreArray(constraintsFromFile));
+    EXPECT_EQ(accountInfo.GetConstraints(), constraintsFromFile);
 
     EXPECT_EQ(ERR_OK, innerMgrService_->RemoveOsAccount(accountInfo.GetLocalId()));
 }
@@ -605,11 +605,11 @@ HWTEST_F(OsAccountInnerAccmgrMockTest, CreateOsAccountWithFullInfo001, TestSize.
     std::vector<std::string> constraintsByType;
     EXPECT_EQ(ERR_OK, innerMgrService_->osAccountControl_->GetConstraintsByType(NORMAL, constraintsByType));
     constraintsByType.emplace_back("test constraints");
-    EXPECT_THAT(accountInfo.GetConstraints(), testing::ElementsAreArray(constraintsByType));
+    EXPECT_EQ(accountInfo.GetConstraints(), constraintsByType);
     auto constraintsFromFileJson = CreateJson();
     EXPECT_EQ(ERR_OK, g_controlManager->GetBaseOAConstraintsFromFile(constraintsFromFileJson));
     std::vector<std::string> constraintsFromFile = GetVectorStringFromJson(constraintsFromFileJson, std::to_string(accountInfo.GetLocalId()));
-    EXPECT_THAT(accountInfo.GetConstraints(), testing::ElementsAreArray(constraintsFromFile));
+    EXPECT_EQ(accountInfo.GetConstraints(), constraintsFromFile);
 
     EXPECT_EQ(ERR_OK, innerMgrService_->RemoveOsAccount(accountInfo.GetLocalId()));
 }
@@ -689,7 +689,7 @@ HWTEST_F(OsAccountInnerAccmgrMockTest, UpdateOsAccountWithFullInfo001, TestSize.
     EXPECT_FALSE(accountInfo.GetIsLoggedIn());
 
     // constraints has been saved to base_os_account_constraints.json
-    EXPECT_THAT(accountInfo.GetConstraints(), testing::ElementsAreArray({"test constraints"}));
+    EXPECT_EQ(accountInfo.GetConstraints(), std::vector<std::string>{"test constraints"});
     auto constraintsFromFileJson = CreateJson();
     EXPECT_EQ(ERR_OK, g_controlManager->GetBaseOAConstraintsFromFile(constraintsFromFileJson));
     std::vector<std::string> constraintsFromFile = GetVectorStringFromJson(constraintsFromFileJson, std::to_string(accountInfo.GetLocalId()));
@@ -717,11 +717,11 @@ HWTEST_F(OsAccountInnerAccmgrMockTest, RemoveOsAccount001, TestSize.Level1)
     // constraints has been saved to base_os_account_constraints.json
     std::vector<std::string> constraintsByType;
     EXPECT_EQ(ERR_OK, innerMgrService_->osAccountControl_->GetConstraintsByType(NORMAL, constraintsByType));
-    EXPECT_THAT(accountInfo.GetConstraints(), testing::ElementsAreArray(constraintsByType));
+    EXPECT_EQ(accountInfo.GetConstraints(), constraintsByType);
     auto constraintsFromFileJson = CreateJson();
     EXPECT_EQ(ERR_OK, g_controlManager->GetBaseOAConstraintsFromFile(constraintsFromFileJson));
     std::vector<std::string> constraintsFromFile = GetVectorStringFromJson(constraintsFromFileJson, std::to_string(accountInfo.GetLocalId()));
-    EXPECT_THAT(accountInfo.GetConstraints(), testing::ElementsAreArray(constraintsFromFile));
+    EXPECT_EQ(accountInfo.GetConstraints(), constraintsFromFile);
 
     EXPECT_EQ(ERR_OK, innerMgrService_->RemoveOsAccount(accountInfo.GetLocalId()));
 
@@ -756,11 +756,11 @@ HWTEST_F(OsAccountInnerAccmgrMockTest, RemoveOsAccount002, TestSize.Level1)
     // constraints has been saved to base_os_account_constraints.json
     std::vector<std::string> constraintsByType;
     EXPECT_EQ(ERR_OK, innerMgrService_->osAccountControl_->GetConstraintsByType(NORMAL, constraintsByType));
-    EXPECT_THAT(accountInfo.GetConstraints(), testing::ElementsAreArray(constraintsByType));
+    EXPECT_EQ(accountInfo.GetConstraints(), constraintsByType);
     auto constraintsFromFileJson = CreateJson();
     EXPECT_EQ(ERR_OK, g_controlManager->GetBaseOAConstraintsFromFile(constraintsFromFileJson));
     std::vector<std::string> constraintsFromFile = GetVectorStringFromJson(constraintsFromFileJson, std::to_string(accountInfo.GetLocalId()));
-    EXPECT_THAT(accountInfo.GetConstraints(), testing::ElementsAreArray(constraintsFromFile));
+    EXPECT_EQ(accountInfo.GetConstraints(), constraintsFromFile);
 
     EXPECT_EQ(ERR_OK, innerMgrService_->ActivateOsAccount(accountInfo.GetLocalId()));
     int id = 0;
@@ -1132,7 +1132,7 @@ HWTEST_F(OsAccountInnerAccmgrMockTest, AccountStatusTest002, TestSize.Level1)
     EXPECT_EQ(osAccountInfosBefore.size() + 1, osAccountInfosAfter.size());
     std::vector<std::string> constraints;
     EXPECT_EQ(ERR_OK, innerMgrService_->GetOsAccountAllConstraints(id, constraints));
-    EXPECT_THAT(accountInfo.GetConstraints(), testing::ElementsAreArray(constraints));
+    EXPECT_EQ(accountInfo.GetConstraints(), constraints);
 
     EXPECT_EQ(ERR_OK, innerMgrService_->RemoveOsAccount(id));
 }
