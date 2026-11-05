@@ -3077,7 +3077,7 @@ HWTEST_F(OsAccountManagerModuleTest, GetForegroundOsAccountDisplayIds001, TestSi
 {
     std::vector<uint64_t> displayIds;
     EXPECT_EQ(OsAccountManager::GetForegroundOsAccountDisplayIds(-2, displayIds),
-        ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+        ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR);
 }
 
 /**

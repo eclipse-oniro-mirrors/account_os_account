@@ -101,11 +101,6 @@ private:
     ErrCode LoadConfigLocked();
     ErrCode EnsureConfigReady();
 
-    bool HasDisplayByLogicalId(uint64_t logicalId) const;
-    bool GetUserZonePrimaryDisplayId(uint64_t group, uint64_t &logicalId) const;
-    std::vector<uint64_t> GetDisplayIdsByUserZone(uint64_t group) const;
-    uint64_t GetUserZoneByLogicalId(uint64_t logicalId) const;
-
     void ClearParsedData();
     bool ParseUInt64(const std::string &value, uint64_t &result);
 

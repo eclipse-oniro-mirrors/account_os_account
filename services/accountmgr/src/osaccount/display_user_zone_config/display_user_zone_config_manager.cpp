@@ -18,7 +18,6 @@
 #include "account_log_wrapper.h"
 
 #include <charconv>
-#include <climits>
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
@@ -68,12 +67,11 @@ ErrCode DisplayUserZoneConfigManager::GetPrimaryDisplayId(uint64_t logicalDispla
     auto primaryIter = userZonePrimaryMap_.find(displayIter->second.userZone);
     if (primaryIter == userZonePrimaryMap_.end() ||
         logicalIdMap_.find(primaryIter->second) == logicalIdMap_.end()) {
-        primaryDisplayId = logicalDisplayId;
-        ACCOUNT_LOGW("GetPrimaryDisplayId found no primary display for %{public}llu "
-            "(userZone=%{public}llu); returning the original display ID",
+        ACCOUNT_LOGE("GetPrimaryDisplayId found no primary display for %{public}llu "
+            "(userZone=%{public}llu)",
             static_cast<unsigned long long>(logicalDisplayId),
             static_cast<unsigned long long>(displayIter->second.userZone));
-        return ERR_OK;
+        return ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR;
     }
     primaryDisplayId = primaryIter->second;
     if (primaryDisplayId != logicalDisplayId) {
@@ -111,54 +109,6 @@ ErrCode DisplayUserZoneConfigManager::GetDisplayIdsByLogicalId(uint64_t logicalD
         }
     }
     return ERR_OK;
-}
-
-bool DisplayUserZoneConfigManager::HasDisplayByLogicalId(uint64_t logicalId) const
-{
-    std::lock_guard<std::mutex> lock(mutex_);
-    return logicalIdMap_.find(logicalId) != logicalIdMap_.end();
-}
-
-bool DisplayUserZoneConfigManager::GetUserZonePrimaryDisplayId(uint64_t group, uint64_t &logicalId) const
-{
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto iter = userZonePrimaryMap_.find(group);
-    if (iter == userZonePrimaryMap_.end()) {
-        return false;
-    }
-    auto displayIter = logicalIdMap_.find(iter->second);
-    if (displayIter == logicalIdMap_.end()) {
-        return false;
-    }
-    logicalId = displayIter->second.logicalId;
-    return true;
-}
-
-std::vector<uint64_t> DisplayUserZoneConfigManager::GetDisplayIdsByUserZone(uint64_t group) const
-{
-    std::lock_guard<std::mutex> lock(mutex_);
-    std::vector<uint64_t> result;
-    auto iter = userZoneMap_.find(group);
-    if (iter == userZoneMap_.end()) {
-        return result;
-    }
-    for (uint64_t logicalId : iter->second) {
-        auto displayIter = logicalIdMap_.find(logicalId);
-        if (displayIter != logicalIdMap_.end()) {
-            result.push_back(displayIter->second.logicalId);
-        }
-    }
-    return result;
-}
-
-uint64_t DisplayUserZoneConfigManager::GetUserZoneByLogicalId(uint64_t logicalId) const
-{
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto iter = logicalIdMap_.find(logicalId);
-    if (iter == logicalIdMap_.end()) {
-        return logicalId;
-    }
-    return iter->second.userZone;
 }
 
 ErrCode DisplayUserZoneConfigManager::Init()
@@ -238,6 +188,19 @@ xmlNodePtr FindDisplaysNode(xmlDocPtr doc)
     }
     return nullptr;
 }
+
+// XML leaf values may carry pretty-printing whitespace (spaces, tabs, newlines);
+// trim it before the value is consumed.
+std::string TrimConfigValue(const std::string &value)
+{
+    const std::string whiteSpaces = " \t\r\n\f\v";
+    size_t start = value.find_first_not_of(whiteSpaces);
+    if (start == std::string::npos) {
+        return "";
+    }
+    size_t end = value.find_last_not_of(whiteSpaces);
+    return value.substr(start, end - start + 1);
+}
 } // namespace
 
 ErrCode DisplayUserZoneConfigManager::ParseDisplayConfig(const std::string &content)
@@ -288,12 +251,12 @@ ErrCode DisplayUserZoneConfigManager::CollectDisplayNodes(void *root,
         DisplayConfigInfo info;
         ErrCode errCode = ParseDisplayNodeAttributes(node, info);
         if (errCode != ERR_OK) {
-            ACCOUNT_LOGE("Failed to parse display node attributes, fallback to original validation path");
+            ACCOUNT_LOGE("Failed to parse display node attributes, config rejected");
             ClearParsedData();
             return errCode;
         }
         if (physicalToLogical.find(info.physicalId) != physicalToLogical.end()) {
-            ACCOUNT_LOGE("Duplicate physicalId=%{public}llu in config, fallback to original validation path",
+            ACCOUNT_LOGE("Duplicate physicalId=%{public}llu in config, config rejected",
                 static_cast<unsigned long long>(info.physicalId));
             ClearParsedData();
             return ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR;
@@ -309,7 +272,7 @@ ErrCode DisplayUserZoneConfigManager::ResolveDisplayUserZones(const std::vector<
 {
     for (const auto &info : displays) {
         if (logicalIdMap_.find(info.logicalId) != logicalIdMap_.end()) {
-            ACCOUNT_LOGE("Duplicate logicalId=%{public}llu in config, fallback to original validation path",
+            ACCOUNT_LOGE("Duplicate logicalId=%{public}llu in config, config rejected",
                 static_cast<unsigned long long>(info.logicalId));
             ClearParsedData();
             return ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR;
@@ -404,17 +367,18 @@ void DisplayUserZoneConfigManager::ClearParsedData()
 
 bool DisplayUserZoneConfigManager::ParseUInt64(const std::string &value, uint64_t &result)
 {
-    if (value.empty()) {
+    const std::string trimmed = TrimConfigValue(value);
+    if (trimmed.empty()) {
         return false;
     }
-    auto res = std::from_chars(value.data(), value.data() + value.size(), result);
-    return res.ec == std::errc{} && res.ptr == value.data() + value.size();
+    auto res = std::from_chars(trimmed.data(), trimmed.data() + trimmed.size(), result);
+    return res.ec == std::errc{} && res.ptr == trimmed.data() + trimmed.size();
 }
 
 ErrCode DisplayUserZoneConfigManager::ValidateParsedConfig()
 {
     if (userZonePrimaryMap_.empty()) {
-        ACCOUNT_LOGE("No primary display found in config, fallback to original validation path");
+        ACCOUNT_LOGE("No primary display found in config, config rejected");
         return ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR;
     }
     for (const auto &pair : logicalIdMap_) {
@@ -425,7 +389,7 @@ ErrCode DisplayUserZoneConfigManager::ValidateParsedConfig()
         auto primaryIt = logicalIdMap_.find(info.userZone);
         if (primaryIt == logicalIdMap_.end()) {
             ACCOUNT_LOGE("Secondary display logicalId=%{public}llu references non-existent primary "
-                "group=%{public}llu, fallback to original validation path",
+                "group=%{public}llu, config rejected",
                 static_cast<unsigned long long>(info.logicalId),
                 static_cast<unsigned long long>(info.userZone));
             return ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR;

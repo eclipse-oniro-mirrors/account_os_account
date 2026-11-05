@@ -350,6 +350,8 @@ int32_t OsAccountConvertToJSErrCode(int32_t errCode)
             return ERR_JS_FOREGROUND_OS_ACCOUNT_NOT_FOUND;
         case ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR:
             return ERR_JS_DISPLAY_NOT_FOUND;
+        case ERR_ACCOUNT_COMMON_DISPLAY_NOT_PRIMARY_ERROR:
+            return ERR_JS_DISPLAY_NOT_FOUND;
         case ERR_ACCOUNT_COMMON_CROSS_DISPLAY_ACTIVE_ERROR:
             return ERR_JS_CROSS_DISPLAY_ACTIVATION_NOT_SUPPORTED;
         default:
@@ -399,6 +401,7 @@ static bool IsOsAccountServiceError(int32_t errCode)
            (errCode == ERR_ACCOUNT_COMMON_SHORT_NAME_HAD_EXISTED) ||
            (errCode == ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR) ||
            (errCode == ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR) ||
+           (errCode == ERR_ACCOUNT_COMMON_DISPLAY_NOT_PRIMARY_ERROR) ||
            (errCode == ERR_ACCOUNT_COMMON_CROSS_DISPLAY_ACTIVE_ERROR) ||
            (errCode == ERR_ACCOUNT_COMMON_ACCOUNT_IS_RESTRICTED) ||
            (errCode == ERR_ACCOUNT_COMMON_TEE_USER_TOKEN_INVALID) ||

@@ -16,7 +16,6 @@
 #ifndef OS_ACCOUNT_SERVICES_ACCOUNTMGR_INCLUDE_OSACCOUNT_IINNER_OS_ACCOUNT_H
 #define OS_ACCOUNT_SERVICES_ACCOUNTMGR_INCLUDE_OSACCOUNT_IINNER_OS_ACCOUNT_H
 
-#include <map>
 #include <string>
 #include "account_error_no.h"
 #include "idomain_account_callback.h"
@@ -114,7 +113,7 @@ public:
     virtual ErrCode SetOsAccountToBeRemoved(int32_t localId, bool toBeRemoved) = 0;
     virtual ErrCode ActivateDefaultOsAccount() = 0;
 #ifdef ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
-    virtual ErrCode RestoreAllForegroundAccounts(std::map<uint64_t, int32_t> &pendingAccounts) = 0;
+    virtual void RestoreAllForegroundAccounts() = 0;
 #endif // ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
     virtual int32_t CleanGarbageOsAccounts(int32_t excludeId = -1) = 0;
     virtual void ResetAccountStatus() = 0;

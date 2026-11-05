@@ -243,3 +243,19 @@ HWTEST_F(AccountErrorCodeConvertTest, AccountErrorCodeConvertTest009, TestSize.L
     EXPECT_EQ(AuthorizationPublicConvertToJsErrCode(ERR_OK), ERR_JS_SUCCESS);
     EXPECT_EQ(AuthorizationPublicConvertToJsErrCode(-1), ERR_JS_SYSTEM_SERVICE_EXCEPTION);
 }
+
+/**
+ * @tc.name: AccountErrorCodeConvertTest010
+ * @tc.desc: Display error codes convert to JS error codes test
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AccountErrorCodeConvertTest, AccountErrorCodeConvertTest010, TestSize.Level3)
+{
+    // Both display-validation failures keep sharing the public "display not found or not
+    // primary" JS error; the native codes stay distinct for inner-API callers and diagnostics.
+    EXPECT_EQ(ConvertToJSErrCode(ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR), ERR_JS_DISPLAY_NOT_FOUND);
+    EXPECT_EQ(ConvertToJSErrCode(ERR_ACCOUNT_COMMON_DISPLAY_NOT_PRIMARY_ERROR), ERR_JS_DISPLAY_NOT_FOUND);
+    EXPECT_EQ(ConvertToJSErrCode(ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR),
+        ERR_JS_FOREGROUND_OS_ACCOUNT_NOT_FOUND);
+}
