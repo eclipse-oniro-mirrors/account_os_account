@@ -43,19 +43,6 @@ DistributedAccountSubscribeManager &DistributedAccountSubscribeManager::GetInsta
     return *instance;
 }
 
-DistributedSubscribeRecordPtr DistributedAccountSubscribeManager::FindSubscribeRecordByEventListener(
-    const sptr<IRemoteObject> &eventListener)
-{
-    auto it = std::find_if(subscribeRecords_.begin(), subscribeRecords_.end(),
-        [&eventListener](const auto& record) {
-            return record->eventListener_ == eventListener;
-        });
-    if (it != subscribeRecords_.end()) {
-        return *it;
-    }
-    return nullptr;
-}
-
 ErrCode DistributedAccountSubscribeManager::SubscribeDistributedAccountEvent(
     const DISTRIBUTED_ACCOUNT_SUBSCRIBE_TYPE type, const sptr<IRemoteObject> &eventListener)
 {
@@ -64,24 +51,42 @@ ErrCode DistributedAccountSubscribeManager::SubscribeDistributedAccountEvent(
         ACCOUNT_LOGE("EventListener is nullptr.");
         return ERR_ACCOUNT_COMMON_NULL_PTR_ERROR;
     }
+    int32_t callingPid = IPCSkeleton::GetCallingPid();
     std::lock_guard<std::mutex> lock(subscribeRecordMutex_);
-    auto it = std::find_if(subscribeRecords_.begin(), subscribeRecords_.end(), [&eventListener](const auto& record) {
-        return record->eventListener_ == eventListener;
-    });
+    auto it = subscribeRecords_.find(callingPid);
     if (it != subscribeRecords_.end()) {
-        (*it)->types_.insert(type);
-        ACCOUNT_LOGI("Subscribe already exsits, update type only, type size=%{public}zu.", (*it)->types_.size());
-        return ERR_OK;
+        const auto &oldListener = it->second->eventListener_;
+        if (oldListener == eventListener) {
+            it->second->types_.insert(type);
+            ACCOUNT_LOGI("Subscribe already exists, update type only, type size=%{public}zu.",
+                it->second->types_.size());
+            return ERR_OK;
+        }
+        // kit always sends DistributedAccountEventService::GetInstance()->AsObject() (process-level singleton),
+        // so oldListener == eventListener for kit-originated calls and this branch is not reached.
+        // This branch only applies to callers that bypass the kit and send a different listener.
+        if (oldListener != nullptr && !oldListener->IsObjectDead()) {
+            ACCOUNT_LOGE("CallingPid=%{public}d already has a different eventListener.", callingPid);
+            return ERR_OHOSACCOUNT_KIT_CALLBACK_ALREADY_REGISTERED_ERROR;
+        }
     }
 
     auto subscribeRecordPtr = std::make_shared<DistributedSubscribeRecord>(eventListener);
+    if (it != subscribeRecords_.end()) {
+        const auto &oldListener = it->second->eventListener_;
+        if (oldListener != nullptr && subscribeDeathRecipient_ != nullptr) {
+            oldListener->RemoveDeathRecipient(subscribeDeathRecipient_);
+        }
+        ACCOUNT_LOGI("CallingPid=%{public}d stale record cleaned, re-subscribe.", callingPid);
+        subscribeRecords_.erase(it);
+    }
     if (subscribeDeathRecipient_ != nullptr) {
         eventListener->AddDeathRecipient(subscribeDeathRecipient_);
     }
-    subscribeRecordPtr->eventListener_ = eventListener;
     subscribeRecordPtr->types_.insert(type);
-    ACCOUNT_LOGI("Subscribe add, type size=%{public}zu.", subscribeRecordPtr->types_.size());
-    subscribeRecords_.emplace_back(subscribeRecordPtr);
+    ACCOUNT_LOGI("Subscribe add, callingPid=%{public}d, type size=%{public}zu.", callingPid,
+        subscribeRecordPtr->types_.size());
+    subscribeRecords_[callingPid] = subscribeRecordPtr;
     return ERR_OK;
 }
 
@@ -93,23 +98,22 @@ ErrCode DistributedAccountSubscribeManager::UnsubscribeDistributedAccountEvent(
         ACCOUNT_LOGE("EventListener is nullptr.");
         return ERR_ACCOUNT_COMMON_NULL_PTR_ERROR;
     }
+    int32_t callingPid = IPCSkeleton::GetCallingPid();
     std::lock_guard<std::mutex> lock(subscribeRecordMutex_);
-    for (auto it = subscribeRecords_.begin(); it != subscribeRecords_.end(); ++it) {
-        if ((*it)->eventListener_ == eventListener) {
-            (*it)->types_.erase(type);
-            if (!(*it)->types_.empty()) {
-                return ERR_OK;
-            }
-            if (subscribeDeathRecipient_ != nullptr) {
-                eventListener->RemoveDeathRecipient(subscribeDeathRecipient_);
-            }
-            (*it)->eventListener_ = nullptr;
-            subscribeRecords_.erase(it);
-            return ERR_OK;
-        }
+    auto it = subscribeRecords_.find(callingPid);
+    if (it == subscribeRecords_.end() || it->second->eventListener_ != eventListener) {
+        ACCOUNT_LOGE("Unsubscribe failed, subscribe record not found, callingPid=%{public}d.", callingPid);
+        return ERR_OHOSACCOUNT_KIT_NO_SPECIFIED_CALLBACK_HAS_BEEN_REGISTERED;
     }
-    ACCOUNT_LOGE("Unsubscribe failed, subscribe record not find.");
-    return ERR_OHOSACCOUNT_KIT_NO_SPECIFIED_CALLBACK_HAS_BEEN_REGISTERED;
+    it->second->types_.erase(type);
+    if (!it->second->types_.empty()) {
+        return ERR_OK;
+    }
+    if (subscribeDeathRecipient_ != nullptr) {
+        eventListener->RemoveDeathRecipient(subscribeDeathRecipient_);
+    }
+    subscribeRecords_.erase(it);
+    return ERR_OK;
 }
 
 ErrCode DistributedAccountSubscribeManager::UnsubscribeDistributedAccountEvent(
@@ -125,12 +129,18 @@ ErrCode DistributedAccountSubscribeManager::UnsubscribeDistributedAccountEvent(
     if (subscribeDeathRecipient_ != nullptr) {
         eventListener->RemoveDeathRecipient(subscribeDeathRecipient_);
     }
+    bool found = false;
     for (auto it = subscribeRecords_.begin(); it != subscribeRecords_.end(); ++it) {
-        if (eventListener == (*it)->eventListener_) {
-            (*it)->eventListener_ = nullptr;
+        if (eventListener == it->second->eventListener_) {
             subscribeRecords_.erase(it);
+            found = true;
             break;
         }
+    }
+    if (found) {
+        ACCOUNT_LOGI("Unsubscribe by death recipient, record erased.");
+    } else {
+        ACCOUNT_LOGI("Unsubscribe by death recipient, no matching record.");
     }
     return ERR_OK;
 }
@@ -206,8 +216,8 @@ ErrCode DistributedAccountSubscribeManager::Publish(const int id, DISTRIBUTED_AC
     std::lock_guard<std::mutex> lock(subscribeRecordMutex_);
     uint32_t sendCnt = 0;
     for (auto it = subscribeRecords_.begin(); it != subscribeRecords_.end(); ++it) {
-        if ((*it)->types_.find(subscribeType) != (*it)->types_.end()) {
-            auto eventProxy = iface_cast<IDistributedAccountEvent>((*it)->eventListener_);
+        if (it->second->types_.find(subscribeType) != it->second->types_.end()) {
+            auto eventProxy = iface_cast<IDistributedAccountEvent>(it->second->eventListener_);
             if (eventProxy == nullptr) {
                 ACCOUNT_LOGE("Get eventProxy failed");
                 continue;
@@ -219,8 +229,13 @@ ErrCode DistributedAccountSubscribeManager::Publish(const int id, DISTRIBUTED_AC
             ++sendCnt;
         }
     }
-    ACCOUNT_LOGI("Publish DistributedAccountEvent %{public}d succeed, id=%{public}d, sendCnt=%{public}u.",
-        subscribeType, id, sendCnt);
+    if (sendCnt == 0) {
+        ACCOUNT_LOGW("Publish DistributedAccountEvent %{public}d no subscriber dispatched, id=%{public}d.",
+            subscribeType, id);
+    } else {
+        ACCOUNT_LOGI("Publish DistributedAccountEvent %{public}d succeed, id=%{public}d, sendCnt=%{public}u.",
+            subscribeType, id, sendCnt);
+    }
     return ERR_OK;
 }
 }  // namespace AccountSA

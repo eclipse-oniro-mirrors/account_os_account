@@ -41,12 +41,11 @@ private:
     DISALLOW_COPY_AND_MOVE(DistributedAccountSubscribeManager);
     bool OnAccountsChanged(const sptr<IDistributedAccountEvent> &eventProxy,
         const int id, DISTRIBUTED_ACCOUNT_SUBSCRIBE_TYPE subscribeType, const int32_t subProfileId);
-    DistributedSubscribeRecordPtr FindSubscribeRecordByEventListener(const sptr<IRemoteObject> &eventListener);
 
 private:
     sptr<IRemoteObject::DeathRecipient> subscribeDeathRecipient_;
     std::mutex subscribeRecordMutex_;
-    std::vector<DistributedSubscribeRecordPtr> subscribeRecords_;
+    std::map<int32_t, DistributedSubscribeRecordPtr> subscribeRecords_;
 };
 }  // namespace AccountSA
 }  // namespace OHOS
