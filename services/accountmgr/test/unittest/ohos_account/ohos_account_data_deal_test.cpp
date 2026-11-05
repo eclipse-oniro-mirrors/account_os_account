@@ -36,7 +36,71 @@ const std::string TEST_STR_ACCOUNT_NAME = "incubation";
 const std::string TEST_STR_OPEN_ID = "test open id";
 const std::int32_t TEST_VALID_USER_ID = 100;
 const std::int32_t TEST_INVALID_USER_ID = 200;
+
+ErrCode g_mockDeleteRet = ERR_OK;
+bool g_mockDeleteEnabled = false;
+ErrCode g_mockGetContentRet = ERR_OK;
+bool g_mockGetContentEnabled = false;
+std::string g_mockGetContentStr;
 }
+
+namespace OHOS {
+namespace AccountSA {
+void SetMockDeleteFileResult(ErrCode ret)
+{
+    g_mockDeleteRet = ret;
+    g_mockDeleteEnabled = true;
+}
+
+void SetMockGetContentResult(ErrCode ret, const std::string &content)
+{
+    g_mockGetContentRet = ret;
+    g_mockGetContentStr = content;
+    g_mockGetContentEnabled = true;
+}
+
+void ResetMockAccountFileOperator()
+{
+    g_mockDeleteEnabled = false;
+    g_mockGetContentEnabled = false;
+}
+
+ErrCode AccountFileOperator::DeleteFile(const std::string &path)
+{
+    if (g_mockDeleteEnabled) {
+        g_mockDeleteEnabled = false;
+        return g_mockDeleteRet;
+    }
+    std::unique_lock<std::shared_timed_mutex> lock(fileLock_);
+    if (!OHOS::RemoveFile(path)) {
+        return ERR_OSACCOUNT_SERVICE_FILE_DELE_ERROR;
+    }
+#ifdef ENABLE_FILE_WATCHER
+    SetValidDeleteFileOperationFlag(path, true);
+#endif
+    return ERR_OK;
+}
+
+ErrCode AccountFileOperator::GetFileContentByPath(const std::string &path, std::string &content)
+{
+    if (g_mockGetContentEnabled) {
+        g_mockGetContentEnabled = false;
+        content = g_mockGetContentStr;
+        return g_mockGetContentRet;
+    }
+    if (!IsExistFile(path)) {
+        return ERR_OSACCOUNT_SERVICE_FILE_FIND_FILE_ERROR;
+    }
+    std::shared_lock<std::shared_timed_mutex> lock(fileLock_);
+    std::ifstream fin(path);
+    if (!fin) {
+        return ERR_ACCOUNT_COMMON_FILE_OPEN_FAILED;
+    }
+    content.assign((std::istreambuf_iterator<char>(fin)), std::istreambuf_iterator<char>());
+    return ERR_OK;
+}
+} // namespace AccountSA
+} // namespace OHOS
 
 class OhosAccountDataDealTest : public testing::Test {
 public:
@@ -65,6 +129,7 @@ void OhosAccountDataDealTest::SetUp(void) __attribute__((no_sanitize("cfi")))
 
 void OhosAccountDataDealTest::TearDown()
 {
+    ResetMockAccountFileOperator();
 }
 
 /**
@@ -316,6 +381,11 @@ HWTEST_F(OhosAccountDataDealTest, OversizedOhosAccountJsonBoundaryTest002, TestS
     EXPECT_EQ(errCode, ERR_OK);
     EXPECT_TRUE(dataDeal.initOk_);
 
+#ifdef ENABLE_FILE_WATCHER
+    EXPECT_TRUE(dataDeal.accountFileOperator_->GetValidDeleteFileOperationFlag(testFile));
+    dataDeal.accountFileOperator_->SetValidDeleteFileOperationFlag(testFile, false);
+#endif // ENABLE_FILE_WATCHER
+
     OHOS::ForceRemoveDirectory(testDir);
 }
 
@@ -353,4 +423,175 @@ HWTEST_F(OhosAccountDataDealTest, OversizedOhosAccountJsonTest002, TestSize.Leve
     EXPECT_EQ(accountInfo.ohosAccountInfo_.name_, DEFAULT_OHOS_ACCOUNT_NAME);
 
     OHOS::ForceRemoveDirectory(oversizedDir);
+}
+
+/**
+ * @tc.name: ParseJsonInvalidJsonTest001
+ * @tc.desc: Test ParseJsonFromFile with invalid (non-oversized) JSON content (branch F)
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OhosAccountDataDealTest, ParseJsonInvalidJsonTest001, TestSize.Level3)
+{
+    int32_t testUserId = 306;
+    std::string testDir = RESOURCE_ROOT_PATH + std::to_string(testUserId) + "/";
+    ASSERT_TRUE(OHOS::ForceCreateDirectory(testDir));
+    std::string testFile = testDir + "account.json";
+    std::ofstream fout(testFile, std::ios::binary);
+    ASSERT_TRUE(fout.is_open());
+    fout << "not_a_json";
+    fout.close();
+    OhosAccountDataDeal dataDeal(RESOURCE_ROOT_PATH);
+#ifdef ENABLE_FILE_WATCHER
+    dataDeal.checkCallbackFunc_ = nullptr;
+#endif // ENABLE_FILE_WATCHER
+    dataDeal.initOk_ = true;
+    AccountInfo accountInfo;
+    ErrCode errCode = dataDeal.AccountInfoFromJson(accountInfo, testUserId);
+    EXPECT_EQ(errCode, ERR_ACCOUNT_DATADEAL_JSON_FILE_CORRUPTION);
+    OHOS::ForceRemoveDirectory(testDir);
+}
+
+/**
+ * @tc.name: MockInitReadFailTest001
+ * @tc.desc: Test Init returns INPUT_FILE_ERROR when GetFileContentByPath fails (branch B)
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OhosAccountDataDealTest, MockInitReadFailTest001, TestSize.Level3)
+{
+    int32_t testUserId = 310;
+    std::string testDir = RESOURCE_ROOT_PATH + std::to_string(testUserId) + "/";
+    ASSERT_TRUE(OHOS::ForceCreateDirectory(testDir));
+    std::string testFile = testDir + "account.json";
+    std::ofstream fout(testFile, std::ios::binary);
+    ASSERT_TRUE(fout.is_open());
+    fout << "{}";
+    fout.close();
+    OhosAccountDataDeal dataDeal(RESOURCE_ROOT_PATH);
+#ifdef ENABLE_FILE_WATCHER
+    dataDeal.checkCallbackFunc_ = nullptr;
+#endif // ENABLE_FILE_WATCHER
+    SetMockGetContentResult(ERR_OSACCOUNT_SERVICE_FILE_FIND_FILE_ERROR, "");
+    ErrCode errCode = dataDeal.Init(testUserId);
+    EXPECT_EQ(errCode, ERR_ACCOUNT_DATADEAL_INPUT_FILE_ERROR);
+    ResetMockAccountFileOperator();
+    OHOS::ForceRemoveDirectory(testDir);
+}
+
+/**
+ * @tc.name: MockInitOversizedDeleteFailTest001
+ * @tc.desc: Test Init oversized path when DeleteFile fails (branch A)
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OhosAccountDataDealTest, MockInitOversizedDeleteFailTest001, TestSize.Level3)
+{
+    int32_t testUserId = 311;
+    std::string testDir = RESOURCE_ROOT_PATH + std::to_string(testUserId) + "/";
+    ASSERT_TRUE(OHOS::ForceCreateDirectory(testDir));
+    std::string testFile = testDir + "account.json";
+    std::ofstream fout(testFile, std::ios::binary);
+    ASSERT_TRUE(fout.is_open());
+    std::string garbage(16 * 1024 * 1024, 'x');
+    fout.write(garbage.data(), garbage.size());
+    fout.put('x');
+    fout.close();
+    OhosAccountDataDeal dataDeal(RESOURCE_ROOT_PATH);
+#ifdef ENABLE_FILE_WATCHER
+    dataDeal.checkCallbackFunc_ = nullptr;
+#endif // ENABLE_FILE_WATCHER
+    SetMockDeleteFileResult(ERR_OSACCOUNT_SERVICE_FILE_DELE_ERROR);
+    ErrCode errCode = dataDeal.Init(testUserId);
+    EXPECT_EQ(errCode, ERR_OK);
+    EXPECT_TRUE(dataDeal.initOk_);
+    ResetMockAccountFileOperator();
+    OHOS::ForceRemoveDirectory(testDir);
+}
+
+/**
+ * @tc.name: MockInitInvalidJsonDeleteFailTest001
+ * @tc.desc: Test Init invalid-JSON path when DeleteFile fails (branch C)
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OhosAccountDataDealTest, MockInitInvalidJsonDeleteFailTest001, TestSize.Level3)
+{
+    int32_t testUserId = 312;
+    std::string testDir = RESOURCE_ROOT_PATH + std::to_string(testUserId) + "/";
+    ASSERT_TRUE(OHOS::ForceCreateDirectory(testDir));
+    std::string testFile = testDir + "account.json";
+    std::ofstream fout(testFile, std::ios::binary);
+    ASSERT_TRUE(fout.is_open());
+    fout << "garbage";
+    fout.close();
+    OhosAccountDataDeal dataDeal(RESOURCE_ROOT_PATH);
+#ifdef ENABLE_FILE_WATCHER
+    dataDeal.checkCallbackFunc_ = nullptr;
+#endif // ENABLE_FILE_WATCHER
+    SetMockDeleteFileResult(ERR_OSACCOUNT_SERVICE_FILE_DELE_ERROR);
+    ErrCode errCode = dataDeal.Init(testUserId);
+    EXPECT_EQ(errCode, ERR_ACCOUNT_DATADEAL_JSON_FILE_CORRUPTION);
+    ResetMockAccountFileOperator();
+    OHOS::ForceRemoveDirectory(testDir);
+}
+
+/**
+ * @tc.name: MockParseJsonOversizedDeleteFailTest001
+ * @tc.desc: Test ParseJsonFromFile oversized path when DeleteFile fails (branch D)
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OhosAccountDataDealTest, MockParseJsonOversizedDeleteFailTest001, TestSize.Level3)
+{
+    int32_t testUserId = 313;
+    std::string testDir = RESOURCE_ROOT_PATH + std::to_string(testUserId) + "/";
+    ASSERT_TRUE(OHOS::ForceCreateDirectory(testDir));
+    std::string testFile = testDir + "account.json";
+    std::ofstream fout(testFile, std::ios::binary);
+    ASSERT_TRUE(fout.is_open());
+    std::string garbage(16 * 1024 * 1024, 'x');
+    fout.write(garbage.data(), garbage.size());
+    fout.put('x');
+    fout.close();
+    OhosAccountDataDeal dataDeal(RESOURCE_ROOT_PATH);
+#ifdef ENABLE_FILE_WATCHER
+    dataDeal.checkCallbackFunc_ = nullptr;
+#endif // ENABLE_FILE_WATCHER
+    dataDeal.initOk_ = true;
+    SetMockDeleteFileResult(ERR_OSACCOUNT_SERVICE_FILE_DELE_ERROR);
+    AccountInfo accountInfo;
+    ErrCode errCode = dataDeal.AccountInfoFromJson(accountInfo, testUserId);
+    EXPECT_EQ(errCode, ERR_ACCOUNT_DATADEAL_INPUT_FILE_ERROR);
+    ResetMockAccountFileOperator();
+    OHOS::ForceRemoveDirectory(testDir);
+}
+
+/**
+ * @tc.name: MockParseJsonReadFailTest001
+ * @tc.desc: Test ParseJsonFromFile when GetFileContentByPath fails (branch E)
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OhosAccountDataDealTest, MockParseJsonReadFailTest001, TestSize.Level3)
+{
+    int32_t testUserId = 314;
+    std::string testDir = RESOURCE_ROOT_PATH + std::to_string(testUserId) + "/";
+    ASSERT_TRUE(OHOS::ForceCreateDirectory(testDir));
+    std::string testFile = testDir + "account.json";
+    std::ofstream fout(testFile, std::ios::binary);
+    ASSERT_TRUE(fout.is_open());
+    fout << "{}";
+    fout.close();
+    OhosAccountDataDeal dataDeal(RESOURCE_ROOT_PATH);
+#ifdef ENABLE_FILE_WATCHER
+    dataDeal.checkCallbackFunc_ = nullptr;
+#endif // ENABLE_FILE_WATCHER
+    dataDeal.initOk_ = true;
+    SetMockGetContentResult(ERR_OSACCOUNT_SERVICE_FILE_FIND_FILE_ERROR, "");
+    AccountInfo accountInfo;
+    ErrCode errCode = dataDeal.AccountInfoFromJson(accountInfo, testUserId);
+    EXPECT_EQ(errCode, ERR_ACCOUNT_DATADEAL_INPUT_FILE_ERROR);
+    ResetMockAccountFileOperator();
+    OHOS::ForceRemoveDirectory(testDir);
 }
