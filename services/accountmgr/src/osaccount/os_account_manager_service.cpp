@@ -2355,21 +2355,6 @@ ErrCode OsAccountManagerService::GetForegroundOsAccountDisplayIds(const int32_t 
         ACCOUNT_LOGE("Account manager service, permission denied!");
         return ERR_ACCOUNT_COMMON_PERMISSION_DENIED;
     }
-    int32_t id = (localId == -1) ? (IPCSkeleton::GetCallingUid() / UID_TRANSFORM_DIVISOR) : localId;
-    if (id < Constants::ADMIN_LOCAL_ID) {
-        ACCOUNT_LOGE("LocalId %{public}d is invalid.", id);
-        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
-    }
-
-    bool isOsAccountExists = false;
-    ErrCode result = IsOsAccountExists(id, isOsAccountExists);
-    if (result != ERR_OK) {
-        return result;
-    }
-    if (!isOsAccountExists) {
-        ACCOUNT_LOGE("LocalId %{public}d not exist.", id);
-        return ERR_ACCOUNT_COMMON_ACCOUNT_NOT_EXIST_ERROR;
-    }
     return innerManager_.GetForegroundOsAccountDisplayIds(localId, displayIds);
 }
 

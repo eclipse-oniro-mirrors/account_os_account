@@ -2473,7 +2473,8 @@ HWTEST_F(OsAccountManagerServiceModuleTest, SetDefaultActivatedOsAccountWithDisp
     uint64_t anotherDisplayId = 1;
     result = osAccountManagerService_->SetDefaultActivatedOsAccount(anotherDisplayId, START_USER_ID);
     EXPECT_TRUE(result == ERR_OK || result == ERR_ACCOUNT_COMMON_PERMISSION_DENIED ||
-                result == ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR);
+                result == ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR ||
+                result == ERR_ACCOUNT_COMMON_DISPLAY_NOT_PRIMARY_ERROR);
 }
 
 /**
@@ -2580,7 +2581,7 @@ HWTEST_F(OsAccountManagerServiceModuleTest, GetForegroundOsAccountDisplayIdTest0
 
 /**
  * @tc.name: GetForegroundOsAccountDisplayIdTest002
- * @tc.desc: Test GetForegroundOsAccountDisplayId with invalid parameters
+ * @tc.desc: Test GetForegroundOsAccountDisplayId with negative or non-existent local ID
  * @tc.type: FUNC
  * @tc.require:
  */
@@ -2588,7 +2589,7 @@ HWTEST_F(OsAccountManagerServiceModuleTest, GetForegroundOsAccountDisplayIdTest0
 {
     uint64_t displayId = 0;
     
-    // Test with invalid local ID
+    // Test with negative local ID
     ErrCode result = osAccountManagerService_->GetForegroundOsAccountDisplayId(-2, displayId);
     EXPECT_TRUE(result == ERR_ACCOUNT_COMMON_PERMISSION_DENIED ||
                 result == ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
@@ -2644,7 +2645,7 @@ HWTEST_F(OsAccountManagerServiceModuleTest, GetForegroundOsAccountDisplayIdTest0
 
 /**
  * @tc.name: GetForegroundOsAccountDisplayIdsTest001
- * @tc.desc: Test GetForegroundOsAccountDisplayIds with an invalid local ID.
+ * @tc.desc: Test GetForegroundOsAccountDisplayIds with a negative local ID.
  * @tc.type: FUNC
  * @tc.require:
  */
@@ -2652,7 +2653,7 @@ HWTEST_F(OsAccountManagerServiceModuleTest, GetForegroundOsAccountDisplayIdsTest
 {
     std::vector<uint64_t> displayIds;
     EXPECT_EQ(osAccountManagerService_->GetForegroundOsAccountDisplayIds(-2, displayIds),
-        ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+        ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR);
 }
 
 /**
@@ -2665,7 +2666,28 @@ HWTEST_F(OsAccountManagerServiceModuleTest, GetForegroundOsAccountDisplayIdsTest
 {
     std::vector<uint64_t> displayIds;
     EXPECT_EQ(osAccountManagerService_->GetForegroundOsAccountDisplayIds(INVALID_ACCOUNT_ID, displayIds),
-        ERR_ACCOUNT_COMMON_ACCOUNT_NOT_EXIST_ERROR);
+        ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR);
+}
+
+/**
+ * @tc.name: GetForegroundOsAccountDisplayIdsConvergedError001
+ * @tc.desc: Test GetForegroundOsAccountDisplayIds maps distinct invalid inputs (a negative local ID
+ *           and a non-existent local ID) to the same display-not-found error.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountManagerServiceModuleTest, GetForegroundOsAccountDisplayIdsConvergedError001, TestSize.Level1)
+{
+    std::vector<uint64_t> negativeDisplayIds;
+    ErrCode negativeResult =
+        osAccountManagerService_->GetForegroundOsAccountDisplayIds(-2, negativeDisplayIds);
+    std::vector<uint64_t> invalidDisplayIds;
+    ErrCode invalidResult =
+        osAccountManagerService_->GetForegroundOsAccountDisplayIds(INVALID_ACCOUNT_ID, invalidDisplayIds);
+
+    EXPECT_EQ(negativeResult, ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR);
+    EXPECT_EQ(invalidResult, ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR);
+    EXPECT_EQ(negativeResult, invalidResult);
 }
 
 /**

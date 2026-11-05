@@ -86,6 +86,8 @@ const char OPERATION_MIGRATE_TYPE_TO_TEE[] = "migrateOSAccountTypeToTee";
 // Backup restore DFX flag
 const char OPERATION_BACKUP[] = "backup";
 const char OPERATION_RESTORE[] = "restore";
+const char OPERATION_RESTORE_FOREGROUND_ACCOUNT[] = "restoreForegroundAccount";
+const char OPERATION_GET_FOREGROUND_DISPLAY_IDS[] = "getForegroundDisplayIds";
 
 // Crash recovery
 const char RESTORE_BACKUP_DIR_PREFIX[] = ".";

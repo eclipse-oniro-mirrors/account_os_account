@@ -28,10 +28,7 @@ using namespace AccountSA;
 
 namespace {
 constexpr uint64_t UNKNOWN_DISPLAY_ID = 88888888ULL;
-constexpr uint64_t UNKNOWN_USER_ZONE_ID = 777;
 constexpr uint64_t SOME_DISPLAY_ID = 100;
-constexpr uint64_t SOME_USER_ZONE_ID = 200;
-constexpr uint64_t DEFAULT_USER_ZONE_ID = 0;
 
 // File reads are supplied by this test executable; the parser and retry state machine are real.
 ErrCode configReadResult = ERR_ACCOUNT_COMMON_FILE_READ_FAILED;
@@ -49,7 +46,6 @@ constexpr uint64_t DISPLAY_B_PHYSICAL_ID = 20;
 constexpr uint64_t DISPLAY_C_PHYSICAL_ID = 30;
 constexpr uint64_t USER_ZONE_ONE = DISPLAY_A_LOGICAL_ID;
 constexpr uint64_t USER_ZONE_TWO = DISPLAY_C_LOGICAL_ID;
-constexpr uint64_t STALE_LOGICAL_ID = 99999;
 const std::string DISPLAY_NAME_A = "display_a";
 const std::string DISPLAY_NAME_B = "display_b";
 const std::string DISPLAY_NAME_C = "display_c";
@@ -57,7 +53,6 @@ const std::string DISPLAY_NAME_C = "display_c";
 // Loop and display count constants
 constexpr int LOOP_COUNT = 3;
 constexpr size_t USER_ZONE_ONE_DISPLAY_COUNT = 2;
-constexpr size_t USER_ZONE_TWO_DISPLAY_COUNT = 1;
 }  // namespace
 
 ErrCode AccountFileOperator::GetFileContentByPath(const std::string &path, std::string &content)
@@ -116,11 +111,6 @@ void SetConfigLoadState(DisplayUserZoneConfigManager &mgr, bool readFailed, bool
 {
     mgr.configReadFailed_ = readFailed;
     mgr.configFormatError_ = formatError;
-}
-
-void SetUserZonePrimaryDisplay(DisplayUserZoneConfigManager &mgr, uint64_t userZone, uint64_t logicalId)
-{
-    mgr.userZonePrimaryMap_[userZone] = logicalId;
 }
 }  // namespace
 
@@ -233,6 +223,107 @@ HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerRetryForm
 }
 
 /**
+ * @tc.name: DisplayUserZoneConfigManagerTrimWhitespace001
+ * @tc.desc: Numeric leaf values carrying pretty-printing whitespace are trimmed before parsing,
+ *           so a hand-written config with padded values still loads.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerTrimWhitespace001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    SetConfigLoadState(mgr, true, false);
+    const std::string savedContent = configContent;
+    configReadResult = ERR_OK;
+    configContent =
+        "<Configs><displays><display><physicalId>\n\t10 \t</physicalId>"
+        "<logicalId> 100\r\n</logicalId><name>display_a</name>"
+        "<userZoneId>\r\n 10 \n</userZoneId></display></displays></Configs>";
+    bool isPrimary = false;
+    EXPECT_EQ(mgr.IsDisplayPrimary(DISPLAY_A_LOGICAL_ID, isPrimary), ERR_OK);
+    EXPECT_TRUE(isPrimary);
+    uint64_t primaryDisplayId = Constants::INVALID_DISPLAY_ID;
+    EXPECT_EQ(mgr.GetPrimaryDisplayId(DISPLAY_A_LOGICAL_ID, primaryDisplayId), ERR_OK);
+    EXPECT_EQ(primaryDisplayId, DISPLAY_A_LOGICAL_ID);
+    EXPECT_EQ(mgr.logicalIdMap_.size(), static_cast<size_t>(1));
+    configContent = savedContent;
+    TeardownConfig(mgr);
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerRealConfigParse001
+ * @tc.desc: Parse a factory-shaped display_manager_config.xml — pretty-printed XML with the
+ *           built-in display as a standalone user zone and expansion displays paired via
+ *           userZoneId — through the real file-read and libxml2 parse path, then verify the
+ *           derived user-zone layout through the public query APIs.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerRealConfigParse001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    // configReadFailed_ = true forces EnsureConfigReady through the real LoadConfigLocked path
+    // (file read + libxml2 parse), instead of skipping straight to the degraded empty-config view.
+    TeardownConfig(mgr);
+    SetConfigLoadState(mgr, true, false);
+    const std::string savedContent = configContent;
+    configReadResult = ERR_OK;
+    // Mirrors the shipped /system/etc/window/resources/display_manager_config.xml shape:
+    // pretty-printed XML, an XML declaration, a comment node, the built-in display standalone,
+    // and expansion displays grouped by a userZoneId referencing the head display's physicalId.
+    configContent =
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+        "<Configs>\n"
+        "    <displays>\n"
+        "        <!-- built-in display: no userZoneId, its own user zone primary -->\n"
+        "        <display>\n"
+        "            <physicalId>1</physicalId>\n"
+        "            <logicalId>0</logicalId>\n"
+        "            <name>built_in</name>\n"
+        "        </display>\n"
+        "        <!-- expansion zone: head display + passenger display -->\n"
+        "        <display>\n"
+        "            <physicalId>2</physicalId>\n"
+        "            <logicalId>100</logicalId>\n"
+        "            <name>head_unit</name>\n"
+        "        </display>\n"
+        "        <display>\n"
+        "            <physicalId>3</physicalId>\n"
+        "            <logicalId>200</logicalId>\n"
+        "            <name>passenger</name>\n"
+        "            <userZoneId>2</userZoneId>\n"
+        "        </display>\n"
+        "    </displays>\n"
+        "</Configs>\n";
+
+    bool isPrimary = false;
+    EXPECT_EQ(mgr.IsDisplayPrimary(Constants::DEFAULT_DISPLAY_ID, isPrimary), ERR_OK);
+    EXPECT_TRUE(isPrimary);
+    EXPECT_EQ(mgr.IsDisplayPrimary(DISPLAY_A_LOGICAL_ID, isPrimary), ERR_OK);
+    EXPECT_TRUE(isPrimary);
+    EXPECT_EQ(mgr.IsDisplayPrimary(DISPLAY_B_LOGICAL_ID, isPrimary), ERR_OK);
+    EXPECT_FALSE(isPrimary);
+
+    uint64_t primaryDisplayId = Constants::INVALID_DISPLAY_ID;
+    EXPECT_EQ(mgr.GetPrimaryDisplayId(DISPLAY_B_LOGICAL_ID, primaryDisplayId), ERR_OK);
+    EXPECT_EQ(primaryDisplayId, DISPLAY_A_LOGICAL_ID);
+    EXPECT_EQ(mgr.GetPrimaryDisplayId(DISPLAY_A_LOGICAL_ID, primaryDisplayId), ERR_OK);
+    EXPECT_EQ(primaryDisplayId, DISPLAY_A_LOGICAL_ID);
+
+    std::vector<uint64_t> displayIds;
+    EXPECT_EQ(mgr.GetDisplayIdsByLogicalId(DISPLAY_B_LOGICAL_ID, displayIds), ERR_OK);
+    ASSERT_EQ(displayIds.size(), USER_ZONE_ONE_DISPLAY_COUNT);
+    EXPECT_EQ(displayIds[0], DISPLAY_A_LOGICAL_ID);
+    EXPECT_EQ(displayIds[1], DISPLAY_B_LOGICAL_ID);
+    EXPECT_EQ(mgr.GetDisplayIdsByLogicalId(Constants::DEFAULT_DISPLAY_ID, displayIds), ERR_OK);
+    ASSERT_EQ(displayIds.size(), 1u);
+    EXPECT_EQ(displayIds[0], Constants::DEFAULT_DISPLAY_ID);
+
+    configContent = savedContent;
+    TeardownConfig(mgr);
+}
+
+/**
  * @tc.name: DisplayUserZoneConfigManagerPrimaryDisplay001
  * @tc.desc: Verify primary-display resolution owns configuration readiness and preserves standalone fallback.
  * @tc.type: FUNC
@@ -247,6 +338,25 @@ HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerPrimaryDi
     EXPECT_EQ(primaryDisplayId, DISPLAY_A_LOGICAL_ID);
     EXPECT_EQ(mgr.GetPrimaryDisplayId(UNKNOWN_DISPLAY_ID, primaryDisplayId), ERR_OK);
     EXPECT_EQ(primaryDisplayId, UNKNOWN_DISPLAY_ID);
+    TeardownConfig(mgr);
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerPrimaryDisplayNotFound001
+ * @tc.desc: Verify GetPrimaryDisplayId reports DISPLAY_ID_NOT_EXIST when the config is loaded
+ *           but a known display's user zone has no resolvable primary display.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerPrimaryDisplayNotFound001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    SetupLoadedConfig(mgr);
+    // A known secondary display (user zone one) loses its primary mapping.
+    mgr.userZonePrimaryMap_.erase(USER_ZONE_ONE);
+    uint64_t primaryDisplayId = Constants::INVALID_DISPLAY_ID;
+    EXPECT_EQ(mgr.GetPrimaryDisplayId(DISPLAY_B_LOGICAL_ID, primaryDisplayId),
+        ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR);
     TeardownConfig(mgr);
 }
 
@@ -272,66 +382,6 @@ HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerDisplayId
 }
 
 /**
- * @tc.name: DisplayUserZoneConfigManagerFallback002
- * @tc.desc: Verify HasDisplayByLogicalId returns false for any display id in fallback mode.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerFallback002, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    EXPECT_FALSE(mgr.HasDisplayByLogicalId(Constants::DEFAULT_DISPLAY_ID));
-    EXPECT_FALSE(mgr.HasDisplayByLogicalId(SOME_DISPLAY_ID));
-    EXPECT_FALSE(mgr.HasDisplayByLogicalId(UNKNOWN_DISPLAY_ID));
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerFallback004
- * @tc.desc: Verify GetUserZonePrimaryDisplay returns nullptr for any group id in fallback mode.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerFallback004, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    uint64_t primaryDisplayId = 0;
-    EXPECT_FALSE(mgr.GetUserZonePrimaryDisplayId(DEFAULT_USER_ZONE_ID, primaryDisplayId));
-    EXPECT_FALSE(mgr.GetUserZonePrimaryDisplayId(SOME_USER_ZONE_ID, primaryDisplayId));
-    EXPECT_FALSE(mgr.GetUserZonePrimaryDisplayId(UNKNOWN_USER_ZONE_ID, primaryDisplayId));
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerFallback005
- * @tc.desc: Verify GetDisplayIdsByUserZone returns an empty vector for any group id in fallback mode.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerFallback005, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    auto result = mgr.GetDisplayIdsByUserZone(DEFAULT_USER_ZONE_ID);
-    EXPECT_TRUE(result.empty());
-    result = mgr.GetDisplayIdsByUserZone(SOME_USER_ZONE_ID);
-    EXPECT_TRUE(result.empty());
-    result = mgr.GetDisplayIdsByUserZone(UNKNOWN_USER_ZONE_ID);
-    EXPECT_TRUE(result.empty());
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerFallback006
- * @tc.desc: Verify GetUserZoneByLogicalId treats every display as an independent group in fallback mode.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerFallback006, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    EXPECT_EQ(mgr.GetUserZoneByLogicalId(Constants::DEFAULT_DISPLAY_ID), Constants::DEFAULT_DISPLAY_ID);
-    EXPECT_EQ(mgr.GetUserZoneByLogicalId(SOME_DISPLAY_ID), SOME_DISPLAY_ID);
-    EXPECT_EQ(mgr.GetUserZoneByLogicalId(UNKNOWN_DISPLAY_ID), UNKNOWN_DISPLAY_ID);
-}
-
-/**
  * @tc.name: DisplayUserZoneConfigManagerFallbackConsistency001
  * @tc.desc: Verify repeated queries return consistent fallback results (no state mutation between calls).
  * @tc.type: FUNC
@@ -342,15 +392,11 @@ HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerFallbackC
     auto &mgr = DisplayUserZoneConfigManager::GetInstance();
     bool primaryFirst = false;
     EXPECT_EQ(mgr.IsDisplayPrimary(SOME_DISPLAY_ID, primaryFirst), ERR_OK);
-    uint64_t userZoneFirst = mgr.GetUserZoneByLogicalId(SOME_DISPLAY_ID);
 
     for (int i = 0; i < LOOP_COUNT; ++i) {
         bool isPrimary = false;
         EXPECT_EQ(mgr.IsDisplayPrimary(SOME_DISPLAY_ID, isPrimary), ERR_OK);
         EXPECT_EQ(isPrimary, primaryFirst);
-        EXPECT_EQ(mgr.GetUserZoneByLogicalId(SOME_DISPLAY_ID), userZoneFirst);
-        EXPECT_FALSE(mgr.HasDisplayByLogicalId(SOME_DISPLAY_ID));
-        EXPECT_TRUE(mgr.GetDisplayIdsByUserZone(SOME_USER_ZONE_ID).empty());
     }
 }
 
@@ -372,77 +418,6 @@ HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerLoaded001
     EXPECT_FALSE(isPrimary);
     EXPECT_EQ(mgr.IsDisplayPrimary(UNKNOWN_DISPLAY_ID, isPrimary), ERR_OK);
     EXPECT_TRUE(isPrimary);
-    TeardownConfig(mgr);
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerLoaded002
- * @tc.desc: Verify HasDisplayByLogicalId returns true for known displays and false for unknown displays.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerLoaded002, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    SetupLoadedConfig(mgr);
-    EXPECT_TRUE(mgr.HasDisplayByLogicalId(DISPLAY_A_LOGICAL_ID));
-    EXPECT_FALSE(mgr.HasDisplayByLogicalId(UNKNOWN_DISPLAY_ID));
-    TeardownConfig(mgr);
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerLoaded004
- * @tc.desc: Verify GetUserZonePrimaryDisplayId returns the primary for known groups and false when unavailable.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerLoaded004, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    SetupLoadedConfig(mgr);
-    uint64_t primaryDisplayId = 0;
-    EXPECT_TRUE(mgr.GetUserZonePrimaryDisplayId(USER_ZONE_ONE, primaryDisplayId));
-    EXPECT_EQ(primaryDisplayId, DISPLAY_A_LOGICAL_ID);
-    EXPECT_FALSE(mgr.GetUserZonePrimaryDisplayId(UNKNOWN_USER_ZONE_ID, primaryDisplayId));
-    // Simulate stale userZonePrimaryMap_ entry pointing to a logicalId not in logicalIdMap_.
-    SetUserZonePrimaryDisplay(mgr, USER_ZONE_ONE, STALE_LOGICAL_ID);
-    EXPECT_FALSE(mgr.GetUserZonePrimaryDisplayId(USER_ZONE_ONE, primaryDisplayId));
-    TeardownConfig(mgr);
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerLoaded005
- * @tc.desc: Verify GetDisplayIdsByUserZone returns all display ids for known groups and empty for unknown groups.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerLoaded005, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    SetupLoadedConfig(mgr);
-    auto result = mgr.GetDisplayIdsByUserZone(USER_ZONE_ONE);
-    EXPECT_EQ(result.size(), USER_ZONE_ONE_DISPLAY_COUNT);
-    result = mgr.GetDisplayIdsByUserZone(USER_ZONE_TWO);
-    EXPECT_EQ(result.size(), USER_ZONE_TWO_DISPLAY_COUNT);
-    result = mgr.GetDisplayIdsByUserZone(UNKNOWN_USER_ZONE_ID);
-    EXPECT_TRUE(result.empty());
-    TeardownConfig(mgr);
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerLoaded006
- * @tc.desc: Verify GetUserZoneByLogicalId returns the configured group for known displays and an independent group
- *           for an unknown display.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerLoaded006, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    SetupLoadedConfig(mgr);
-    EXPECT_EQ(mgr.GetUserZoneByLogicalId(DISPLAY_A_LOGICAL_ID), USER_ZONE_ONE);
-    EXPECT_EQ(mgr.GetUserZoneByLogicalId(DISPLAY_C_LOGICAL_ID), USER_ZONE_TWO);
-    EXPECT_EQ(mgr.GetUserZoneByLogicalId(UNKNOWN_DISPLAY_ID), UNKNOWN_DISPLAY_ID);
     TeardownConfig(mgr);
 }
 
@@ -476,8 +451,6 @@ HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseConf
         "</Configs>";
     ErrCode ret = mgr.ParseDisplayConfig(validXml);
     EXPECT_EQ(ret, ERR_OK);
-    EXPECT_EQ(mgr.GetUserZoneByLogicalId(DISPLAY_A_LOGICAL_ID), USER_ZONE_ONE);
-    EXPECT_EQ(mgr.GetUserZoneByLogicalId(DISPLAY_B_LOGICAL_ID), USER_ZONE_ONE);
     bool isPrimary = false;
     EXPECT_EQ(mgr.IsDisplayPrimary(DISPLAY_A_LOGICAL_ID, isPrimary), ERR_OK);
     EXPECT_TRUE(isPrimary);
@@ -643,15 +616,10 @@ HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseConf
         "</Configs>";
     ErrCode ret = mgr.ParseDisplayConfig(standaloneXml);
     EXPECT_EQ(ret, ERR_OK);
-    EXPECT_TRUE(mgr.HasDisplayByLogicalId(DISPLAY_A_LOGICAL_ID));
-    EXPECT_TRUE(mgr.HasDisplayByLogicalId(DISPLAY_C_LOGICAL_ID));
-    EXPECT_EQ(mgr.GetUserZoneByLogicalId(DISPLAY_A_LOGICAL_ID), DISPLAY_A_LOGICAL_ID);
-    uint64_t primaryDisplayId = 0;
-    EXPECT_TRUE(mgr.GetUserZonePrimaryDisplayId(DISPLAY_A_LOGICAL_ID, primaryDisplayId));
-    EXPECT_EQ(primaryDisplayId, DISPLAY_A_LOGICAL_ID);
-    auto userZoneDisplays = mgr.GetDisplayIdsByUserZone(DISPLAY_C_LOGICAL_ID);
-    ASSERT_EQ(userZoneDisplays.size(), 1u);
-    EXPECT_EQ(userZoneDisplays[0], DISPLAY_C_LOGICAL_ID);
+    EXPECT_EQ(mgr.logicalIdMap_.size(), 2u);
+    EXPECT_EQ(mgr.logicalIdMap_[DISPLAY_A_LOGICAL_ID].userZone, DISPLAY_A_LOGICAL_ID);
+    EXPECT_EQ(mgr.userZonePrimaryMap_[DISPLAY_A_LOGICAL_ID], DISPLAY_A_LOGICAL_ID);
+    EXPECT_EQ(mgr.userZoneMap_[DISPLAY_C_LOGICAL_ID].size(), 1u);
     TeardownConfig(mgr);
 }
 
@@ -667,12 +635,12 @@ HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseConf
     std::string missingPhysicalIdXml =
         "<Configs><displays><display><logicalId>100</logicalId></display></displays></Configs>";
     EXPECT_EQ(mgr.ParseDisplayConfig(missingPhysicalIdXml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    EXPECT_FALSE(mgr.HasDisplayByLogicalId(DISPLAY_A_LOGICAL_ID));
+    EXPECT_TRUE(mgr.logicalIdMap_.empty());
 
     std::string missingLogicalIdXml =
         "<Configs><displays><display><physicalId>10</physicalId></display></displays></Configs>";
     EXPECT_EQ(mgr.ParseDisplayConfig(missingLogicalIdXml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    EXPECT_FALSE(mgr.HasDisplayByLogicalId(DISPLAY_A_LOGICAL_ID));
+    EXPECT_TRUE(mgr.logicalIdMap_.empty());
     TeardownConfig(mgr);
 }
 
@@ -689,13 +657,13 @@ HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseConf
         "<Configs><displays><display><physicalId>10</physicalId><physicalId>11</physicalId>"
         "<logicalId>100</logicalId></display></displays></Configs>";
     EXPECT_EQ(mgr.ParseDisplayConfig(duplicatePhysicalIdXml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    EXPECT_FALSE(mgr.HasDisplayByLogicalId(DISPLAY_A_LOGICAL_ID));
+    EXPECT_TRUE(mgr.logicalIdMap_.empty());
 
     std::string duplicateLogicalIdXml =
         "<Configs><displays><display><physicalId>10</physicalId><logicalId>100</logicalId>"
         "<logicalId>101</logicalId></display></displays></Configs>";
     EXPECT_EQ(mgr.ParseDisplayConfig(duplicateLogicalIdXml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    EXPECT_FALSE(mgr.HasDisplayByLogicalId(DISPLAY_A_LOGICAL_ID));
+    EXPECT_TRUE(mgr.logicalIdMap_.empty());
     TeardownConfig(mgr);
 }
 

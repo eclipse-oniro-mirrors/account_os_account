@@ -117,9 +117,6 @@ private:
     bool IsDefaultOsAccountVerified();
     void GetUncreatedInitAccounts(std::set<int32_t> &initAccounts);
     void ActivateDefaultOsAccountAndRestore();
-#ifdef ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
-    void RetryForegroundAccountsRestore(std::map<uint64_t, int32_t> &pendingAccounts);
-#endif // ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
     ErrCode GetOsAccountDistributedInfoInner(int32_t localId, OhosAccountInfo &info);
     bool HasAccountRequestPermission(const std::string &permissionName);
     int32_t CheckUserIdValid(int32_t userId);

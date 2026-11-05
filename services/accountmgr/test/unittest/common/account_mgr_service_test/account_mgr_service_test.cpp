@@ -15,8 +15,6 @@
 
 #include <gtest/gtest.h>
 
-#include <chrono>
-
 #include "account_info.h"
 #include "account_log_wrapper.h"
 #include "account_test_common.h"
@@ -421,6 +419,27 @@ HWTEST_F(AccountMgrServiceTest, AccountMgrServiceDump001, TestSize.Level2)
 }
 
 #ifdef ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
+namespace {
+// Restores "bootevent.account.ready" on scope exit, including ASSERT early returns,
+// so mutating this global parameter cannot leak into later test cases of the process.
+class BootEventReadyGuard {
+public:
+    explicit BootEventReadyGuard(const char *value)
+    {
+        GetParameter("bootevent.account.ready", "false", oldValue_, sizeof(oldValue_));
+        SetParameter("bootevent.account.ready", value);
+    }
+
+    ~BootEventReadyGuard()
+    {
+        SetParameter("bootevent.account.ready", oldValue_);
+    }
+
+private:
+    char oldValue_[32] = {0};
+};
+} // namespace
+
 /**
  * @tc.name: ActivateDefaultOsAccountAndRestoreRestart001
  * @tc.desc: Test ActivateDefaultOsAccountAndRestore with bootevent.account.ready="true"
@@ -431,12 +450,10 @@ HWTEST_F(AccountMgrServiceTest, AccountMgrServiceDump001, TestSize.Level2)
 HWTEST_F(AccountMgrServiceTest, ActivateDefaultOsAccountAndRestoreRestart001, TestSize.Level2)
 {
     ASSERT_NE(g_accountMgrService, nullptr);
-    char oldBootValue[32] = {0};
-    GetParameter("bootevent.account.ready", "false", oldBootValue, sizeof(oldBootValue));
+    BootEventReadyGuard bootGuard("true");
     bool oldActivated = g_accountMgrService->isDefaultOsAccountActivated_;
     bool oldProcessRestart = g_accountMgrService->isProcessRestart_;
 
-    SetParameter("bootevent.account.ready", "true");
     g_accountMgrService->isDefaultOsAccountActivated_ = false;
     g_accountMgrService->isProcessRestart_ = true;
     g_accountMgrService->ActivateDefaultOsAccountAndRestore();
@@ -447,7 +464,6 @@ HWTEST_F(AccountMgrServiceTest, ActivateDefaultOsAccountAndRestoreRestart001, Te
     // Restore
     g_accountMgrService->isDefaultOsAccountActivated_ = oldActivated;
     g_accountMgrService->isProcessRestart_ = oldProcessRestart;
-    SetParameter("bootevent.account.ready", oldBootValue);
 }
 
 /**
@@ -491,94 +507,39 @@ HWTEST_F(AccountMgrServiceTest, ActivateDefaultOsAccountAndRestoreFail001, TestS
 }
 
 /**
- * @tc.name: RetryForegroundAccountsRestoreEmpty001
- * @tc.desc: An empty retry list must not recollect default accounts or perform an activation.
- * @tc.type: FUNC
- */
-HWTEST_F(AccountMgrServiceTest, RetryForegroundAccountsRestoreEmpty001, TestSize.Level2)
-{
-    ASSERT_NE(g_accountMgrService, nullptr);
-    auto &innerMgr = IInnerOsAccountManager::GetInstance();
-    constexpr uint64_t displayId = 900002;
-    constexpr int32_t accountId = Constants::MAX_USER_ID + 2;
-    int32_t oldId = Constants::INVALID_OS_ACCOUNT_ID;
-    const bool hadDefault = innerMgr.defaultActivatedIds_.Find(displayId, oldId);
-    innerMgr.defaultActivatedIds_.EnsureInsert(displayId, accountId);
-    ASSERT_TRUE(innerMgr.CheckAndAddLocalIdOperating(accountId));
-    std::map<uint64_t, int32_t> pendingAccounts;
-    g_accountMgrService->RetryForegroundAccountsRestore(pendingAccounts);
-    EXPECT_TRUE(pendingAccounts.empty());
-    innerMgr.RemoveLocalIdToOperating(accountId);
-    if (hadDefault) {
-        innerMgr.defaultActivatedIds_.EnsureInsert(displayId, oldId);
-    } else {
-        innerMgr.defaultActivatedIds_.Erase(displayId);
-    }
-}
-
-/**
- * @tc.name: RetryForegroundAccountsRestoreNonIpcFailure001
- * @tc.desc: A non-IPC activation failure remains pending after all three restore retries.
- * @tc.type: FUNC
- */
-HWTEST_F(AccountMgrServiceTest, RetryForegroundAccountsRestoreNonIpcFailure001, TestSize.Level2)
-{
-    ASSERT_NE(g_accountMgrService, nullptr);
-    auto &innerMgr = IInnerOsAccountManager::GetInstance();
-    constexpr uint64_t displayId = 900003;
-    constexpr int32_t accountId = Constants::MAX_USER_ID + 3;
-    int32_t oldId = Constants::INVALID_OS_ACCOUNT_ID;
-    const bool hadDefault = innerMgr.defaultActivatedIds_.Find(displayId, oldId);
-    innerMgr.defaultActivatedIds_.EnsureInsert(displayId, accountId);
-    std::map<uint64_t, int32_t> pendingAccounts = {{displayId, accountId}};
-    g_accountMgrService->RetryForegroundAccountsRestore(pendingAccounts);
-    EXPECT_EQ(pendingAccounts.count(displayId), 1U);
-    if (hadDefault) {
-        innerMgr.defaultActivatedIds_.EnsureInsert(displayId, oldId);
-    } else {
-        innerMgr.defaultActivatedIds_.Erase(displayId);
-    }
-}
-
-/**
- * @tc.name: RetryForegroundAccountsRestoreFailure001
- * @tc.desc: Verify the service performs all three retries for a busy account and leaves it pending.
+ * @tc.name: ActivateDefaultOsAccountAndRestoreForegroundFail001
+ * @tc.desc: Test ActivateDefaultOsAccountAndRestore still marks the default account activated
+ *           when foreground restore encounters a failing account.
  * @tc.type: FUNC
  * @tc.require:
  */
-HWTEST_F(AccountMgrServiceTest, RetryForegroundAccountsRestoreFailure001, TestSize.Level2)
+HWTEST_F(AccountMgrServiceTest, ActivateDefaultOsAccountAndRestoreForegroundFail001, TestSize.Level2)
 {
     ASSERT_NE(g_accountMgrService, nullptr);
     auto &innerMgr = IInnerOsAccountManager::GetInstance();
-    char oldBootValue[32] = {0};
-    GetParameter("bootevent.account.ready", "false", oldBootValue, sizeof(oldBootValue));
-    SetParameter("bootevent.account.ready", "true");
+    constexpr uint64_t nonDefaultDisplay = Constants::DEFAULT_DISPLAY_ID + 1;
+    constexpr int32_t invalidAccountId = Constants::MAX_USER_ID + 1;
 
-    constexpr uint64_t testDisplayId = 900001;
-    constexpr int32_t testAccountId = Constants::MAX_USER_ID + 1;
     int32_t oldDefaultId = Constants::INVALID_OS_ACCOUNT_ID;
-    const bool hadDefault = innerMgr.defaultActivatedIds_.Find(testDisplayId, oldDefaultId);
-    std::map<uint64_t, int32_t> pendingAccounts = {{testDisplayId, testAccountId}};
-    innerMgr.defaultActivatedIds_.EnsureInsert(testDisplayId, testAccountId);
-    ASSERT_TRUE(innerMgr.CheckAndAddLocalIdOperating(testAccountId));
+    const bool hadDefault = innerMgr.defaultActivatedIds_.Find(nonDefaultDisplay, oldDefaultId);
+    innerMgr.defaultActivatedIds_.EnsureInsert(nonDefaultDisplay, invalidAccountId);
 
-    const auto start = std::chrono::steady_clock::now();
-    g_accountMgrService->RetryForegroundAccountsRestore(pendingAccounts);
-    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - start);
+    bool oldActivated = g_accountMgrService->isDefaultOsAccountActivated_;
+    bool oldProcessRestart = g_accountMgrService->isProcessRestart_;
+    g_accountMgrService->isDefaultOsAccountActivated_ = false;
+    g_accountMgrService->isProcessRestart_ = true;
 
-    EXPECT_GE(elapsed.count(), 850);
-    auto pendingIt = pendingAccounts.find(testDisplayId);
-    EXPECT_NE(pendingIt, pendingAccounts.end());
-    if (pendingIt != pendingAccounts.end()) {
-        EXPECT_EQ(pendingIt->second, testAccountId);
-    }
-    innerMgr.RemoveLocalIdToOperating(testAccountId);
+    g_accountMgrService->ActivateDefaultOsAccountAndRestore();
+
+    EXPECT_TRUE(g_accountMgrService->isDefaultOsAccountActivated_);
+
     if (hadDefault) {
-        innerMgr.defaultActivatedIds_.EnsureInsert(testDisplayId, oldDefaultId);
+        innerMgr.defaultActivatedIds_.EnsureInsert(nonDefaultDisplay, oldDefaultId);
     } else {
-        innerMgr.defaultActivatedIds_.Erase(testDisplayId);
+        innerMgr.defaultActivatedIds_.Erase(nonDefaultDisplay);
     }
-    SetParameter("bootevent.account.ready", oldBootValue);
+    g_accountMgrService->isDefaultOsAccountActivated_ = oldActivated;
+    g_accountMgrService->isProcessRestart_ = oldProcessRestart;
 }
+
 #endif // ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
