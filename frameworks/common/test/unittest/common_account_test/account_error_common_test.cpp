@@ -259,3 +259,81 @@ HWTEST_F(AccountErrorCodeConvertTest, AccountErrorCodeConvertTest010, TestSize.L
     EXPECT_EQ(ConvertToJSErrCode(ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR),
         ERR_JS_FOREGROUND_OS_ACCOUNT_NOT_FOUND);
 }
+
+/**
+ * @tc.name: AccountErrorCodeConvertTest011
+ * @tc.desc: AccountIAMConvertToJSErrCode history pin match test
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AccountErrorCodeConvertTest, AccountErrorCodeConvertTest011, TestSize.Level3)
+{
+    EXPECT_EQ(AccountIAMConvertToJSErrCode(ERR_IAM_HISTORY_PIN_MATCH), ERR_JS_HISTORY_PIN_MATCH_FAILED);
+    EXPECT_NE(AccountIAMConvertToJSErrCode(ERR_IAM_HISTORY_PIN_MATCH), ERR_JS_SYSTEM_SERVICE_EXCEPTION);
+}
+
+/**
+ * @tc.name: AccountErrorCodeConvertTest012
+ * @tc.desc: ConvertToJsErrMsg history pin match error message test
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AccountErrorCodeConvertTest, AccountErrorCodeConvertTest012, TestSize.Level3)
+{
+    std::string errMsg = ConvertToJsErrMsg(ERR_JS_HISTORY_PIN_MATCH_FAILED);
+    EXPECT_EQ(errMsg,
+        "The credential has been used recently and cannot be reused. Suggested solutions: Use an unused credential.");
+    EXPECT_NE(errMsg, "Unknown error, please reboot your device and try again");
+}
+
+/**
+ * @tc.name: AccountErrorCodeConvertTest013
+ * @tc.desc: CheckJsErrorCode history pin match test
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AccountErrorCodeConvertTest, AccountErrorCodeConvertTest013, TestSize.Level3)
+{
+    EXPECT_TRUE(CheckJsErrorCode(ERR_JS_HISTORY_PIN_MATCH_FAILED));
+}
+
+/**
+ * @tc.name: AccountErrorCodeConvertTest014
+ * @tc.desc: History pin match JS error code value test
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AccountErrorCodeConvertTest, AccountErrorCodeConvertTest014, TestSize.Level3)
+{
+    EXPECT_EQ(ERR_JS_HISTORY_PIN_MATCH_FAILED, 12300121);
+    EXPECT_NE(ERR_JS_HISTORY_PIN_MATCH_FAILED, ERR_JS_SYSTEM_SERVICE_EXCEPTION);
+    EXPECT_NE(ERR_JS_HISTORY_PIN_MATCH_FAILED, ERR_JS_COMPLEXITY_CHECK_FAILED);
+    EXPECT_NE(ERR_JS_HISTORY_PIN_MATCH_FAILED, ERR_JS_PIN_IS_EXPIRED);
+    EXPECT_NE(ERR_JS_HISTORY_PIN_MATCH_FAILED, ERR_JS_SESSION_TIMEOUT);
+    EXPECT_NE(ERR_JS_HISTORY_PIN_MATCH_FAILED, ERR_JS_CREDENTIAL_NO_LONGER_VALID);
+}
+
+/**
+ * @tc.name: AccountErrorCodeConvertTest015
+ * @tc.desc: AccountIAMConvertToJSErrCode unknown error code fallback test
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AccountErrorCodeConvertTest, AccountErrorCodeConvertTest015, TestSize.Level3)
+{
+    EXPECT_EQ(AccountIAMConvertToJSErrCode(999999), ERR_JS_SYSTEM_SERVICE_EXCEPTION);
+}
+
+/**
+ * @tc.name: AccountErrorCodeConvertTest016
+ * @tc.desc: AccountIAMConvertToJSErrCode existing mapping regression test
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AccountErrorCodeConvertTest, AccountErrorCodeConvertTest016, TestSize.Level3)
+{
+    EXPECT_EQ(AccountIAMConvertToJSErrCode(ERR_IAM_COMPLEXITY_CHECK_FAILED), ERR_JS_COMPLEXITY_CHECK_FAILED);
+    EXPECT_EQ(AccountIAMConvertToJSErrCode(ERR_IAM_PIN_IS_EXPIRED), ERR_JS_PIN_IS_EXPIRED);
+    EXPECT_EQ(AccountIAMConvertToJSErrCode(ERR_IAM_SESSION_TIMEOUT), ERR_JS_SESSION_TIMEOUT);
+    EXPECT_EQ(AccountIAMConvertToJSErrCode(ERR_IAM_NO_VALID_CREDENTIAL), ERR_JS_CREDENTIAL_NO_LONGER_VALID);
+}

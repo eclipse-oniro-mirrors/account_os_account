@@ -75,6 +75,8 @@ static const std::unordered_map<uint32_t, std::string> g_errorStringMap = {
     {ERR_JS_COMPLEXITY_CHECK_FAILED, "The complexity of credential check failed"},
     {ERR_JS_PIN_IS_EXPIRED, "The PIN credential is expired"},
     {ERR_JS_CREDENTIAL_NO_LONGER_VALID, "The credentials are no longer valid"},
+    {ERR_JS_HISTORY_PIN_MATCH_FAILED,
+     "The credential has been used recently and cannot be reused. Suggested solutions: Use an unused credential."},
     {ERR_JS_DOMAIN_PLUGIN_ALREADY_REGISTERED, "The domain plugin is already registered"},
     {ERR_JS_SERVER_UNREACHABLE, "The server is unreachable"},
     {ERR_JS_SERVER_CONFIG_NOT_FOUND, "The server config not found"},
@@ -154,6 +156,7 @@ static const std::unordered_map<int32_t, int32_t> IAM_ERRCODE_MAP = {
     {ERR_IAM_CREDENTIAL_NUMBER_REACH_LIMIT, ERR_JS_CREDENTIAL_NUMBER_REACH_LIMIT},
     {ERR_IAM_SESSION_TIMEOUT, ERR_JS_SESSION_TIMEOUT},
     {ERR_IAM_NO_VALID_CREDENTIAL, ERR_JS_CREDENTIAL_NO_LONGER_VALID},
+    {ERR_IAM_HISTORY_PIN_MATCH, ERR_JS_HISTORY_PIN_MATCH_FAILED},
     {ERR_IAM_CHECK_SYSTEM_APP_FAILED, ERR_JS_IS_NOT_SYSTEM_APP}
 };
 
