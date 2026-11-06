@@ -33,12 +33,13 @@
 | Data consistency across callers | P12 | CE12 | Query/write/migration paths touching shared fields |
 | Callback not oneway | P13 | CE13 | callback IDL files / [oneway] / OnResult / OnAccountsChanged |
 | Unbounded wait on binder thread | P14 | CE14 | condition_variable::wait / wait_for / cv.wait |
+| Noisy log / HiSysEvent flood on hot path | P15 | CE15 | ACCOUNT_LOG* / HiSysEventWrite on frequently-called / data-query hot paths |
 
 ### Non-greppable information (unique value of AGENTS.md)
 The following information **cannot be obtained via code grep** and must be sourced from this file:
 - Constraint file names (base/global/specific_os_account_constraints.json) — the constant names are in os_account_constants.h, but "which is which" needs this file
 - DVID algorithm parameters (PBKDF2_HMAC-SHA256, iter=1000, keylen=32) — the GenerateDVID function body has them, but "this is DVID" needs this file
-- Pitfall mapping (which function has loop risk / slow-in-lock) — code does not self-label "I have risk"
+- Pitfall mapping (which function has loop risk / slow-in-lock, and which is a high-frequency/query hot path for P15) — code does not self-label "I have risk" or "I am called often"
 - EL2/EL3/EL4 level definitions — code has StorageManager calls but "EL2=user key / EL3=screen lock" needs this file
 - Standard call chain vs real code divergence (e.g. DVID is generated on the query path, not the login path) — code is readable but "the standard chain is wrong" needs this file
 
@@ -511,6 +512,40 @@ forbidden on binder threads.
 - Check for other unbounded blocking primitives on binder threads (`std::future::get`, `std::promise` unbounded wait, `pthread_join`, etc.).
 
 ⚠ **Common omissions**: ① thinking `wait(lock, pred)` with a predicate is bounded (it is actually unbounded) ② only matching the literal `wait(` and ignoring that `wait_for` with an unsatisfied predicate still returns correctly on timeout ③ not confirming `notify` covers all exception branches, so the waiter never gets notified ④ ignoring other unbounded primitives like `future::get`/`promise` on binder threads.
+
+**Pitfall 15 — Do NOT emit logs or HiSysEvent big-data reports on the normal branch of high-frequency or data-query interfaces; this is a CRITICAL (致命) issue.**
+High-frequency interfaces — i.e. any interface or functionality that is
+invoked frequently or queried often (hot paths hit per IPC, per query,
+per event, per-account-load, per-call state read, and other frequently-
+called / data-query paths) — are exercised far more often
+than lifecycle or state-change paths. If an `ACCOUNT_LOG*` statement or a
+`HiSysEventWrite` (especially a large-payload / big-data report) sits on
+the **normal / common / success branch** of such a path — rather than
+only on a genuine error or rare branch — it fires on every invocation,
+producing a flood of repetitive, low-value logs / events. This is
+classified as a **致命 (critical)** defect, not a style nit: a single log
+line looks harmless, but on a hot path it (1) churns the hilog ring
+buffer and evicts real fault logs before they can be captured; (2)
+consumes DFX event quota / HiSysEvent throughput with noise, masking
+genuine faults; (3) wastes CPU / IPC / storage on constant formatting
+and marshalling; (4) slows boot / OTA when the path runs during startup.
+The presence of such a log is itself the defect — removing it is a
+correct fix, not a loss of diagnostics.
+  Historical: "`ACCOUNT_LOGW("createTime not set in account.json for
+  userId=%{public}d, using default 0", userId)` fired on every load of
+  any `account.json` lacking `createTime` — on a multi-account device or
+  repeated loads this produced a steady stream of identical warnings with
+  no actionable value; removed as a P15 fix."
+
+**Code-level evidence checklist (CE15):**
+- For every `ACCOUNT_LOG*` / `HiSysEventWrite` added or under review, first classify the enclosing function: is it a high-frequency or data-query path (per-call query, per-IPC read, per-account-load, per-event loop)? If yes, the log/event must be **error/rare-branch only** — confirm it does NOT sit on the normal / success / common branch.
+- Confirm logs on hot paths are gated to genuine error / failure / rare branches (return-error path, exception path, state transition), never the success return.
+- If a diagnostic log is genuinely needed on a hot path, confirm it is behind a debug flag / higher log level that is off by default, or is rate-limited (once per N calls / once per transition), not per-call.
+- For `HiSysEventWrite`, confirm big-data (large-payload) reports are NOT on a per-query / per-call path — aggregate or report on state change only; per-call big-data exhausts the event pipeline.
+- When a noisy hot-path log is being *removed* (e.g. the `createTime` warning), recognize this as a P15 remediation, not a regression; do not require a replacement log.
+- Identify high-frequency / data-query interfaces by analyzing call frequency and call sites (not by a fixed function-name list), then trace every `ACCOUNT_LOG*` / `HiSysEventWrite` in them to confirm each call is on a rare / error branch, not the normal branch.
+
+⚠ **Common omissions**: ① judging a single log line in isolation ("it's just one warning") without checking the enclosing function's call frequency ② only checking error-code logs but missing `ACCOUNT_LOGI` / `ACCOUNT_LOGD` / `ACCOUNT_LOGW` on the success branch ③ adding a HiSysEvent big-data report per query without considering event-pipeline throughput ④ treating removal of a noisy hot-path log as a loss of diagnostics rather than a P15 fix ⑤ not distinguishing high-frequency query paths from low-frequency lifecycle paths before adding a log.
 
 ---
 
