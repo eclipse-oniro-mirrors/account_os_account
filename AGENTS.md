@@ -244,6 +244,12 @@ These changes carry high risk and must not be made autonomously:
 - **HiSysEvent definitions** (`dfx/hisysevent_adapter/`): do not change event
   names, param names, or domains — existing consumers and fault attribution
   depend on them.
+- **Inner API test coverage** (`interfaces/innerkits/`): do not add a new
+  interface — header declaration in `interfaces/innerkits/<type>/native/include/`
+  or a new IDL method — without adding a corresponding unit/module test case
+  (see §5.2/§5.3). An uncovered new interface drops the subsystem's interface
+  coverage rate; the change must not be committed until the matching test case
+  exists.
 
 ### 3.2 Ask before
 
@@ -607,12 +613,66 @@ Common products: `rk3568`, `hi3516`, `ohos-sdk`.
 | If you changed… | Also run / check |
 |----------------|-----------------|
 | `interfaces/kits/` (public API) | API-diff / compatibility check; confirm no signature or error-code change leaked into the SDK. **Escalate to user if any public surface changed.** |
-| `interfaces/innerkits/` (inner API) | Build all callers in the subsystem; grep for the changed signature across `services/` and `frameworks/` |
+| `interfaces/innerkits/` (inner API) | Build all callers in the subsystem; grep for the changed signature across `services/` and `frameworks/`; **a new interface must be accompanied by matching unit/module test cases (`*_test.cpp` / `*_moduletest.cpp`), or interface coverage drops** |
 | `services/accountmgr/src/*` (service logic) | Run the matching module test suite (see §5.3) |
 | `os_account.gni` (feature flag) | Full build with the flag both on and off |
 | `dfx/` (HiSysEvent) | Confirm event names/params unchanged; run `hidumper -s AccountMgrService` |
 | Anything in SA startup path | **Do not commit without user approval** (Pitfall 5) |
 | Locking / concurrency | Review lock hierarchy in nested AGENTS.md; check for new cross-lock calls |
+
+**Before adding any test case** (`*_test.cpp` / `*_moduletest.cpp`): first
+confirm whether the branch / scenario the new case intends to cover is already
+covered by an existing case. Do not blindly add redundant cases — grep the
+target function across the matching test suite and review existing assertions
+to avoid duplicate coverage; add a new case only when the target branch is
+genuinely uncovered.
+
+**Do not add invalid (no-value) test cases.** A test case must actually exercise
+the interface under test and assert an observable result that can fail if the
+implementation is wrong. The following are invalid and must not be submitted:
+
+- **Tautological assertion** — asserts a constant against itself,
+  passes regardless of the code under test:
+  ```cpp
+  EXPECT_EQ(ERR_OK, ERR_OK);   // always true, unrelated to the interface under test
+  EXPECT_TRUE(true);
+  ```
+- **Never calls the interface under test** — only sets up
+  data / logs, never invokes the function under test, then asserts a trivial
+  truth:
+  ```cpp
+  HWTEST_F(..., GetOsAccountName001, ...) {
+      EXPECT_TRUE(true);   // GetOsAccountLocalName never called; verifies nothing
+  }
+  ```
+- **Asserts self-assigned value, not result** — asserts
+  the value the test itself just assigned, not the return value / side effect
+  of the interface:
+  ```cpp
+  int id = 100;
+  EXPECT_EQ(id, 100);   // asserts a value the test assigned, unrelated to CreateOsAccount
+  ```
+- **No assertion** — invokes the interface but never checks return
+  value or observable state; a passing run proves nothing:
+  ```cpp
+  OsAccountManager::Dump(fd, args);   // called but no assertion -> cannot pass/fail
+  ```
+- **Asserts initial state, not operation result** —
+  asserts a freshly-constructed container / default value instead of the
+  result produced by the interface:
+  ```cpp
+  std::vector<OsAccountInfo> accounts;
+  EXPECT_EQ(accounts.size(), 0u);   // freshly constructed, always 0; no interface called
+  ```
+- **Copy-paste rename** — body identical to an existing case
+  with only the name changed; contributes zero new branch coverage (also
+  covered by the "check-before-add" rule above).
+- **Precondition false** — asserts a success code on an
+  input that the implementation cannot possibly succeed on, so the assertion
+  either always fails or is meaningless:
+  ```cpp
+  EXPECT_EQ(OsAccountManager::RemoveOsAccount(-999), ERR_OK);  // -999 does not exist
+  ```
 
 ### 5.3 Test commands
 
