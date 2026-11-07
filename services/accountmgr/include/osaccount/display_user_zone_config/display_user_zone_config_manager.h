@@ -24,6 +24,10 @@
 #include "account_error_no.h"
 #include "nocopyable.h"
 
+// Forward declaration of the libxml2 opaque node type so the private parse helpers
+// can take a node pointer without leaking the libxml2 headers into every translation unit.
+struct _xmlNode;
+
 namespace OHOS {
 namespace AccountSA {
 
@@ -32,10 +36,8 @@ struct DisplayConfigInfo {
     uint64_t logicalId = 0;
     std::string name;
     uint64_t userZone = 0;
-    uint64_t userZoneId = 0;
     bool hasPhysicalId = false;
     bool hasLogicalId = false;
-    bool hasUserZoneId = false;
 };
 
 class DisplayUserZoneConfigManager {
@@ -43,44 +45,52 @@ public:
     static DisplayUserZoneConfigManager &GetInstance();
 
     /**
-     * Read and parse the display user zone config XML file.
-     * @return ERR_OK on success; otherwise, the read or format error is recorded
-     *         and reported by a user-zone query before its result is consumed.
+     * Load the display user zone config XML file once. Repeated calls are no-ops
+     * after a successful load.
+     * @return ERR_OK on success; otherwise a read or format error. A failed load
+     *         leaves the manager uninitialized so the next user-zone query retries
+     *         the load before consuming any result.
      */
     ErrCode Init();
 
     /**
-     * Read failures are retried on every query; format errors are not retried.
+     * A failed load (read or format error) is retried on every query.
      * Whether the given logical display is the primary display of its user zone.
      * A display is primary when its logicalId equals its user zone id (i.e. it is
      * a standalone display or the primary that other secondary displays point to).
      * @param logicalDisplayId Logical display id.
-     * @param isPrimary Set to true if the display is primary, false if it is explicitly not primary.
+     * @param isPrimary Set to true if the display is primary, false if it is explicitly
+     *        not primary. Untouched when an error is returned.
      * @return ERR_OK on success; ERR_ACCOUNT_COMMON_FILE_READ_FAILED when the initial
      *         configuration read fails again on this query; ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR
-     *         when the configuration format is invalid.
+     *         when the configuration format is invalid; ERR_ACCOUNT_COMMON_DISPLAY_NOT_IN_CONFIG_ERROR
+     *         when the logical display is absent from the configuration.
      */
     ErrCode IsDisplayPrimary(uint64_t logicalDisplayId, bool &isPrimary);
 
     /**
      * Resolve a logical display to the primary display of its user zone.
-     * Displays absent from the configuration are treated as standalone.
      * @param logicalDisplayId Logical display id to resolve.
-     * @param primaryDisplayId Set to the corresponding primary display id.
+     * @param primaryDisplayId Set to the corresponding primary display id. Untouched
+     *        when an error is returned.
      * @return ERR_OK on success; ERR_ACCOUNT_COMMON_FILE_READ_FAILED after the
      *         read retry for this query fails; ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR
-     *         if the loaded configuration has an invalid format.
+     *         if the loaded configuration has an invalid format;
+     *         ERR_ACCOUNT_COMMON_DISPLAY_NOT_IN_CONFIG_ERROR when the logical display is
+     *         absent from the configuration.
      */
     ErrCode GetPrimaryDisplayId(uint64_t logicalDisplayId, uint64_t &primaryDisplayId);
 
     /**
      * Get all displays in the user zone containing the given logical display.
-     * A display absent from the configuration is returned as a standalone zone.
      * @param logicalDisplayId Logical display id to resolve.
-     * @param displayIds Set to the logical display ids in its user zone.
+     * @param displayIds Set to the logical display ids in its user zone. Cleared on
+     *        entry; stays empty when an error is returned.
      * @return ERR_OK on success; ERR_ACCOUNT_COMMON_FILE_READ_FAILED after the
      *         read retry for this query fails; ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR
-     *         if the loaded configuration has an invalid format.
+     *         if the loaded configuration has an invalid format;
+     *         ERR_ACCOUNT_COMMON_DISPLAY_NOT_IN_CONFIG_ERROR when the logical display is
+     *         absent from the configuration.
      */
     ErrCode GetDisplayIdsByLogicalId(uint64_t logicalDisplayId, std::vector<uint64_t> &displayIds);
 
@@ -90,15 +100,18 @@ private:
     DISALLOW_COPY_AND_MOVE(DisplayUserZoneConfigManager);
 
     ErrCode ParseDisplayConfig(const std::string &content);
-    ErrCode ParseDisplayNodes(void *root);
-    ErrCode CollectDisplayNodes(void *root, std::vector<DisplayConfigInfo> &displays,
-        std::map<uint64_t, uint64_t> &physicalToLogical);
+    ErrCode ParseDisplayNodes(_xmlNode *root);
+    ErrCode CollectDisplayNodes(_xmlNode *root, std::vector<DisplayConfigInfo> &displays,
+        std::map<uint64_t, uint64_t> &physicalToLogical,
+        std::map<uint64_t, uint64_t> &userZoneIdByLogicalId);
     ErrCode ResolveDisplayUserZones(const std::vector<DisplayConfigInfo> &displays,
-        const std::map<uint64_t, uint64_t> &physicalToLogical);
-    ErrCode ParseDisplayNodeAttributes(void *node, DisplayConfigInfo &info);
+        const std::map<uint64_t, uint64_t> &physicalToLogical,
+        const std::map<uint64_t, uint64_t> &userZoneIdByLogicalId);
+    ErrCode ParseDisplayNodeAttributes(_xmlNode *node, DisplayConfigInfo &info,
+        uint64_t &userZoneId, bool &hasUserZoneId);
     ErrCode FinalizeParsedConfig();
     ErrCode ValidateParsedConfig();
-    ErrCode LoadConfigLocked();
+    ErrCode ReadConfigContent(std::string &content);
     ErrCode EnsureConfigReady();
 
     void ClearParsedData();
@@ -108,9 +121,7 @@ private:
     mutable std::mutex mutex_;
     std::map<uint64_t, DisplayConfigInfo> logicalIdMap_;
     std::map<uint64_t, std::vector<uint64_t>> userZoneMap_;
-    std::map<uint64_t, uint64_t> userZonePrimaryMap_;
-    bool configReadFailed_ = false;
-    bool configFormatError_ = false;
+    bool initOk_ = false;
 };
 }  // namespace AccountSA
 }  // namespace OHOS

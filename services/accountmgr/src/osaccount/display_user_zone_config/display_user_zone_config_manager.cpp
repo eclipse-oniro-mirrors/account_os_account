@@ -30,6 +30,27 @@
 namespace OHOS {
 namespace AccountSA {
 
+namespace {
+std::string GetDisplayUserZoneConfigPath()
+{
+#ifdef ACCOUNT_TEST
+    // Tests compile this file with ACCOUNT_TEST and place a real XML file under the
+    // writable account test directory instead of the system configuration path.
+    return "/data/service/el1/public/account/test/display_manager_config.xml";
+#else
+    std::string configPath = "/system/" + Constants::DISPLAY_MANAGER_CONFIG_RELATIVE_PATH;
+#ifdef HAS_CONFIG_POLICY_PART
+    char buf[MAX_PATH_LEN] = {0};
+    char *path = GetOneCfgFile(Constants::DISPLAY_MANAGER_CONFIG_RELATIVE_PATH.c_str(), buf, MAX_PATH_LEN);
+    if (path != nullptr && *path != '\0') {
+        configPath = path;
+    }
+#endif // HAS_CONFIG_POLICY_PART
+    return configPath;
+#endif // ACCOUNT_TEST
+}
+} // namespace
+
 DisplayUserZoneConfigManager &DisplayUserZoneConfigManager::GetInstance()
 {
     static DisplayUserZoneConfigManager instance;
@@ -45,8 +66,7 @@ ErrCode DisplayUserZoneConfigManager::IsDisplayPrimary(uint64_t logicalDisplayId
     std::lock_guard<std::mutex> lock(mutex_);
     auto iter = logicalIdMap_.find(logicalDisplayId);
     if (iter == logicalIdMap_.end()) {
-        isPrimary = true;
-        return ERR_OK;
+        return ERR_ACCOUNT_COMMON_DISPLAY_NOT_IN_CONFIG_ERROR;
     }
     isPrimary = iter->second.logicalId == iter->second.userZone;
     return ERR_OK;
@@ -61,26 +81,9 @@ ErrCode DisplayUserZoneConfigManager::GetPrimaryDisplayId(uint64_t logicalDispla
     std::lock_guard<std::mutex> lock(mutex_);
     auto displayIter = logicalIdMap_.find(logicalDisplayId);
     if (displayIter == logicalIdMap_.end()) {
-        primaryDisplayId = logicalDisplayId;
-        return ERR_OK;
+        return ERR_ACCOUNT_COMMON_DISPLAY_NOT_IN_CONFIG_ERROR;
     }
-    auto primaryIter = userZonePrimaryMap_.find(displayIter->second.userZone);
-    if (primaryIter == userZonePrimaryMap_.end() ||
-        logicalIdMap_.find(primaryIter->second) == logicalIdMap_.end()) {
-        ACCOUNT_LOGE("GetPrimaryDisplayId found no primary display for %{public}llu "
-            "(userZone=%{public}llu)",
-            static_cast<unsigned long long>(logicalDisplayId),
-            static_cast<unsigned long long>(displayIter->second.userZone));
-        return ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR;
-    }
-    primaryDisplayId = primaryIter->second;
-    if (primaryDisplayId != logicalDisplayId) {
-        ACCOUNT_LOGI("GetPrimaryDisplayId returns primary %{public}llu for display %{public}llu "
-            "(userZone=%{public}llu)",
-            static_cast<unsigned long long>(primaryDisplayId),
-            static_cast<unsigned long long>(logicalDisplayId),
-            static_cast<unsigned long long>(displayIter->second.userZone));
-    }
+    primaryDisplayId = displayIter->second.userZone;
     return ERR_OK;
 }
 
@@ -95,85 +98,74 @@ ErrCode DisplayUserZoneConfigManager::GetDisplayIdsByLogicalId(uint64_t logicalD
     std::lock_guard<std::mutex> lock(mutex_);
     auto displayIter = logicalIdMap_.find(logicalDisplayId);
     if (displayIter == logicalIdMap_.end()) {
-        displayIds.emplace_back(logicalDisplayId);
-        return ERR_OK;
+        return ERR_ACCOUNT_COMMON_DISPLAY_NOT_IN_CONFIG_ERROR;
     }
     auto userZoneIter = userZoneMap_.find(displayIter->second.userZone);
     if (userZoneIter == userZoneMap_.end()) {
         return ERR_OK;
     }
-    for (uint64_t displayId : userZoneIter->second) {
-        auto userZoneDisplayIter = logicalIdMap_.find(displayId);
-        if (userZoneDisplayIter != logicalIdMap_.end()) {
-            displayIds.emplace_back(userZoneDisplayIter->second.logicalId);
-        }
-    }
+    displayIds = userZoneIter->second;
     return ERR_OK;
 }
 
 ErrCode DisplayUserZoneConfigManager::Init()
 {
-    std::lock_guard<std::mutex> lock(mutex_);
-    configReadFailed_ = false;
-    configFormatError_ = false;
-    return LoadConfigLocked();
+    return EnsureConfigReady();
 }
 
-ErrCode DisplayUserZoneConfigManager::LoadConfigLocked()
+ErrCode DisplayUserZoneConfigManager::ReadConfigContent(std::string &content)
 {
-    ClearParsedData();
-    configReadFailed_ = false;
-    configFormatError_ = false;
-    std::string configPath = "/system/" + Constants::DISPLAY_MANAGER_CONFIG_RELATIVE_PATH;
-    bool usePolicyPath = false;
-#ifdef HAS_CONFIG_POLICY_PART
-    char buf[MAX_PATH_LEN] = {0};
-    char *path = GetOneCfgFile(Constants::DISPLAY_MANAGER_CONFIG_RELATIVE_PATH.c_str(), buf, MAX_PATH_LEN);
-    if (path != nullptr && *path != '\0') {
-        configPath = path;
-        usePolicyPath = true;
-    }
-#endif
-    ACCOUNT_LOGI("Loading display user zone config from %{public}s path",
-        usePolicyPath ? "policy" : "fallback");
+    std::string configPath = GetDisplayUserZoneConfigPath();
     AccountFileOperator fileOperator;
-    std::string content;
     ErrCode errCode = fileOperator.GetFileContentByPath(configPath, content);
     if (errCode != ERR_OK) {
-        ACCOUNT_LOGE("Failed to read display user zone config, err=%{public}d", errCode);
-        ClearParsedData();
-        configReadFailed_ = true;
-        return errCode;
-    }
-    errCode = ParseDisplayConfig(content);
-    if (errCode != ERR_OK) {
-        configFormatError_ = true;
-        ACCOUNT_LOGE("Failed to parse display user zone config, err=%{public}d", errCode);
-        return errCode;
+        ACCOUNT_LOGE("Failed to read display user zone config from %{public}s, err=%{public}d",
+            configPath.c_str(), errCode);
+        return ERR_ACCOUNT_COMMON_FILE_READ_FAILED;
     }
     return ERR_OK;
 }
 
+// The whole body runs under mutex_. The config read targets a small read-only /system XML,
+// so the brief lock-held I/O is a deliberate trade for a single-segment critical section.
 ErrCode DisplayUserZoneConfigManager::EnsureConfigReady()
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (configFormatError_) {
-        return ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR;
-    }
-    if (!configReadFailed_) {
+    if (initOk_) {
         return ERR_OK;
     }
-    ErrCode errCode = LoadConfigLocked();
-    if (errCode == ERR_OK) {
-        return ERR_OK;
+    ClearParsedData();
+    initOk_ = false;
+    std::string content;
+    ErrCode errCode = ReadConfigContent(content);
+    if (errCode != ERR_OK) {
+        return errCode;
     }
-    if (configFormatError_) {
+    errCode = ParseDisplayConfig(content);
+    if (errCode != ERR_OK) {
         return ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR;
     }
-    return ERR_ACCOUNT_COMMON_FILE_READ_FAILED;
+    initOk_ = true;
+    return ERR_OK;
 }
 
 namespace {
+class XmlDocGuard {
+public:
+    explicit XmlDocGuard(xmlDocPtr doc) : doc_(doc) {}
+    ~XmlDocGuard()
+    {
+        if (doc_ != nullptr) {
+            xmlFreeDoc(doc_);
+        }
+    }
+    XmlDocGuard(const XmlDocGuard &) = delete;
+    XmlDocGuard &operator=(const XmlDocGuard &) = delete;
+
+private:
+    xmlDocPtr doc_;
+};
+
 xmlNodePtr FindDisplaysNode(xmlDocPtr doc)
 {
     xmlNodePtr root = xmlDocGetRootElement(doc);
@@ -209,66 +201,65 @@ ErrCode DisplayUserZoneConfigManager::ParseDisplayConfig(const std::string &cont
         "display_manager_config.xml", nullptr, XML_PARSE_NOBLANKS);
     if (doc == nullptr) {
         ACCOUNT_LOGE("Failed to parse display user zone config XML");
-        ClearParsedData();
         return ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR;
     }
+    XmlDocGuard docGuard(doc);
     xmlNodePtr displaysNode = FindDisplaysNode(doc);
     if (displaysNode == nullptr) {
         ACCOUNT_LOGE("Invalid XML: missing Configs or displays element");
-        xmlFreeDoc(doc);
-        ClearParsedData();
         return ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR;
     }
     ErrCode errCode = ParseDisplayNodes(displaysNode);
-    xmlFreeDoc(doc);
     if (errCode != ERR_OK) {
-        ClearParsedData();
         return errCode;
     }
     return FinalizeParsedConfig();
 }
 
-ErrCode DisplayUserZoneConfigManager::ParseDisplayNodes(void *root)
+ErrCode DisplayUserZoneConfigManager::ParseDisplayNodes(xmlNodePtr root)
 {
-    xmlNodePtr rootNode = static_cast<xmlNodePtr>(root);
     std::vector<DisplayConfigInfo> displays;
     std::map<uint64_t, uint64_t> physicalToLogical;
-    ErrCode errCode = CollectDisplayNodes(rootNode, displays, physicalToLogical);
+    std::map<uint64_t, uint64_t> userZoneIdByLogicalId;
+    ErrCode errCode = CollectDisplayNodes(root, displays, physicalToLogical, userZoneIdByLogicalId);
     if (errCode != ERR_OK) {
         return errCode;
     }
-    return ResolveDisplayUserZones(displays, physicalToLogical);
+    return ResolveDisplayUserZones(displays, physicalToLogical, userZoneIdByLogicalId);
 }
 
-ErrCode DisplayUserZoneConfigManager::CollectDisplayNodes(void *root,
-    std::vector<DisplayConfigInfo> &displays, std::map<uint64_t, uint64_t> &physicalToLogical)
+ErrCode DisplayUserZoneConfigManager::CollectDisplayNodes(xmlNodePtr root,
+    std::vector<DisplayConfigInfo> &displays, std::map<uint64_t, uint64_t> &physicalToLogical,
+    std::map<uint64_t, uint64_t> &userZoneIdByLogicalId)
 {
-    xmlNodePtr rootNode = static_cast<xmlNodePtr>(root);
-    for (xmlNodePtr node = rootNode->children; node != nullptr; node = node->next) {
+    for (xmlNodePtr node = root->children; node != nullptr; node = node->next) {
         if (node->type != XML_ELEMENT_NODE || xmlStrcmp(node->name, BAD_CAST "display") != 0) {
             continue;
         }
         DisplayConfigInfo info;
-        ErrCode errCode = ParseDisplayNodeAttributes(node, info);
+        uint64_t userZoneId = 0;
+        bool hasUserZoneId = false;
+        ErrCode errCode = ParseDisplayNodeAttributes(node, info, userZoneId, hasUserZoneId);
         if (errCode != ERR_OK) {
-            ACCOUNT_LOGE("Failed to parse display node attributes, config rejected");
-            ClearParsedData();
             return errCode;
         }
         if (physicalToLogical.find(info.physicalId) != physicalToLogical.end()) {
             ACCOUNT_LOGE("Duplicate physicalId=%{public}llu in config, config rejected",
                 static_cast<unsigned long long>(info.physicalId));
-            ClearParsedData();
             return ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR;
         }
         displays.push_back(info);
         physicalToLogical[info.physicalId] = info.logicalId;
+        if (hasUserZoneId) {
+            userZoneIdByLogicalId[info.logicalId] = userZoneId;
+        }
     }
     return ERR_OK;
 }
 
 ErrCode DisplayUserZoneConfigManager::ResolveDisplayUserZones(const std::vector<DisplayConfigInfo> &displays,
-    const std::map<uint64_t, uint64_t> &physicalToLogical)
+    const std::map<uint64_t, uint64_t> &physicalToLogical,
+    const std::map<uint64_t, uint64_t> &userZoneIdByLogicalId)
 {
     for (const auto &info : displays) {
         if (logicalIdMap_.find(info.logicalId) != logicalIdMap_.end()) {
@@ -278,11 +269,12 @@ ErrCode DisplayUserZoneConfigManager::ResolveDisplayUserZones(const std::vector<
             return ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR;
         }
         DisplayConfigInfo resolved = info;
-        if (info.hasUserZoneId) {
-            auto it = physicalToLogical.find(info.userZoneId);
+        auto userZoneIt = userZoneIdByLogicalId.find(info.logicalId);
+        if (userZoneIt != userZoneIdByLogicalId.end()) {
+            auto it = physicalToLogical.find(userZoneIt->second);
             if (it == physicalToLogical.end()) {
                 ACCOUNT_LOGE("userZoneId=%{public}llu not found for display logicalId=%{public}llu",
-                    static_cast<unsigned long long>(info.userZoneId),
+                    static_cast<unsigned long long>(userZoneIt->second),
                     static_cast<unsigned long long>(info.logicalId));
                 ClearParsedData();
                 return ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR;
@@ -293,24 +285,19 @@ ErrCode DisplayUserZoneConfigManager::ResolveDisplayUserZones(const std::vector<
         }
         logicalIdMap_[resolved.logicalId] = resolved;
         userZoneMap_[resolved.userZone].push_back(resolved.logicalId);
-        if (resolved.userZone == resolved.logicalId) {
-            userZonePrimaryMap_[resolved.userZone] = resolved.logicalId;
-        }
         ACCOUNT_LOGI("Parsed display: logicalId=%{public}llu physicalId=%{public}llu group=%{public}llu "
             "name=%{public}s",
             static_cast<unsigned long long>(resolved.logicalId),
             static_cast<unsigned long long>(resolved.physicalId),
             static_cast<unsigned long long>(resolved.userZone), resolved.name.c_str());
     }
-    ACCOUNT_LOGI("ParseDisplayNodes done, display count=%{public}zu user zone count=%{public}zu",
-        logicalIdMap_.size(), userZoneMap_.size());
     return ERR_OK;
 }
 
-ErrCode DisplayUserZoneConfigManager::ParseDisplayNodeAttributes(void *node, DisplayConfigInfo &info)
+ErrCode DisplayUserZoneConfigManager::ParseDisplayNodeAttributes(xmlNodePtr node, DisplayConfigInfo &info,
+    uint64_t &userZoneId, bool &hasUserZoneId)
 {
-    xmlNodePtr nodePtr = static_cast<xmlNodePtr>(node);
-    for (xmlNodePtr child = nodePtr->children; child != nullptr; child = child->next) {
+    for (xmlNodePtr child = node->children; child != nullptr; child = child->next) {
         if (child->type != XML_ELEMENT_NODE) {
             continue;
         }
@@ -333,11 +320,11 @@ ErrCode DisplayUserZoneConfigManager::ParseDisplayNodeAttributes(void *node, Dis
         } else if (name == "name") {
             info.name = value;
         } else if (name == "userZoneId") {
-            if (info.hasUserZoneId || !ParseUInt64(value, info.userZoneId)) {
+            if (hasUserZoneId || !ParseUInt64(value, userZoneId)) {
                 ACCOUNT_LOGE("Failed to parse userZoneId, value=%{public}s", value.c_str());
                 return ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR;
             }
-            info.hasUserZoneId = true;
+            hasUserZoneId = true;
         }
     }
     if (!info.hasPhysicalId || !info.hasLogicalId) {
@@ -362,7 +349,6 @@ void DisplayUserZoneConfigManager::ClearParsedData()
 {
     logicalIdMap_.clear();
     userZoneMap_.clear();
-    userZonePrimaryMap_.clear();
 }
 
 bool DisplayUserZoneConfigManager::ParseUInt64(const std::string &value, uint64_t &result)
@@ -377,8 +363,8 @@ bool DisplayUserZoneConfigManager::ParseUInt64(const std::string &value, uint64_
 
 ErrCode DisplayUserZoneConfigManager::ValidateParsedConfig()
 {
-    if (userZonePrimaryMap_.empty()) {
-        ACCOUNT_LOGE("No primary display found in config, config rejected");
+    if (logicalIdMap_.empty()) {
+        ACCOUNT_LOGE("No display nodes found in config, config rejected");
         return ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR;
     }
     for (const auto &pair : logicalIdMap_) {
