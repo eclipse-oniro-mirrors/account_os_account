@@ -2473,8 +2473,7 @@ HWTEST_F(OsAccountManagerServiceModuleTest, SetDefaultActivatedOsAccountWithDisp
     uint64_t anotherDisplayId = 1;
     result = osAccountManagerService_->SetDefaultActivatedOsAccount(anotherDisplayId, START_USER_ID);
     EXPECT_TRUE(result == ERR_OK || result == ERR_ACCOUNT_COMMON_PERMISSION_DENIED ||
-                result == ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR ||
-                result == ERR_ACCOUNT_COMMON_DISPLAY_NOT_PRIMARY_ERROR);
+                result == ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR);
 }
 
 /**

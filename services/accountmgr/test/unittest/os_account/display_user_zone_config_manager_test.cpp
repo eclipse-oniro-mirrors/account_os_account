@@ -13,55 +13,72 @@
  * limitations under the License.
  */
 
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <fstream>
+#include <string>
+#include <sys/stat.h>
+#include <thread>
+#include <vector>
+
 #include <gtest/gtest.h>
-#include "account_file_operator.h"
 #define private public
 #include "osaccount/display_user_zone_config/display_user_zone_config_manager.h"
 #undef private
-#include "os_account_constants.h"
 
 namespace OHOS {
 namespace AccountSA {
 using namespace testing::ext;
-using namespace OHOS;
-using namespace AccountSA;
 
 namespace {
-constexpr uint64_t UNKNOWN_DISPLAY_ID = 88888888ULL;
-constexpr uint64_t SOME_DISPLAY_ID = 100;
+// The manager is compiled with ACCOUNT_TEST, so the load path reads a real XML
+// file from this writable test directory instead of the system configuration.
+const std::string TEST_CONFIG_DIR = "/data/service/el1/public/account/test/";
+const std::string TEST_CONFIG_PATH = TEST_CONFIG_DIR + "display_manager_config.xml";
 
-// File reads are supplied by this test executable; the parser and retry state machine are real.
-ErrCode configReadResult = ERR_ACCOUNT_COMMON_FILE_READ_FAILED;
-size_t configReadCount = 0;
-std::string configContent =
-    "<Configs><displays><display><physicalId>10</physicalId><logicalId>100</logicalId>"
-    "</display></displays></Configs>";
-
-// Display user zone config test fixtures
-constexpr uint64_t DISPLAY_A_LOGICAL_ID = 100;
-constexpr uint64_t DISPLAY_B_LOGICAL_ID = 200;
-constexpr uint64_t DISPLAY_C_LOGICAL_ID = 300;
-constexpr uint64_t DISPLAY_A_PHYSICAL_ID = 10;
-constexpr uint64_t DISPLAY_B_PHYSICAL_ID = 20;
-constexpr uint64_t DISPLAY_C_PHYSICAL_ID = 30;
-constexpr uint64_t USER_ZONE_ONE = DISPLAY_A_LOGICAL_ID;
-constexpr uint64_t USER_ZONE_TWO = DISPLAY_C_LOGICAL_ID;
-const std::string DISPLAY_NAME_A = "display_a";
-const std::string DISPLAY_NAME_B = "display_b";
-const std::string DISPLAY_NAME_C = "display_c";
-
-// Loop and display count constants
-constexpr int LOOP_COUNT = 3;
-constexpr size_t USER_ZONE_ONE_DISPLAY_COUNT = 2;
-}  // namespace
-
-ErrCode AccountFileOperator::GetFileContentByPath(const std::string &path, std::string &content)
+void WriteTestConfig(const std::string &content)
 {
-    (void)path;
-    ++configReadCount;
-    content = configContent;
-    return configReadResult;
+    std::ofstream file(TEST_CONFIG_PATH, std::ios::out | std::ios::trunc);
+    ASSERT_TRUE(file.is_open());
+    file << content;
+    file.close();
 }
+
+void RemoveTestConfig()
+{
+    std::remove(TEST_CONFIG_PATH.c_str());
+}
+
+constexpr uint64_t PHYS_A = 10;
+constexpr uint64_t PHYS_B = 20;
+constexpr uint64_t PHYS_C = 30;
+constexpr uint64_t LOGICAL_A = 100;
+constexpr uint64_t LOGICAL_B = 200;
+constexpr uint64_t LOGICAL_C = 300;
+
+// Build one <display> element. userZoneId is emitted only when requested so the
+// standalone (own user zone) vs secondary (grouped) branches are both exercised.
+std::string DisplayNode(uint64_t physicalId, uint64_t logicalId, const std::string &name,
+    bool withUserZoneId = false, uint64_t userZoneId = 0)
+{
+    std::string node = "<display>"
+        "<physicalId>" + std::to_string(physicalId) + "</physicalId>"
+        "<logicalId>" + std::to_string(logicalId) + "</logicalId>"
+        "<name>" + name + "</name>";
+    if (withUserZoneId) {
+        node += "<userZoneId>" + std::to_string(userZoneId) + "</userZoneId>";
+    }
+    node += "</display>";
+    return node;
+}
+
+std::string WrapConfig(const std::string &displaysBody)
+{
+    return "<Configs><displays>" + displaysBody + "</displays></Configs>";
+}
+}  // namespace
 
 class DisplayUserZoneConfigManagerTest : public testing::Test {
 public:
@@ -71,619 +88,674 @@ public:
     void TearDown(void);
 };
 
-namespace {
-void SetupLoadedConfig(DisplayUserZoneConfigManager &mgr)
-{
-    DisplayConfigInfo infoA;
-    infoA.physicalId = DISPLAY_A_PHYSICAL_ID;
-    infoA.logicalId = DISPLAY_A_LOGICAL_ID;
-    infoA.name = DISPLAY_NAME_A;
-    infoA.userZone = USER_ZONE_ONE;
-    DisplayConfigInfo infoB;
-    infoB.physicalId = DISPLAY_B_PHYSICAL_ID;
-    infoB.logicalId = DISPLAY_B_LOGICAL_ID;
-    infoB.name = DISPLAY_NAME_B;
-    infoB.userZone = USER_ZONE_ONE;
-    DisplayConfigInfo infoC;
-    infoC.physicalId = DISPLAY_C_PHYSICAL_ID;
-    infoC.logicalId = DISPLAY_C_LOGICAL_ID;
-    infoC.name = DISPLAY_NAME_C;
-    infoC.userZone = USER_ZONE_TWO;
-    mgr.logicalIdMap_[DISPLAY_A_LOGICAL_ID] = infoA;
-    mgr.logicalIdMap_[DISPLAY_B_LOGICAL_ID] = infoB;
-    mgr.logicalIdMap_[DISPLAY_C_LOGICAL_ID] = infoC;
-    mgr.userZoneMap_[USER_ZONE_ONE] = {DISPLAY_A_LOGICAL_ID, DISPLAY_B_LOGICAL_ID};
-    mgr.userZoneMap_[USER_ZONE_TWO] = {DISPLAY_C_LOGICAL_ID};
-    mgr.userZonePrimaryMap_[USER_ZONE_ONE] = DISPLAY_A_LOGICAL_ID;
-    mgr.userZonePrimaryMap_[USER_ZONE_TWO] = DISPLAY_C_LOGICAL_ID;
-}
-
-void TeardownConfig(DisplayUserZoneConfigManager &mgr)
-{
-    mgr.logicalIdMap_.clear();
-    mgr.userZoneMap_.clear();
-    mgr.userZonePrimaryMap_.clear();
-    mgr.configReadFailed_ = false;
-    mgr.configFormatError_ = false;
-}
-
-void SetConfigLoadState(DisplayUserZoneConfigManager &mgr, bool readFailed, bool formatError)
-{
-    mgr.configReadFailed_ = readFailed;
-    mgr.configFormatError_ = formatError;
-}
-}  // namespace
-
 void DisplayUserZoneConfigManagerTest::SetUpTestCase(void)
-{}
+{
+    mkdir(TEST_CONFIG_DIR.c_str(), S_IRWXU | S_IRWXG | S_IRWXO);
+}
 
 void DisplayUserZoneConfigManagerTest::TearDownTestCase(void)
-{}
+{
+    RemoveTestConfig();
+}
 
 void DisplayUserZoneConfigManagerTest::SetUp(void)
 {
-    TeardownConfig(DisplayUserZoneConfigManager::GetInstance());
-    configReadResult = ERR_ACCOUNT_COMMON_FILE_READ_FAILED;
-    configReadCount = 0;
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    mgr.logicalIdMap_.clear();
+    mgr.userZoneMap_.clear();
+    mgr.initOk_ = false;
+    RemoveTestConfig();
 }
 
 void DisplayUserZoneConfigManagerTest::TearDown(void)
 {
-    TeardownConfig(DisplayUserZoneConfigManager::GetInstance());
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    mgr.logicalIdMap_.clear();
+    mgr.userZoneMap_.clear();
+    mgr.initOk_ = false;
+    RemoveTestConfig();
 }
 
 /**
- * @tc.name: DisplayUserZoneConfigManagerFallback001
- * @tc.desc: Verify IsDisplayPrimary treats every display as primary when no display config is available.
+ * @tc.name: DisplayUserZoneConfigManagerParseStandalone001
+ * @tc.desc: Every display without userZoneId is its own user zone; the lookup
+ *           maps are populated consistently.
  * @tc.type: FUNC
  * @tc.require:
  */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerFallback001, TestSize.Level1)
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseStandalone001, TestSize.Level1)
 {
     auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    bool isPrimary = false;
-    EXPECT_EQ(mgr.IsDisplayPrimary(Constants::DEFAULT_DISPLAY_ID, isPrimary), ERR_OK);
-    EXPECT_TRUE(isPrimary);
-    EXPECT_EQ(mgr.IsDisplayPrimary(SOME_DISPLAY_ID, isPrimary), ERR_OK);
-    EXPECT_TRUE(isPrimary);
-    EXPECT_EQ(mgr.IsDisplayPrimary(UNKNOWN_DISPLAY_ID, isPrimary), ERR_OK);
-    EXPECT_TRUE(isPrimary);
+    const std::string xml = WrapConfig(
+        DisplayNode(PHYS_A, LOGICAL_A, "display_a") +
+        DisplayNode(PHYS_B, LOGICAL_B, "display_b"));
+
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_OK);
+    ASSERT_EQ(mgr.logicalIdMap_.size(), 2u);
+    ASSERT_EQ(mgr.userZoneMap_.size(), 2u);
+
+    EXPECT_EQ(mgr.logicalIdMap_[LOGICAL_A].physicalId, PHYS_A);
+    EXPECT_EQ(mgr.logicalIdMap_[LOGICAL_A].name, "display_a");
+    EXPECT_EQ(mgr.logicalIdMap_[LOGICAL_A].userZone, LOGICAL_A);
+    EXPECT_EQ(mgr.logicalIdMap_[LOGICAL_B].userZone, LOGICAL_B);
+
+    ASSERT_EQ(mgr.userZoneMap_[LOGICAL_A].size(), 1u);
+    EXPECT_EQ(mgr.userZoneMap_[LOGICAL_A][0], LOGICAL_A);
+    ASSERT_EQ(mgr.userZoneMap_[LOGICAL_B].size(), 1u);
+    EXPECT_EQ(mgr.userZoneMap_[LOGICAL_B][0], LOGICAL_B);
 }
 
 /**
- * @tc.name: DisplayUserZoneConfigManagerReadFailure001
- * @tc.desc: Verify every query retries a failed read, and a later successful read is cached.
+ * @tc.name: DisplayUserZoneConfigManagerParsePrimarySecondary001
+ * @tc.desc: A secondary display pointing to the head display's physicalId via
+ *           userZoneId is resolved into the head's user zone.
  * @tc.type: FUNC
  * @tc.require:
  */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerReadFailure001, TestSize.Level1)
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParsePrimarySecondary001, TestSize.Level1)
 {
     auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    SetConfigLoadState(mgr, true, false);
-    bool isPrimary = false;
-    EXPECT_EQ(mgr.IsDisplayPrimary(SOME_DISPLAY_ID, isPrimary), ERR_ACCOUNT_COMMON_FILE_READ_FAILED);
-    EXPECT_EQ(configReadCount, 1u);
-    uint64_t primaryDisplayId = Constants::INVALID_DISPLAY_ID;
-    EXPECT_EQ(mgr.GetPrimaryDisplayId(SOME_DISPLAY_ID, primaryDisplayId), ERR_ACCOUNT_COMMON_FILE_READ_FAILED);
-    EXPECT_EQ(configReadCount, 2u);
-    std::vector<uint64_t> displayIds;
-    EXPECT_EQ(mgr.GetDisplayIdsByLogicalId(SOME_DISPLAY_ID, displayIds), ERR_ACCOUNT_COMMON_FILE_READ_FAILED);
-    EXPECT_EQ(configReadCount, 3u);
+    const std::string xml = WrapConfig(
+        DisplayNode(PHYS_A, LOGICAL_A, "head_unit") +
+        DisplayNode(PHYS_B, LOGICAL_B, "passenger", true, PHYS_A));
 
-    configReadResult = ERR_OK;
-    EXPECT_EQ(mgr.IsDisplayPrimary(SOME_DISPLAY_ID, isPrimary), ERR_OK);
-    EXPECT_TRUE(isPrimary);
-    EXPECT_EQ(configReadCount, 4u);
-    EXPECT_EQ(mgr.GetPrimaryDisplayId(SOME_DISPLAY_ID, primaryDisplayId), ERR_OK);
-    EXPECT_EQ(primaryDisplayId, SOME_DISPLAY_ID);
-    EXPECT_EQ(configReadCount, 4u);
-    TeardownConfig(mgr);
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_OK);
+    ASSERT_EQ(mgr.logicalIdMap_.size(), 2u);
+    ASSERT_EQ(mgr.userZoneMap_.size(), 1u);
+
+    EXPECT_EQ(mgr.logicalIdMap_[LOGICAL_A].userZone, LOGICAL_A);
+    EXPECT_EQ(mgr.logicalIdMap_[LOGICAL_B].userZone, LOGICAL_A);
+    EXPECT_EQ(mgr.logicalIdMap_[LOGICAL_B].name, "passenger");
+
+    ASSERT_EQ(mgr.userZoneMap_[LOGICAL_A].size(), 2u);
+    EXPECT_EQ(mgr.userZoneMap_[LOGICAL_A][0], LOGICAL_A);
+    EXPECT_EQ(mgr.userZoneMap_[LOGICAL_A][1], LOGICAL_B);
 }
 
 /**
- * @tc.name: DisplayUserZoneConfigManagerFormatError001
- * @tc.desc: Verify IsDisplayPrimary returns a format error without retrying an invalid config.
+ * @tc.name: DisplayUserZoneConfigManagerParseMultipleZones001
+ * @tc.desc: A head zone with one secondary plus an independent standalone zone
+ *           produce two distinct user zones with the correct primaries.
  * @tc.type: FUNC
  * @tc.require:
  */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerFormatError001, TestSize.Level1)
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseMultipleZones001, TestSize.Level1)
 {
     auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    SetConfigLoadState(mgr, false, true);
-    bool isPrimary = false;
-    EXPECT_EQ(mgr.IsDisplayPrimary(SOME_DISPLAY_ID, isPrimary), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    uint64_t primaryDisplayId = Constants::INVALID_DISPLAY_ID;
-    EXPECT_EQ(mgr.GetPrimaryDisplayId(SOME_DISPLAY_ID, primaryDisplayId),
-        ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    std::vector<uint64_t> displayIds;
-    EXPECT_EQ(mgr.GetDisplayIdsByLogicalId(SOME_DISPLAY_ID, displayIds),
-        ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    EXPECT_EQ(configReadCount, 0u);
-    TeardownConfig(mgr);
+    const std::string xml = WrapConfig(
+        DisplayNode(PHYS_A, LOGICAL_A, "head_unit") +
+        DisplayNode(PHYS_B, LOGICAL_B, "passenger", true, PHYS_A) +
+        DisplayNode(PHYS_C, LOGICAL_C, "standalone"));
+
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_OK);
+    ASSERT_EQ(mgr.logicalIdMap_.size(), 3u);
+    ASSERT_EQ(mgr.userZoneMap_.size(), 2u);
+
+    EXPECT_EQ(mgr.logicalIdMap_[LOGICAL_B].userZone, LOGICAL_A);
+    EXPECT_EQ(mgr.logicalIdMap_[LOGICAL_C].userZone, LOGICAL_C);
+
+    ASSERT_EQ(mgr.userZoneMap_[LOGICAL_A].size(), 2u);
+    EXPECT_EQ(mgr.userZoneMap_[LOGICAL_A][0], LOGICAL_A);
+    EXPECT_EQ(mgr.userZoneMap_[LOGICAL_A][1], LOGICAL_B);
+    ASSERT_EQ(mgr.userZoneMap_[LOGICAL_C].size(), 1u);
+    EXPECT_EQ(mgr.userZoneMap_[LOGICAL_C][0], LOGICAL_C);
 }
 
 /**
- * @tc.name: DisplayUserZoneConfigManagerRetryFormatError001
- * @tc.desc: A successful read with invalid XML stops further automatic read retries.
- * @tc.type: FUNC
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerRetryFormatError001, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    SetConfigLoadState(mgr, true, false);
-    const std::string savedContent = configContent;
-    configReadResult = ERR_OK;
-    configContent = "<Invalid/>";
-    bool isPrimary = false;
-    EXPECT_EQ(mgr.IsDisplayPrimary(SOME_DISPLAY_ID, isPrimary), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    EXPECT_EQ(configReadCount, 1u);
-    configContent = savedContent;
-    EXPECT_EQ(mgr.IsDisplayPrimary(SOME_DISPLAY_ID, isPrimary), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    EXPECT_EQ(configReadCount, 1u);
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerTrimWhitespace001
- * @tc.desc: Numeric leaf values carrying pretty-printing whitespace are trimmed before parsing,
- *           so a hand-written config with padded values still loads.
+ * @tc.name: DisplayUserZoneConfigManagerParseWhitespace001
+ * @tc.desc: Numeric leaf values carrying pretty-printing whitespace are trimmed
+ *           before parsing, so hand-written configs still load.
  * @tc.type: FUNC
  * @tc.require:
  */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerTrimWhitespace001, TestSize.Level1)
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseWhitespace001, TestSize.Level1)
 {
     auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    SetConfigLoadState(mgr, true, false);
-    const std::string savedContent = configContent;
-    configReadResult = ERR_OK;
-    configContent =
-        "<Configs><displays><display><physicalId>\n\t10 \t</physicalId>"
-        "<logicalId> 100\r\n</logicalId><name>display_a</name>"
-        "<userZoneId>\r\n 10 \n</userZoneId></display></displays></Configs>";
-    bool isPrimary = false;
-    EXPECT_EQ(mgr.IsDisplayPrimary(DISPLAY_A_LOGICAL_ID, isPrimary), ERR_OK);
-    EXPECT_TRUE(isPrimary);
-    uint64_t primaryDisplayId = Constants::INVALID_DISPLAY_ID;
-    EXPECT_EQ(mgr.GetPrimaryDisplayId(DISPLAY_A_LOGICAL_ID, primaryDisplayId), ERR_OK);
-    EXPECT_EQ(primaryDisplayId, DISPLAY_A_LOGICAL_ID);
-    EXPECT_EQ(mgr.logicalIdMap_.size(), static_cast<size_t>(1));
-    configContent = savedContent;
-    TeardownConfig(mgr);
+    const std::string xml =
+        "<Configs><displays>"
+        "<display><physicalId>\n\t10 \t</physicalId>"
+        "<logicalId> 100\r\n</logicalId><name>head_unit</name></display>"
+        "<display><physicalId> 20 </physicalId>"
+        "<logicalId>200</logicalId><name>passenger</name>"
+        "<userZoneId>\r\n 10 \n</userZoneId></display>"
+        "</displays></Configs>";
+
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_OK);
+    ASSERT_EQ(mgr.logicalIdMap_.size(), 2u);
+    EXPECT_EQ(mgr.logicalIdMap_[LOGICAL_B].userZone, LOGICAL_A);
+    ASSERT_EQ(mgr.userZoneMap_[LOGICAL_A].size(), 2u);
 }
 
 /**
- * @tc.name: DisplayUserZoneConfigManagerRealConfigParse001
- * @tc.desc: Parse a factory-shaped display_manager_config.xml — pretty-printed XML with the
- *           built-in display as a standalone user zone and expansion displays paired via
- *           userZoneId — through the real file-read and libxml2 parse path, then verify the
- *           derived user-zone layout through the public query APIs.
+ * @tc.name: DisplayUserZoneConfigManagerParseXmlDeclComment001
+ * @tc.desc: An XML declaration, comments, and pretty printing do not disturb
+ *           parsing (XML_PARSE_NOBLANKS drops the whitespace text nodes).
  * @tc.type: FUNC
  * @tc.require:
  */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerRealConfigParse001, TestSize.Level1)
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseXmlDeclComment001, TestSize.Level1)
 {
     auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    // configReadFailed_ = true forces EnsureConfigReady through the real LoadConfigLocked path
-    // (file read + libxml2 parse), instead of skipping straight to the degraded empty-config view.
-    TeardownConfig(mgr);
-    SetConfigLoadState(mgr, true, false);
-    const std::string savedContent = configContent;
-    configReadResult = ERR_OK;
-    // Mirrors the shipped /system/etc/window/resources/display_manager_config.xml shape:
-    // pretty-printed XML, an XML declaration, a comment node, the built-in display standalone,
-    // and expansion displays grouped by a userZoneId referencing the head display's physicalId.
-    configContent =
+    const std::string xml =
         "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
         "<Configs>\n"
+        "    <!-- built-in display -->\n"
         "    <displays>\n"
-        "        <!-- built-in display: no userZoneId, its own user zone primary -->\n"
         "        <display>\n"
-        "            <physicalId>1</physicalId>\n"
-        "            <logicalId>0</logicalId>\n"
-        "            <name>built_in</name>\n"
-        "        </display>\n"
-        "        <!-- expansion zone: head display + passenger display -->\n"
-        "        <display>\n"
-        "            <physicalId>2</physicalId>\n"
+        "            <physicalId>10</physicalId>\n"
         "            <logicalId>100</logicalId>\n"
         "            <name>head_unit</name>\n"
         "        </display>\n"
         "        <display>\n"
-        "            <physicalId>3</physicalId>\n"
+        "            <physicalId>20</physicalId>\n"
         "            <logicalId>200</logicalId>\n"
         "            <name>passenger</name>\n"
-        "            <userZoneId>2</userZoneId>\n"
+        "            <userZoneId>10</userZoneId>\n"
         "        </display>\n"
         "    </displays>\n"
         "</Configs>\n";
 
-    bool isPrimary = false;
-    EXPECT_EQ(mgr.IsDisplayPrimary(Constants::DEFAULT_DISPLAY_ID, isPrimary), ERR_OK);
-    EXPECT_TRUE(isPrimary);
-    EXPECT_EQ(mgr.IsDisplayPrimary(DISPLAY_A_LOGICAL_ID, isPrimary), ERR_OK);
-    EXPECT_TRUE(isPrimary);
-    EXPECT_EQ(mgr.IsDisplayPrimary(DISPLAY_B_LOGICAL_ID, isPrimary), ERR_OK);
-    EXPECT_FALSE(isPrimary);
-
-    uint64_t primaryDisplayId = Constants::INVALID_DISPLAY_ID;
-    EXPECT_EQ(mgr.GetPrimaryDisplayId(DISPLAY_B_LOGICAL_ID, primaryDisplayId), ERR_OK);
-    EXPECT_EQ(primaryDisplayId, DISPLAY_A_LOGICAL_ID);
-    EXPECT_EQ(mgr.GetPrimaryDisplayId(DISPLAY_A_LOGICAL_ID, primaryDisplayId), ERR_OK);
-    EXPECT_EQ(primaryDisplayId, DISPLAY_A_LOGICAL_ID);
-
-    std::vector<uint64_t> displayIds;
-    EXPECT_EQ(mgr.GetDisplayIdsByLogicalId(DISPLAY_B_LOGICAL_ID, displayIds), ERR_OK);
-    ASSERT_EQ(displayIds.size(), USER_ZONE_ONE_DISPLAY_COUNT);
-    EXPECT_EQ(displayIds[0], DISPLAY_A_LOGICAL_ID);
-    EXPECT_EQ(displayIds[1], DISPLAY_B_LOGICAL_ID);
-    EXPECT_EQ(mgr.GetDisplayIdsByLogicalId(Constants::DEFAULT_DISPLAY_ID, displayIds), ERR_OK);
-    ASSERT_EQ(displayIds.size(), 1u);
-    EXPECT_EQ(displayIds[0], Constants::DEFAULT_DISPLAY_ID);
-
-    configContent = savedContent;
-    TeardownConfig(mgr);
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_OK);
+    ASSERT_EQ(mgr.logicalIdMap_.size(), 2u);
+    EXPECT_EQ(mgr.logicalIdMap_[LOGICAL_B].userZone, LOGICAL_A);
 }
 
 /**
- * @tc.name: DisplayUserZoneConfigManagerPrimaryDisplay001
- * @tc.desc: Verify primary-display resolution owns configuration readiness and preserves standalone fallback.
+ * @tc.name: DisplayUserZoneConfigManagerParseSelfReference001
+ * @tc.desc: A userZoneId equal to the display's own physicalId resolves to its
+ *           own logicalId, making it a valid primary (standalone behavior).
  * @tc.type: FUNC
  * @tc.require:
  */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerPrimaryDisplay001, TestSize.Level1)
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseSelfReference001, TestSize.Level1)
 {
     auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    SetupLoadedConfig(mgr);
-    uint64_t primaryDisplayId = Constants::INVALID_DISPLAY_ID;
-    EXPECT_EQ(mgr.GetPrimaryDisplayId(DISPLAY_B_LOGICAL_ID, primaryDisplayId), ERR_OK);
-    EXPECT_EQ(primaryDisplayId, DISPLAY_A_LOGICAL_ID);
-    EXPECT_EQ(mgr.GetPrimaryDisplayId(UNKNOWN_DISPLAY_ID, primaryDisplayId), ERR_OK);
-    EXPECT_EQ(primaryDisplayId, UNKNOWN_DISPLAY_ID);
-    TeardownConfig(mgr);
+    const std::string xml = WrapConfig(DisplayNode(PHYS_A, LOGICAL_A, "self", true, PHYS_A));
+
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_OK);
+    ASSERT_EQ(mgr.logicalIdMap_.size(), 1u);
+    EXPECT_EQ(mgr.logicalIdMap_[LOGICAL_A].userZone, LOGICAL_A);
 }
 
 /**
- * @tc.name: DisplayUserZoneConfigManagerPrimaryDisplayNotFound001
- * @tc.desc: Verify GetPrimaryDisplayId reports DISPLAY_ID_NOT_EXIST when the config is loaded
- *           but a known display's user zone has no resolvable primary display.
+ * @tc.name: DisplayUserZoneConfigManagerParseMinimalFields001
+ * @tc.desc: physicalId and logicalId are the only required fields; name and
+ *           userZoneId are optional and default to empty / standalone.
  * @tc.type: FUNC
  * @tc.require:
  */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerPrimaryDisplayNotFound001, TestSize.Level1)
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseMinimalFields001, TestSize.Level1)
 {
     auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    SetupLoadedConfig(mgr);
-    // A known secondary display (user zone one) loses its primary mapping.
-    mgr.userZonePrimaryMap_.erase(USER_ZONE_ONE);
-    uint64_t primaryDisplayId = Constants::INVALID_DISPLAY_ID;
-    EXPECT_EQ(mgr.GetPrimaryDisplayId(DISPLAY_B_LOGICAL_ID, primaryDisplayId),
-        ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR);
-    TeardownConfig(mgr);
+    const std::string xml = WrapConfig(
+        "<display><physicalId>10</physicalId><logicalId>100</logicalId></display>");
+
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_OK);
+    ASSERT_EQ(mgr.logicalIdMap_.size(), 1u);
+    EXPECT_EQ(mgr.logicalIdMap_[LOGICAL_A].userZone, LOGICAL_A);
+    EXPECT_TRUE(mgr.logicalIdMap_[LOGICAL_A].name.empty());
 }
 
 /**
- * @tc.name: DisplayUserZoneConfigManagerDisplayIds001
- * @tc.desc: Verify user-zone display lookup owns configuration readiness and preserves standalone fallback.
+ * @tc.name: DisplayUserZoneConfigManagerParseNonXml001
+ * @tc.desc: Non-XML content is rejected as a format error.
  * @tc.type: FUNC
  * @tc.require:
  */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerDisplayIds001, TestSize.Level1)
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseNonXml001, TestSize.Level1)
 {
     auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    SetupLoadedConfig(mgr);
-    std::vector<uint64_t> displayIds;
-    EXPECT_EQ(mgr.GetDisplayIdsByLogicalId(DISPLAY_B_LOGICAL_ID, displayIds), ERR_OK);
-    ASSERT_EQ(displayIds.size(), USER_ZONE_ONE_DISPLAY_COUNT);
-    EXPECT_EQ(displayIds[0], DISPLAY_A_LOGICAL_ID);
-    EXPECT_EQ(displayIds[1], DISPLAY_B_LOGICAL_ID);
-    EXPECT_EQ(mgr.GetDisplayIdsByLogicalId(UNKNOWN_DISPLAY_ID, displayIds), ERR_OK);
-    ASSERT_EQ(displayIds.size(), 1u);
-    EXPECT_EQ(displayIds[0], UNKNOWN_DISPLAY_ID);
-    TeardownConfig(mgr);
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerFallbackConsistency001
- * @tc.desc: Verify repeated queries return consistent fallback results (no state mutation between calls).
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerFallbackConsistency001, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    bool primaryFirst = false;
-    EXPECT_EQ(mgr.IsDisplayPrimary(SOME_DISPLAY_ID, primaryFirst), ERR_OK);
-
-    for (int i = 0; i < LOOP_COUNT; ++i) {
-        bool isPrimary = false;
-        EXPECT_EQ(mgr.IsDisplayPrimary(SOME_DISPLAY_ID, isPrimary), ERR_OK);
-        EXPECT_EQ(isPrimary, primaryFirst);
-    }
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerLoaded001
- * @tc.desc: Verify IsDisplayPrimary returns true for primary display, false for non-primary display,
- *           and true for unknown display (fallback) when config is loaded.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerLoaded001, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    SetupLoadedConfig(mgr);
-    bool isPrimary = false;
-    EXPECT_EQ(mgr.IsDisplayPrimary(DISPLAY_A_LOGICAL_ID, isPrimary), ERR_OK);
-    EXPECT_TRUE(isPrimary);
-    EXPECT_EQ(mgr.IsDisplayPrimary(DISPLAY_B_LOGICAL_ID, isPrimary), ERR_OK);
-    EXPECT_FALSE(isPrimary);
-    EXPECT_EQ(mgr.IsDisplayPrimary(UNKNOWN_DISPLAY_ID, isPrimary), ERR_OK);
-    EXPECT_TRUE(isPrimary);
-    TeardownConfig(mgr);
-}
-
-#ifdef ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
-/**
- * @tc.name: DisplayUserZoneConfigManagerParseConfig001
- * @tc.desc: Verify ParseDisplayConfig successfully parses a valid XML where the primary display
- *           has no <userZoneId> tag (standalone) and the secondary display references
- *           the primary via <userZoneId>.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseConfig001, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    std::string validXml =
-        "<Configs>"
-        "  <displays>"
-        "    <display>"
-        "      <physicalId>10</physicalId>"
-        "      <logicalId>100</logicalId>"
-        "      <name>display_a</name>"
-        "    </display>"
-        "    <display>"
-        "      <physicalId>20</physicalId>"
-        "      <logicalId>200</logicalId>"
-        "      <name>display_b</name>"
-        "      <userZoneId>10</userZoneId>"
-        "    </display>"
-        "  </displays>"
-        "</Configs>";
-    ErrCode ret = mgr.ParseDisplayConfig(validXml);
-    EXPECT_EQ(ret, ERR_OK);
-    bool isPrimary = false;
-    EXPECT_EQ(mgr.IsDisplayPrimary(DISPLAY_A_LOGICAL_ID, isPrimary), ERR_OK);
-    EXPECT_TRUE(isPrimary);
-    EXPECT_EQ(mgr.IsDisplayPrimary(DISPLAY_B_LOGICAL_ID, isPrimary), ERR_OK);
-    EXPECT_FALSE(isPrimary);
-    TeardownConfig(mgr);
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerParseConfig002
- * @tc.desc: Verify ParseDisplayConfig returns BAD_JSON_FORMAT for invalid XML and wrong root element.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseConfig002, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    // Non-XML content
-    ErrCode ret = mgr.ParseDisplayConfig("this is not xml");
-    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    // Wrong root element
-    std::string wrongRoot = "<wrong_root></wrong_root>";
-    ret = mgr.ParseDisplayConfig(wrongRoot);
-    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    TeardownConfig(mgr);
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerParseConfig003
- * @tc.desc: Verify ParseDisplayConfig fails when a secondary display references a non-existent
- *           primary via userZoneId (no display with that physicalId exists).
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseConfig003, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    std::string noPrimaryXml =
-        "<Configs>"
-        "  <displays>"
-        "    <display>"
-        "      <physicalId>10</physicalId>"
-        "      <logicalId>100</logicalId>"
-        "      <name>display_a</name>"
-        "      <userZoneId>999</userZoneId>"
-        "    </display>"
-        "  </displays>"
-        "</Configs>";
-    ErrCode ret = mgr.ParseDisplayConfig(noPrimaryXml);
-    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    TeardownConfig(mgr);
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerParseConfig004
- * @tc.desc: Verify ParseDisplayNodes fails when a display node has invalid numeric attributes.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseConfig004, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    std::string badAttrXml =
-        "<Configs>"
-        "  <displays>"
-        "    <display>"
-        "      <physicalId>abc</physicalId>"
-        "      <logicalId>100</logicalId>"
-        "      <name>display_a</name>"
-        "    </display>"
-        "  </displays>"
-        "</Configs>";
-    ErrCode ret = mgr.ParseDisplayConfig(badAttrXml);
-    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    TeardownConfig(mgr);
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerParseConfig005
- * @tc.desc: Verify ParseDisplayConfig fails on duplicate logicalId in the config.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseConfig005, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    std::string dupXml =
-        "<Configs>"
-        "  <displays>"
-        "    <display>"
-        "      <physicalId>10</physicalId>"
-        "      <logicalId>100</logicalId>"
-        "      <name>display_a</name>"
-        "    </display>"
-        "    <display>"
-        "      <physicalId>20</physicalId>"
-        "      <logicalId>100</logicalId>"
-        "      <name>display_dup</name>"
-        "    </display>"
-        "  </displays>"
-        "</Configs>";
-    ErrCode ret = mgr.ParseDisplayConfig(dupXml);
-    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    TeardownConfig(mgr);
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerParseConfig006
- * @tc.desc: Verify ParseDisplayConfig fails when two secondary displays form a cycle
- *           (each points to the other's physicalId via userZoneId, but neither is standalone).
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseConfig006, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    std::string cycleXml =
-        "<Configs>"
-        "  <displays>"
-        "    <display>"
-        "      <physicalId>10</physicalId>"
-        "      <logicalId>100</logicalId>"
-        "      <name>display_a</name>"
-        "      <userZoneId>20</userZoneId>"
-        "    </display>"
-        "    <display>"
-        "      <physicalId>20</physicalId>"
-        "      <logicalId>200</logicalId>"
-        "      <name>display_b</name>"
-        "      <userZoneId>10</userZoneId>"
-        "    </display>"
-        "  </displays>"
-        "</Configs>";
-    ErrCode ret = mgr.ParseDisplayConfig(cycleXml);
-    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    TeardownConfig(mgr);
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerParseConfig007
- * @tc.desc: Verify ParseDisplayConfig loads a valid standalone-only configuration: every display
- *           is its own user zone and all lookup maps are populated.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseConfig007, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    std::string standaloneXml =
-        "<Configs>"
-        "  <displays>"
-        "    <display>"
-        "      <physicalId>10</physicalId>"
-        "      <logicalId>100</logicalId>"
-        "      <name>display_a</name>"
-        "    </display>"
-        "    <display>"
-        "      <physicalId>20</physicalId>"
-        "      <logicalId>300</logicalId>"
-        "      <name>display_c</name>"
-        "    </display>"
-        "  </displays>"
-        "</Configs>";
-    ErrCode ret = mgr.ParseDisplayConfig(standaloneXml);
-    EXPECT_EQ(ret, ERR_OK);
-    EXPECT_EQ(mgr.logicalIdMap_.size(), 2u);
-    EXPECT_EQ(mgr.logicalIdMap_[DISPLAY_A_LOGICAL_ID].userZone, DISPLAY_A_LOGICAL_ID);
-    EXPECT_EQ(mgr.userZonePrimaryMap_[DISPLAY_A_LOGICAL_ID], DISPLAY_A_LOGICAL_ID);
-    EXPECT_EQ(mgr.userZoneMap_[DISPLAY_C_LOGICAL_ID].size(), 1u);
-    TeardownConfig(mgr);
-}
-
-/**
- * @tc.name: DisplayUserZoneConfigManagerParseConfig008
- * @tc.desc: Verify ParseDisplayConfig rejects a display missing either required ID.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseConfig008, TestSize.Level1)
-{
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    std::string missingPhysicalIdXml =
-        "<Configs><displays><display><logicalId>100</logicalId></display></displays></Configs>";
-    EXPECT_EQ(mgr.ParseDisplayConfig(missingPhysicalIdXml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_EQ(mgr.ParseDisplayConfig("this is not xml"), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
     EXPECT_TRUE(mgr.logicalIdMap_.empty());
-
-    std::string missingLogicalIdXml =
-        "<Configs><displays><display><physicalId>10</physicalId></display></displays></Configs>";
-    EXPECT_EQ(mgr.ParseDisplayConfig(missingLogicalIdXml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    EXPECT_TRUE(mgr.logicalIdMap_.empty());
-    TeardownConfig(mgr);
 }
 
 /**
- * @tc.name: DisplayUserZoneConfigManagerParseConfig009
- * @tc.desc: Verify ParseDisplayConfig rejects repeated required IDs in one display node.
+ * @tc.name: DisplayUserZoneConfigManagerParseWrongRoot001
+ * @tc.desc: A well-formed document whose root is not <Configs> is rejected.
  * @tc.type: FUNC
  * @tc.require:
  */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseConfig009, TestSize.Level1)
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseWrongRoot001, TestSize.Level1)
 {
     auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    std::string duplicatePhysicalIdXml =
+    EXPECT_EQ(mgr.ParseDisplayConfig("<Displays></Displays>"), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_TRUE(mgr.logicalIdMap_.empty());
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerParseMissingDisplays001
+ * @tc.desc: A <Configs> root without a <displays> child is rejected.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseMissingDisplays001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    EXPECT_EQ(mgr.ParseDisplayConfig("<Configs></Configs>"), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_TRUE(mgr.logicalIdMap_.empty());
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerParseEmptyDisplays001
+ * @tc.desc: A config with zero display nodes has no primary display and is rejected.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseEmptyDisplays001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    EXPECT_EQ(mgr.ParseDisplayConfig(WrapConfig("")), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_TRUE(mgr.logicalIdMap_.empty());
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerParseMissingPhysicalId001
+ * @tc.desc: A display node missing physicalId is rejected.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseMissingPhysicalId001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    const std::string xml = WrapConfig(
+        "<display><logicalId>100</logicalId><name>a</name></display>");
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_TRUE(mgr.logicalIdMap_.empty());
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerParseMissingLogicalId001
+ * @tc.desc: A display node missing logicalId is rejected.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseMissingLogicalId001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    const std::string xml = WrapConfig(
+        "<display><physicalId>10</physicalId><name>a</name></display>");
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_TRUE(mgr.logicalIdMap_.empty());
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerParseBadNumber001
+ * @tc.desc: A non-numeric required attribute is rejected.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseBadNumber001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    const std::string xml = WrapConfig(
+        "<display><physicalId>abc</physicalId><logicalId>100</logicalId></display>");
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerParseNegativeNumber001
+ * @tc.desc: A negative value is not a valid unsigned id and is rejected.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseNegativeNumber001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    const std::string xml = WrapConfig(
+        "<display><physicalId>10</physicalId><logicalId>-1</logicalId></display>");
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerParseOverflow001
+ * @tc.desc: A value exceeding uint64_t range is rejected by from_chars.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseOverflow001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    const std::string xml = WrapConfig(
+        "<display><physicalId>18446744073709551616</physicalId><logicalId>100</logicalId></display>");
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerParseTrailingGarbage001
+ * @tc.desc: A value with trailing non-digit characters is rejected (full-consumption rule).
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseTrailingGarbage001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    const std::string xml = WrapConfig(
+        "<display><physicalId>10abc</physicalId><logicalId>100</logicalId></display>");
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerParseDuplicatePhysicalId001
+ * @tc.desc: Two display nodes sharing a physicalId are rejected.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseDuplicatePhysicalId001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    const std::string xml = WrapConfig(
+        DisplayNode(PHYS_A, LOGICAL_A, "a") +
+        DisplayNode(PHYS_A, LOGICAL_B, "b"));
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_TRUE(mgr.logicalIdMap_.empty());
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerParseDuplicateLogicalId001
+ * @tc.desc: Two display nodes sharing a logicalId are rejected and any partial
+ *           writes are rolled back.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseDuplicateLogicalId001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    const std::string xml = WrapConfig(
+        DisplayNode(PHYS_A, LOGICAL_A, "a") +
+        DisplayNode(PHYS_B, LOGICAL_A, "b"));
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_TRUE(mgr.logicalIdMap_.empty());
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerParseDuplicateField001
+ * @tc.desc: A single display node repeating a required id field is rejected.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseDuplicateField001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    const std::string dupPhysicalId =
         "<Configs><displays><display><physicalId>10</physicalId><physicalId>11</physicalId>"
         "<logicalId>100</logicalId></display></displays></Configs>";
-    EXPECT_EQ(mgr.ParseDisplayConfig(duplicatePhysicalIdXml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
-    EXPECT_TRUE(mgr.logicalIdMap_.empty());
+    EXPECT_EQ(mgr.ParseDisplayConfig(dupPhysicalId), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
 
-    std::string duplicateLogicalIdXml =
+    const std::string dupLogicalId =
         "<Configs><displays><display><physicalId>10</physicalId><logicalId>100</logicalId>"
         "<logicalId>101</logicalId></display></displays></Configs>";
-    EXPECT_EQ(mgr.ParseDisplayConfig(duplicateLogicalIdXml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_EQ(mgr.ParseDisplayConfig(dupLogicalId), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+
+    const std::string dupUserZoneId =
+        "<Configs><displays><display><physicalId>10</physicalId><logicalId>100</logicalId>"
+        "<userZoneId>10</userZoneId><userZoneId>20</userZoneId></display></displays></Configs>";
+    EXPECT_EQ(mgr.ParseDisplayConfig(dupUserZoneId), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
     EXPECT_TRUE(mgr.logicalIdMap_.empty());
-    TeardownConfig(mgr);
 }
 
 /**
- * @tc.name: DisplayUserZoneConfigManagerParseUInt001
- * @tc.desc: Verify ParseUInt64 handles empty, invalid, and valid inputs correctly.
+ * @tc.name: DisplayUserZoneConfigManagerParseUserZoneIdNotFound001
+ * @tc.desc: A secondary display referencing a physicalId that no display owns is rejected.
  * @tc.type: FUNC
  * @tc.require:
  */
-HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseUInt001, TestSize.Level1)
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseUserZoneIdNotFound001, TestSize.Level1)
 {
     auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    const std::string parseUint64Input = "12345";
-    constexpr uint64_t parseUint64Expected = 12345;
-    uint64_t val64 = 0;
-    EXPECT_FALSE(mgr.ParseUInt64("", val64));
-    EXPECT_FALSE(mgr.ParseUInt64("abc", val64));
-    EXPECT_TRUE(mgr.ParseUInt64(parseUint64Input, val64));
-    EXPECT_EQ(val64, parseUint64Expected);
+    const std::string xml = WrapConfig(DisplayNode(PHYS_A, LOGICAL_A, "a", true, 999));
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_TRUE(mgr.logicalIdMap_.empty());
 }
-#endif // ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerParseCycle001
+ * @tc.desc: Two displays whose userZoneId point at each other form a cycle with no
+ *           primary and are rejected.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseCycle001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    const std::string xml = WrapConfig(
+        DisplayNode(PHYS_A, LOGICAL_A, "a", true, PHYS_B) +
+        DisplayNode(PHYS_B, LOGICAL_B, "b", true, PHYS_A));
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_TRUE(mgr.logicalIdMap_.empty());
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerParseSecondaryRefsSecondary001
+ * @tc.desc: A display whose userZoneId resolves to another secondary (not a primary)
+ *           is rejected as a possible cycle.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseSecondaryRefsSecondary001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    const std::string xml = WrapConfig(
+        DisplayNode(PHYS_A, LOGICAL_A, "head") +
+        DisplayNode(PHYS_B, LOGICAL_B, "mid", true, PHYS_A) +
+        DisplayNode(PHYS_C, LOGICAL_C, "leaf", true, PHYS_B));
+    EXPECT_EQ(mgr.ParseDisplayConfig(xml), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_TRUE(mgr.logicalIdMap_.empty());
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerParseUInt64Boundary001
+ * @tc.desc: ParseUInt64 handles empty, whitespace, invalid, valid, and out-of-range
+ *           numeric strings correctly.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerParseUInt64Boundary001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    uint64_t value = 0;
+
+    EXPECT_FALSE(mgr.ParseUInt64("", value));
+    EXPECT_FALSE(mgr.ParseUInt64(" \t\r\n", value));
+    EXPECT_FALSE(mgr.ParseUInt64("abc", value));
+    EXPECT_FALSE(mgr.ParseUInt64("-1", value));
+    EXPECT_FALSE(mgr.ParseUInt64("10abc", value));
+    EXPECT_FALSE(mgr.ParseUInt64("10 20", value));
+    EXPECT_FALSE(mgr.ParseUInt64("18446744073709551616", value));
+
+    EXPECT_TRUE(mgr.ParseUInt64("0", value));
+    EXPECT_EQ(value, 0u);
+    EXPECT_TRUE(mgr.ParseUInt64("18446744073709551615", value));
+    EXPECT_EQ(value, UINT64_MAX);
+    EXPECT_TRUE(mgr.ParseUInt64(" 12345 \n", value));
+    EXPECT_EQ(value, 12345u);
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerRetryReadFailure001
+ * @tc.desc: A failed read is retried on every query; a later successful read is cached.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerRetryReadFailure001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    bool isPrimary = false;
+    EXPECT_EQ(mgr.IsDisplayPrimary(LOGICAL_A, isPrimary), ERR_ACCOUNT_COMMON_FILE_READ_FAILED);
+
+    // A later query retries the read; once a real XML file appears the load succeeds.
+    WriteTestConfig(WrapConfig(DisplayNode(PHYS_A, LOGICAL_A, "display_a")));
+    EXPECT_EQ(mgr.IsDisplayPrimary(LOGICAL_A, isPrimary), ERR_OK);
+    EXPECT_TRUE(isPrimary);
+
+    // A successful load is cached: replacing the file must not change the result.
+    WriteTestConfig(WrapConfig(
+        DisplayNode(PHYS_A, LOGICAL_A, "display_a", true, PHYS_C) +
+        DisplayNode(PHYS_C, LOGICAL_C, "display_c")));
+    EXPECT_EQ(mgr.IsDisplayPrimary(LOGICAL_A, isPrimary), ERR_OK);
+    EXPECT_TRUE(isPrimary);
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerRetryFormatError001
+ * @tc.desc: A successful read with invalid XML is a format error and is retried on every query.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerRetryFormatError001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    WriteTestConfig("<Invalid/>");
+
+    bool isPrimary = false;
+    EXPECT_EQ(mgr.IsDisplayPrimary(LOGICAL_A, isPrimary), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_EQ(mgr.IsDisplayPrimary(LOGICAL_A, isPrimary), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+
+    // Fixing the real XML file recovers the next query.
+    WriteTestConfig(WrapConfig(DisplayNode(PHYS_A, LOGICAL_A, "display_a")));
+    EXPECT_EQ(mgr.IsDisplayPrimary(LOGICAL_A, isPrimary), ERR_OK);
+    EXPECT_TRUE(isPrimary);
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerQueryPrimary001
+ * @tc.desc: GetPrimaryDisplayId and IsDisplayPrimary resolve a loaded secondary display
+ *           to its user zone primary, and unknown displays are reported as an error.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerQueryPrimary001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    WriteTestConfig(WrapConfig(
+        DisplayNode(PHYS_A, LOGICAL_A, "head_unit") +
+        DisplayNode(PHYS_B, LOGICAL_B, "passenger", true, PHYS_A)));
+
+    uint64_t primaryDisplayId = 0;
+    EXPECT_EQ(mgr.GetPrimaryDisplayId(LOGICAL_B, primaryDisplayId), ERR_OK);
+    EXPECT_EQ(primaryDisplayId, LOGICAL_A);
+    EXPECT_EQ(mgr.GetPrimaryDisplayId(LOGICAL_A, primaryDisplayId), ERR_OK);
+    EXPECT_EQ(primaryDisplayId, LOGICAL_A);
+    constexpr uint64_t UNKNOWN_DISPLAY = 999;
+    // An unknown display is reported as an error and the out-params are left untouched.
+    EXPECT_EQ(mgr.GetPrimaryDisplayId(UNKNOWN_DISPLAY, primaryDisplayId),
+        ERR_ACCOUNT_COMMON_DISPLAY_NOT_IN_CONFIG_ERROR);
+    EXPECT_EQ(primaryDisplayId, LOGICAL_A);
+
+    bool isPrimary = false;
+    EXPECT_EQ(mgr.IsDisplayPrimary(LOGICAL_A, isPrimary), ERR_OK);
+    EXPECT_TRUE(isPrimary);
+    EXPECT_EQ(mgr.IsDisplayPrimary(LOGICAL_B, isPrimary), ERR_OK);
+    EXPECT_FALSE(isPrimary);
+    EXPECT_EQ(mgr.IsDisplayPrimary(UNKNOWN_DISPLAY, isPrimary),
+        ERR_ACCOUNT_COMMON_DISPLAY_NOT_IN_CONFIG_ERROR);
+    EXPECT_FALSE(isPrimary);
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerQueryZoneDisplays001
+ * @tc.desc: GetDisplayIdsByLogicalId returns the whole user zone of a loaded secondary
+ *           display and reports unknown displays as an error with an empty result.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerQueryZoneDisplays001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    WriteTestConfig(WrapConfig(
+        DisplayNode(PHYS_A, LOGICAL_A, "head_unit") +
+        DisplayNode(PHYS_B, LOGICAL_B, "passenger", true, PHYS_A) +
+        DisplayNode(PHYS_C, LOGICAL_C, "standalone")));
+
+    std::vector<uint64_t> displayIds;
+    EXPECT_EQ(mgr.GetDisplayIdsByLogicalId(LOGICAL_B, displayIds), ERR_OK);
+    ASSERT_EQ(displayIds.size(), 2u);
+    EXPECT_EQ(displayIds[0], LOGICAL_A);
+    EXPECT_EQ(displayIds[1], LOGICAL_B);
+    EXPECT_EQ(mgr.GetDisplayIdsByLogicalId(LOGICAL_C, displayIds), ERR_OK);
+    ASSERT_EQ(displayIds.size(), 1u);
+    EXPECT_EQ(displayIds[0], LOGICAL_C);
+    constexpr uint64_t UNKNOWN_DISPLAY = 999;
+    // An unknown display is reported as an error; the vector stays empty (cleared on entry).
+    EXPECT_EQ(mgr.GetDisplayIdsByLogicalId(UNKNOWN_DISPLAY, displayIds),
+        ERR_ACCOUNT_COMMON_DISPLAY_NOT_IN_CONFIG_ERROR);
+    EXPECT_TRUE(displayIds.empty());
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerConcurrentLoad001
+ * @tc.desc: Concurrent first load, Init and queries complete without deadlock and
+ *           every thread observes the same user zone layout.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerConcurrentLoad001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+    WriteTestConfig(WrapConfig(
+        DisplayNode(PHYS_A, LOGICAL_A, "head_unit") +
+        DisplayNode(PHYS_B, LOGICAL_B, "passenger", true, PHYS_A)));
+
+    constexpr int THREAD_COUNT = 8;
+    constexpr int ITERATIONS = 50;
+    std::atomic<int> failures = 0;
+    std::atomic<bool> start = false;
+    std::vector<std::thread> threads;
+    threads.reserve(THREAD_COUNT);
+    for (int i = 0; i < THREAD_COUNT; ++i) {
+        threads.emplace_back([&mgr, &failures, &start, i]() {
+            while (!start.load()) {
+                std::this_thread::yield();
+            }
+            for (int j = 0; j < ITERATIONS; ++j) {
+                if (i % 2 == 0) {
+                    bool isPrimary = false;
+                    if (mgr.IsDisplayPrimary(LOGICAL_A, isPrimary) != ERR_OK || !isPrimary) {
+                        ++failures;
+                    }
+                    uint64_t primaryDisplayId = 0;
+                    if (mgr.GetPrimaryDisplayId(LOGICAL_B, primaryDisplayId) != ERR_OK ||
+                        primaryDisplayId != LOGICAL_A) {
+                        ++failures;
+                    }
+                } else {
+                    std::vector<uint64_t> displayIds;
+                    if (mgr.Init() != ERR_OK) {
+                        ++failures;
+                    }
+                    if (mgr.GetDisplayIdsByLogicalId(LOGICAL_B, displayIds) != ERR_OK ||
+                        displayIds.size() != 2u) {
+                        ++failures;
+                    }
+                }
+            }
+        });
+    }
+    start.store(true);
+    // A deadlock here would block join() and fail the suite by timeout.
+    for (auto &thread : threads) {
+        thread.join();
+    }
+    EXPECT_EQ(failures.load(), 0);
+}
+
+/**
+ * @tc.name: DisplayUserZoneConfigManagerInitFailure001
+ * @tc.desc: Init returns the normalized read/format error and leaves the manager
+ *           unready so a subsequent query retries the load.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DisplayUserZoneConfigManagerTest, DisplayUserZoneConfigManagerInitFailure001, TestSize.Level1)
+{
+    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
+
+    // No config file: Init reports a read failure and leaves the manager unready.
+    EXPECT_EQ(mgr.Init(), ERR_ACCOUNT_COMMON_FILE_READ_FAILED);
+    EXPECT_FALSE(mgr.initOk_);
+
+    WriteTestConfig("not xml");
+    EXPECT_EQ(mgr.Init(), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_FALSE(mgr.initOk_);
+}
 }  // namespace AccountSA
 }  // namespace OHOS

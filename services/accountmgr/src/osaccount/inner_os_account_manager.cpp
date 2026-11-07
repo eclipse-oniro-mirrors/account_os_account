@@ -3012,8 +3012,7 @@ ErrCode IInnerOsAccountManager::ValidateDisplayForActivation(const int id, const
                 errCode, static_cast<unsigned long long>(displayId));
         } else if (errCode != ERR_OK) {
             ReportOsAccountOperationFail(id, Constants::OPERATION_ACTIVATE, errCode,
-                errCode == ERR_ACCOUNT_COMMON_DISPLAY_NOT_PRIMARY_ERROR ?
-                "Target display is not primary of its user zone" : "Target display does not exist");
+                "Target display does not exist");
             return errCode;
         }
     }
@@ -3733,6 +3732,11 @@ ErrCode IInnerOsAccountManager::ValidateDisplayPrimary(const uint64_t displayId)
     }
     bool isPrimary = false;
     errCode = DisplayUserZoneConfigManager::GetInstance().IsDisplayPrimary(displayId, isPrimary);
+    if (errCode == ERR_ACCOUNT_COMMON_DISPLAY_NOT_IN_CONFIG_ERROR) {
+        // The display exists (validated above) but is not in the user zone config:
+        // a standalone display is the primary of its own zone.
+        return ERR_OK;
+    }
     if (errCode != ERR_OK) {
         ACCOUNT_LOGE("Failed to load display user zone config, err=%{public}d", errCode);
         return errCode;
@@ -3740,7 +3744,7 @@ ErrCode IInnerOsAccountManager::ValidateDisplayPrimary(const uint64_t displayId)
     if (!isPrimary) {
         ACCOUNT_LOGE("Display %{public}llu is not primary of its user zone",
             static_cast<unsigned long long>(displayId));
-        return ERR_ACCOUNT_COMMON_DISPLAY_NOT_PRIMARY_ERROR;
+        return ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR;
     }
     return ERR_OK;
 }
@@ -3807,17 +3811,11 @@ ErrCode IInnerOsAccountManager::IsOsAccountForeground(const int32_t localId, con
         return ERR_OK;
     }
 
-    // Validate display ID exists
     uint64_t primaryDisplayId = displayId;
 #ifdef ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
-    ErrCode errCode = ValidateDisplayId(displayId);
+    // Translate the display to its user-zone primary; any failure keeps the original display ID.
+    ErrCode errCode = DisplayUserZoneConfigManager::GetInstance().GetPrimaryDisplayId(displayId, primaryDisplayId);
     if (errCode != ERR_OK) {
-        return errCode;
-    }
-    errCode = DisplayUserZoneConfigManager::GetInstance().GetPrimaryDisplayId(displayId, primaryDisplayId);
-    if (errCode == ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR) {
-        return ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR;
-    } else if (errCode != ERR_OK) {
         ACCOUNT_LOGW("Failed to get primary display for %{public}llu, err=%{public}d; use the original display ID",
             static_cast<unsigned long long>(displayId), errCode);
     }
@@ -3839,9 +3837,8 @@ ErrCode IInnerOsAccountManager::GetForegroundOsAccountLocalId(const uint64_t dis
     uint64_t primaryDisplayId = displayId;
 #ifdef ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
     ErrCode errCode = DisplayUserZoneConfigManager::GetInstance().GetPrimaryDisplayId(displayId, primaryDisplayId);
-    if (errCode == ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR) {
-        return ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR;
-    } else if (errCode != ERR_OK) {
+    // Any failure keeps the original display ID; the subsequent map lookup intercepts.
+    if (errCode != ERR_OK) {
         ACCOUNT_LOGW("Failed to get primary display for %{public}llu, err=%{public}d; use the original display ID",
             static_cast<unsigned long long>(displayId), errCode);
     }
@@ -3936,9 +3933,8 @@ ErrCode IInnerOsAccountManager::GetDefaultActivatedOsAccount(const uint64_t disp
     uint64_t primaryDisplayId = displayId;
 #ifdef ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
     ErrCode errCode = DisplayUserZoneConfigManager::GetInstance().GetPrimaryDisplayId(displayId, primaryDisplayId);
-    if (errCode == ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR) {
-        return ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR;
-    } else if (errCode != ERR_OK) {
+    // Any failure keeps the original display ID; the subsequent map lookup intercepts.
+    if (errCode != ERR_OK) {
         ACCOUNT_LOGW("Failed to get primary display for %{public}llu, err=%{public}d; use the original display ID",
             static_cast<unsigned long long>(displayId), errCode);
     }

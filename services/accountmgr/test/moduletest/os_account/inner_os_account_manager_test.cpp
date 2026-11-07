@@ -536,8 +536,7 @@ constexpr size_t EXPECTED_USER_ZONE_ONE_SIZE = 2;
 void SetupDisplayUserZoneLoaded()
 {
     auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    mgr.configReadFailed_ = false;
-    mgr.configFormatError_ = false;
+    mgr.initOk_ = true;
     DisplayConfigInfo infoA;
     infoA.physicalId = DISPLAY_A_PHYSICAL_ID;
     infoA.logicalId = DISPLAY_A_LOGICAL_ID;
@@ -558,8 +557,6 @@ void SetupDisplayUserZoneLoaded()
     mgr.logicalIdMap_[DISPLAY_C_LOGICAL_ID] = infoC;
     mgr.userZoneMap_[USER_ZONE_ONE] = {DISPLAY_A_LOGICAL_ID, DISPLAY_B_LOGICAL_ID};
     mgr.userZoneMap_[USER_ZONE_TWO] = {DISPLAY_C_LOGICAL_ID};
-    mgr.userZonePrimaryMap_[USER_ZONE_ONE] = DISPLAY_A_LOGICAL_ID;
-    mgr.userZonePrimaryMap_[USER_ZONE_TWO] = DISPLAY_C_LOGICAL_ID;
 }
 
 void TeardownDisplayUserZone()
@@ -567,9 +564,15 @@ void TeardownDisplayUserZone()
     auto &mgr = DisplayUserZoneConfigManager::GetInstance();
     mgr.logicalIdMap_.clear();
     mgr.userZoneMap_.clear();
-    mgr.userZonePrimaryMap_.clear();
-    mgr.configReadFailed_ = false;
-    mgr.configFormatError_ = false;
+    mgr.initOk_ = true;
+}
+
+// Simulates an initialized manager whose config lists no displays, so every query
+// treats the display as standalone. Deterministic and independent of the real
+// system config file.
+void SetupDisplayUserZoneEmpty()
+{
+    TeardownDisplayUserZone();
 }
 #endif // ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
 } // namespace
@@ -648,7 +651,6 @@ DefaultActivatedAccountState PrepareDefaultActivatedAccountUserZone(IInnerOsAcco
     configManager.logicalIdMap_[DISPLAY_A_LOGICAL_ID].userZone = Constants::DEFAULT_DISPLAY_ID;
     configManager.userZoneMap_[Constants::DEFAULT_DISPLAY_ID] = {
         Constants::DEFAULT_DISPLAY_ID, DISPLAY_A_LOGICAL_ID};
-    configManager.userZonePrimaryMap_[Constants::DEFAULT_DISPLAY_ID] = Constants::DEFAULT_DISPLAY_ID;
     DefaultActivatedAccountState state;
     state.originalControl = innerMgrService->osAccountControl_;
     auto control = std::make_shared<MockOsAccountControlFileManager>();
@@ -686,8 +688,8 @@ void RestoreDefaultActivatedAccountUserZone(IInnerOsAccountManager *innerMgrServ
 /**
  * @tc.name: GetForegroundOsAccountDisplayIdsFallback001
  * @tc.desc: Verify GetForegroundOsAccountDisplayIds returns exactly the single display the account
- *           is foreground on when the display user zone config is not loaded (fallback mode), so the
- *           new plural API keeps backward-compatible behavior without config.
+ *           is foreground on when the display is absent from the user zone config, so the
+ *           new plural API keeps backward-compatible behavior for standalone displays.
  * @tc.type: FUNC
  * @tc.require:
  */
@@ -1100,7 +1102,6 @@ HWTEST_F(IInnerOsAccountManagerTest, GetForegroundOsAccountDisplayIdsUnknown001,
     defaultDisplay.userZone = Constants::DEFAULT_DISPLAY_ID;
     configManager.logicalIdMap_[Constants::DEFAULT_DISPLAY_ID] = defaultDisplay;
     configManager.userZoneMap_[Constants::DEFAULT_DISPLAY_ID] = {Constants::DEFAULT_DISPLAY_ID};
-    configManager.userZonePrimaryMap_[Constants::DEFAULT_DISPLAY_ID] = Constants::DEFAULT_DISPLAY_ID;
 
     const int32_t localId = Constants::START_USER_ID + 62;
     int32_t oldForeground = Constants::INVALID_OS_ACCOUNT_ID;
@@ -1170,7 +1171,7 @@ HWTEST_F(IInnerOsAccountManagerTest, ResetDefaultActivatedAccount001, TestSize.L
 /**
  * @tc.name: ValidateDisplayForActivationLoaded001
  * @tc.desc: Verify ValidateDisplayForActivation rejects a DMS-confirmed non-default display with
- *           DISPLAY_NOT_PRIMARY_ERROR when it is configured as non-primary.
+ *           DISPLAY_ID_NOT_EXIST_ERROR when it is configured as non-primary.
  * @tc.type: FUNC
  * @tc.require:
  */
@@ -1194,7 +1195,7 @@ HWTEST_F(IInnerOsAccountManagerTest, ValidateDisplayForActivationLoaded001, Test
     mgr.logicalIdMap_[nonPrimaryDisplay] = info;
     const int32_t testId = Constants::START_USER_ID + 80;
     EXPECT_EQ(innerMgrService_->ValidateDisplayForActivation(testId, nonPrimaryDisplay),
-        ERR_ACCOUNT_COMMON_DISPLAY_NOT_PRIMARY_ERROR);
+        ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR);
     TeardownDisplayUserZone();
 }
 
@@ -1216,16 +1217,16 @@ HWTEST_F(IInnerOsAccountManagerTest, ValidateDisplayForActivationLoaded002, Test
 
 /**
  * @tc.name: ValidateDisplayForActivationConfigFallback001
- * @tc.desc: Config errors allow DMS-confirmed displays, but retain cross-display activation checks.
+ * @tc.desc: Displays without a user zone config entry are treated as primary, but
+ *           cross-display activation checks are retained.
  * @tc.type: FUNC
+ * @tc.require:
  */
 HWTEST_F(IInnerOsAccountManagerTest, ValidateDisplayForActivationConfigFallback001, TestSize.Level1)
 {
     const auto displayIds = Rosen::DisplayManagerLite::GetInstance().GetAllDisplayIds();
     ASSERT_FALSE(displayIds.empty());
-    TeardownDisplayUserZone();
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    mgr.configFormatError_ = true;
+    SetupDisplayUserZoneEmpty();
     const int32_t testId = Constants::START_USER_ID + 83;
     EXPECT_EQ(innerMgrService_->ValidateDisplayForActivation(testId, displayIds.front()), ERR_OK);
 
@@ -1247,14 +1248,13 @@ HWTEST_F(IInnerOsAccountManagerTest, ValidateDisplayForActivationConfigFallback0
 /**
  * @tc.name: ValidateDisplayForActivationConfigFallbackDefault001
  * @tc.desc: The default display is always accepted for activation regardless of the DMS display
- *           list or a broken user zone config.
+ *           list or the user zone config content.
  * @tc.type: FUNC
+ * @tc.require:
  */
 HWTEST_F(IInnerOsAccountManagerTest, ValidateDisplayForActivationConfigFallbackDefault001, TestSize.Level1)
 {
-    TeardownDisplayUserZone();
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    mgr.configFormatError_ = true;
+    SetupDisplayUserZoneEmpty();
     const int32_t testId = Constants::START_USER_ID + 85;
     EXPECT_EQ(innerMgrService_->ValidateDisplayForActivation(testId, Constants::DEFAULT_DISPLAY_ID), ERR_OK);
     TeardownDisplayUserZone();
@@ -1262,8 +1262,9 @@ HWTEST_F(IInnerOsAccountManagerTest, ValidateDisplayForActivationConfigFallbackD
 
 /**
  * @tc.name: ValidateDisplayForActivationConfigFallbackAbsent001
- * @tc.desc: Config errors must not allow a non-default display absent from DMS.
+ * @tc.desc: An empty user zone config must not allow a non-default display absent from DMS.
  * @tc.type: FUNC
+ * @tc.require:
  */
 HWTEST_F(IInnerOsAccountManagerTest, ValidateDisplayForActivationConfigFallbackAbsent001, TestSize.Level1)
 {
@@ -1272,9 +1273,7 @@ HWTEST_F(IInnerOsAccountManagerTest, ValidateDisplayForActivationConfigFallbackA
     while (std::find(displayIds.begin(), displayIds.end(), absentDisplay) != displayIds.end()) {
         ++absentDisplay;
     }
-    TeardownDisplayUserZone();
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    mgr.configFormatError_ = true;
+    SetupDisplayUserZoneEmpty();
     const int32_t testId = Constants::START_USER_ID + 82;
     EXPECT_TRUE(innerMgrService_->CheckAndAddLocalIdOperating(testId));
     EXPECT_EQ(innerMgrService_->ValidateDisplayForActivation(testId, absentDisplay),
@@ -1286,17 +1285,15 @@ HWTEST_F(IInnerOsAccountManagerTest, ValidateDisplayForActivationConfigFallbackA
 }
 
 /**
- * @tc.name: UserZoneQueriesConfigFormatError001
+ * @tc.name: UserZoneQueriesNoConfigEntry001
  * @tc.desc: Foreground and default-activated lookups fall back to the original display
- *           when the display user zone config is broken, instead of failing.
+ *           when the display has no user zone config entry, instead of failing.
  * @tc.type: FUNC
  * @tc.require:
  */
-HWTEST_F(IInnerOsAccountManagerTest, UserZoneQueriesConfigFormatError001, TestSize.Level1)
+HWTEST_F(IInnerOsAccountManagerTest, UserZoneQueriesNoConfigEntry001, TestSize.Level1)
 {
-    TeardownDisplayUserZone();
-    auto &mgr = DisplayUserZoneConfigManager::GetInstance();
-    mgr.configFormatError_ = true;
+    SetupDisplayUserZoneEmpty();
     constexpr int32_t testId = Constants::START_USER_ID + 84;
     bool isForeground = false;
     int32_t localId = Constants::INVALID_OS_ACCOUNT_ID;
@@ -1343,10 +1340,9 @@ HWTEST_F(IInnerOsAccountManagerTest, UserZoneQueriesConfigFormatError001, TestSi
 
 /**
  * @tc.name: SetDefaultActivatedDisplayConfigError001
- * @tc.desc: The default display is always a valid primary display and succeeds even when the
- *           user-zone config is broken; non-default DMS-registered displays still fail loudly
- *           on broken config, the DMS existence check is retained, and the not-primary
- *           rejection is retained when the config is available.
+ * @tc.desc: The default display is always a valid primary display; a DMS-registered display
+ *           without a config entry is treated as primary, the DMS existence check is retained,
+ *           and the not-primary rejection is retained when the config lists it as secondary.
  * @tc.type: FUNC
  * @tc.require:
  */
@@ -1355,17 +1351,16 @@ HWTEST_F(IInnerOsAccountManagerTest, SetDefaultActivatedDisplayConfigError001, T
     const auto displayIds = Rosen::DisplayManagerLite::GetInstance().GetAllDisplayIds();
     ASSERT_FALSE(displayIds.empty());
     const uint64_t dmsDisplay = displayIds.front();
-    TeardownDisplayUserZone();
+    SetupDisplayUserZoneEmpty();
     auto &mgr = DisplayUserZoneConfigManager::GetInstance();
 
-    // Config broken: the default display stays valid, while DMS-registered displays are rejected.
-    mgr.configFormatError_ = true;
+    // No config entry: the default display stays valid and the DMS display is treated as primary.
     EXPECT_EQ(innerMgrService_->ValidateDisplayPrimary(Constants::DEFAULT_DISPLAY_ID),
         ERR_OK);
     EXPECT_EQ(innerMgrService_->ValidateDisplayPrimary(dmsDisplay),
-        ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+        ERR_OK);
 
-    // Config broken must not bypass the DMS existence check for non-default displays.
+    // An empty config must not bypass the DMS existence check for non-default displays.
     uint64_t absentDisplay = Constants::DEFAULT_DISPLAY_ID + 1;
     while (std::find(displayIds.begin(), displayIds.end(), absentDisplay) != displayIds.end()) {
         ++absentDisplay;
@@ -1373,15 +1368,14 @@ HWTEST_F(IInnerOsAccountManagerTest, SetDefaultActivatedDisplayConfigError001, T
     EXPECT_EQ(innerMgrService_->ValidateDisplayPrimary(absentDisplay),
         ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR);
 
-    // Config available: a configured secondary display is rejected as not primary, with a
-    // dedicated error code distinct from the DMS existence failure above.
-    mgr.configFormatError_ = false;
+    // Config lists the display as secondary: rejected with the same display-not-exist
+    // error as the DMS existence failure above; the hilog tells the causes apart.
     DisplayConfigInfo secondaryInfo;
     secondaryInfo.logicalId = dmsDisplay;
     secondaryInfo.userZone = dmsDisplay + 1;
     mgr.logicalIdMap_[dmsDisplay] = secondaryInfo;
     EXPECT_EQ(innerMgrService_->ValidateDisplayPrimary(dmsDisplay),
-        ERR_ACCOUNT_COMMON_DISPLAY_NOT_PRIMARY_ERROR);
+        ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR);
     TeardownDisplayUserZone();
 }
 
@@ -1400,8 +1394,7 @@ struct ForegroundAccountFallbackState {
 
 ForegroundAccountFallbackState PrepareForegroundAccountFallback(IInnerOsAccountManager *innerMgrService)
 {
-    TeardownDisplayUserZone();
-    DisplayUserZoneConfigManager::GetInstance().configFormatError_ = true;
+    SetupDisplayUserZoneEmpty();
     const uint64_t defaultDisplay = Constants::DEFAULT_DISPLAY_ID;
     const uint64_t otherDisplay = TEST_DISPLAY_ID_UNKNOWN;
     ForegroundAccountFallbackState state;
@@ -1491,7 +1484,7 @@ HWTEST_F(IInnerOsAccountManagerTest, GetForegroundOsAccountLocalIdSecondaryNoFal
     int32_t localId = Constants::INVALID_OS_ACCOUNT_ID;
     // A secondary display must not borrow the default display's activation target.
     auto &config = DisplayUserZoneConfigManager::GetInstance();
-    config.configFormatError_ = false;
+    config.initOk_ = true;
     DisplayConfigInfo defaultInfo;
     defaultInfo.logicalId = defaultDisplay;
     defaultInfo.userZone = defaultDisplay;
@@ -1500,12 +1493,11 @@ HWTEST_F(IInnerOsAccountManagerTest, GetForegroundOsAccountLocalIdSecondaryNoFal
     secondaryInfo.logicalId = otherDisplay;
     secondaryInfo.userZone = defaultDisplay;
     config.logicalIdMap_[otherDisplay] = secondaryInfo;
-    config.userZonePrimaryMap_[defaultDisplay] = defaultDisplay;
     EXPECT_EQ(innerMgrService_->GetForegroundOsAccountLocalId(defaultDisplay, localId),
         ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR);
     EXPECT_EQ(innerMgrService_->GetForegroundOsAccountLocalId(otherDisplay, localId),
         ERR_ACCOUNT_COMMON_ACCOUNT_IN_DISPLAY_ID_NOT_FOUND_ERROR);
-    config.configFormatError_ = true;
+    TeardownDisplayUserZone();
 
     RestoreForegroundAccountFallback(innerMgrService_, state);
 }
@@ -1607,7 +1599,7 @@ HWTEST_F(IInnerOsAccountManagerTest, SetDefaultActivatedOsAccountUserZone001, Te
     innerMgrService_->defaultActivatedIds_.Erase(DISPLAY_B_LOGICAL_ID);
 
     EXPECT_EQ(innerMgrService_->SetDefaultActivatedOsAccount(DISPLAY_B_LOGICAL_ID, Constants::START_USER_ID),
-        ERR_ACCOUNT_COMMON_DISPLAY_NOT_PRIMARY_ERROR);
+        ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR);
 
     int32_t activatedId = Constants::INVALID_OS_ACCOUNT_ID;
     EXPECT_TRUE(innerMgrService_->defaultActivatedIds_.Find(DISPLAY_A_LOGICAL_ID, activatedId));
@@ -1723,7 +1715,7 @@ HWTEST_F(IInnerOsAccountManagerTest, SetDefaultActivatedOsAccountValidationPrece
     // Validation precedes dedup: DISPLAY_B is secondary in the loaded config, so re-setting the
     // same account on it is rejected instead of returning idempotent success over a stale record.
     EXPECT_EQ(innerMgrService_->SetDefaultActivatedOsAccount(DISPLAY_B_LOGICAL_ID, testId),
-        ERR_ACCOUNT_COMMON_DISPLAY_NOT_PRIMARY_ERROR);
+        ERR_ACCOUNT_COMMON_DISPLAY_ID_NOT_EXIST_ERROR);
 
     if (hadDefault) {
         innerMgrService_->defaultActivatedIds_.EnsureInsert(Constants::DEFAULT_DISPLAY_ID, oldDefaultId);
