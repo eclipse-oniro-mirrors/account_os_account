@@ -42,7 +42,7 @@ using namespace OHOS::Security::AccessToken;
 
 namespace {
     static uint64_t g_shellTokenID = IPCSkeleton::GetSelfTokenID();
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     constexpr uid_t MAINTENANCE_UID_FOR_TEST = 4444;
     constexpr uid_t ROOT_UID_FOR_TEST = 0;
 #ifdef HAS_PIN_AUTH_PART
@@ -260,7 +260,7 @@ uint64_t GetAllAccountPermission()
     return tokenID;
 }
 
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 template<typename Func>
 ErrCode ExecuteWithUid(uid_t uid, Func &&func)
 {
@@ -390,7 +390,7 @@ ErrCode ExecuteWithAuthorizationToken(Options options, Func &&func)
 
 ErrCode CreateOsAccountForTest(const std::string &name, const OsAccountType &type, OsAccountInfo &osAccountInfo)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 #ifdef HAS_PIN_AUTH_PART
     CreateOsAccountOptions options;
     options.hasShortName = false;
@@ -408,7 +408,7 @@ ErrCode CreateOsAccountForTest(const std::string &name, const OsAccountType &typ
 ErrCode CreateOsAccountForTest(const std::string &localName, const std::string &shortName,
     const OsAccountType &type, OsAccountInfo &osAccountInfo)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 #ifdef HAS_PIN_AUTH_PART
     CreateOsAccountOptions options;
     return ExecuteWithAuthorizationToken(options, [&](const CreateOsAccountOptions &authOptions) {
@@ -425,7 +425,7 @@ ErrCode CreateOsAccountForTest(const std::string &localName, const std::string &
 ErrCode CreateOsAccountForTest(const std::string &localName, const std::string &shortName,
     const OsAccountType &type, const CreateOsAccountOptions &options, OsAccountInfo &osAccountInfo)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 #ifdef HAS_PIN_AUTH_PART
     return ExecuteWithAuthorizationToken(options, [&](const CreateOsAccountOptions &authOptions) {
         return OsAccountManager::CreateOsAccount(localName, shortName, type, authOptions, osAccountInfo);
@@ -440,7 +440,7 @@ ErrCode CreateOsAccountForTest(const std::string &localName, const std::string &
 
 ErrCode CreateOsAccountForTest(OsAccountInfo &osAccountInfo, const CreateOsAccountOptions &options)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     return CreateOsAccountWithFullInfoForTest(osAccountInfo, options);
 #else
     const std::string localName = osAccountInfo.GetLocalName();
@@ -451,7 +451,7 @@ ErrCode CreateOsAccountForTest(OsAccountInfo &osAccountInfo, const CreateOsAccou
 
 ErrCode CreateOsAccountWithFullInfoForTest(OsAccountInfo &osAccountInfo, const CreateOsAccountOptions &options)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 #ifdef HAS_PIN_AUTH_PART
     return ExecuteWithAuthorizationToken(options, [&](const CreateOsAccountOptions &authOptions) {
         return OsAccountManager::CreateOsAccountWithFullInfo(osAccountInfo, authOptions);
@@ -467,7 +467,7 @@ ErrCode CreateOsAccountWithFullInfoForTest(OsAccountInfo &osAccountInfo, const C
 ErrCode CreateOsAccountForDomainForTest(const OsAccountType &type, const DomainAccountInfo &domainInfo,
     const std::shared_ptr<DomainAccountCallback> &callback, const CreateOsAccountForDomainOptions &options)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 #ifdef HAS_PIN_AUTH_PART
     return ExecuteWithAuthorizationToken(options, [&](const CreateOsAccountForDomainOptions &authOptions) {
         return OsAccountManager::CreateOsAccountForDomain(type, domainInfo, callback, authOptions);
@@ -482,7 +482,7 @@ ErrCode CreateOsAccountForDomainForTest(const OsAccountType &type, const DomainA
 
 ErrCode SetOsAccountToBeRemovedForTest(int32_t localId, bool toBeRemoved)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     return ExecuteWithUid(MAINTENANCE_UID_FOR_TEST, [&]() {
         return OsAccountManager::SetOsAccountToBeRemoved(localId, toBeRemoved);
     });
@@ -493,7 +493,7 @@ ErrCode SetOsAccountToBeRemovedForTest(int32_t localId, bool toBeRemoved)
 
 ErrCode RemoveOsAccountForTest(int id)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 #ifdef HAS_PIN_AUTH_PART
     RemoveOsAccountOptions options;
     return ExecuteWithAuthorizationToken(options, [&](const RemoveOsAccountOptions &authOptions) {
@@ -509,7 +509,7 @@ ErrCode RemoveOsAccountForTest(int id)
 
 ErrCode RemoveOsAccountForTest(int id, const RemoveOsAccountOptions &options)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 #ifdef HAS_PIN_AUTH_PART
     return ExecuteWithAuthorizationToken(options, [&](const RemoveOsAccountOptions &authOptions) {
         return OsAccountManager::RemoveOsAccount(id, authOptions);
@@ -524,7 +524,7 @@ ErrCode RemoveOsAccountForTest(int id, const RemoveOsAccountOptions &options)
 
 ErrCode CreateOsAccountByProxyForTest(const std::string &name, const OsAccountType &type, OsAccountInfo &osAccountInfo)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 #ifdef HAS_PIN_AUTH_PART
     CreateOsAccountOptions options;
     options.hasShortName = false;
@@ -542,7 +542,7 @@ ErrCode CreateOsAccountByProxyForTest(const std::string &name, const OsAccountTy
 ErrCode CreateOsAccountByProxyForTest(const std::string &localName, const std::string &shortName,
     const OsAccountType &type, OsAccountInfo &osAccountInfo, const CreateOsAccountOptions &options)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 #ifdef HAS_PIN_AUTH_PART
     return ExecuteWithAuthorizationToken(options, [&](const CreateOsAccountOptions &authOptions) {
         return OsAccount::GetInstance().CreateOsAccount(localName, shortName, type, osAccountInfo, authOptions);
@@ -557,7 +557,7 @@ ErrCode CreateOsAccountByProxyForTest(const std::string &localName, const std::s
 
 ErrCode RemoveOsAccountByProxyForTest(int id)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 #ifdef HAS_PIN_AUTH_PART
     RemoveOsAccountOptions options;
     return ExecuteWithAuthorizationToken(options, [&](const RemoveOsAccountOptions &authOptions) {
@@ -573,7 +573,7 @@ ErrCode RemoveOsAccountByProxyForTest(int id)
 
 ErrCode RemoveOsAccountByProxyForTest(int id, const RemoveOsAccountOptions &options)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 #ifdef HAS_PIN_AUTH_PART
     return ExecuteWithAuthorizationToken(options, [&](const RemoveOsAccountOptions &authOptions) {
         return OsAccount::GetInstance().RemoveOsAccount(id, authOptions);

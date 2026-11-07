@@ -818,7 +818,8 @@ HWTEST_F(DomainAccountManagerInnerServiceTest, InnerDomainAuthCallbackConstructo
 
 /**
  * @tc.name: CreateAuthCallbackForUnlock001
- * @tc.desc: CreateAuthCallbackForUnlock returns callback with UNLOCK_INTENT when SUPPORT_AUTHORIZATION is not defined
+ * @tc.desc: CreateAuthCallbackForUnlock returns callback with UNLOCK_INTENT
+ *           when SUPPORT_ADMIN_ACCESS_CONTROL is not defined
  * @tc.type: FUNC
  * @tc.require:
  */

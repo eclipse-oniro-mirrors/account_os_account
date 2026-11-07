@@ -1501,13 +1501,13 @@ HWTEST_F(OsAccountManagerServiceModuleTest, OsAccountManagerServiceModuleTest125
 
     setuid(ROOT_UID);
     ASSERT_TRUE(RecoveryPermission(tokenID, selfTokenId));
-#ifndef SUPPORT_AUTHORIZATION
+#ifndef SUPPORT_ADMIN_ACCESS_CONTROL
     setuid(3057);
     EXPECT_EQ(ERR_OK,
         osAccountManagerService_->CreateOsAccount("Test125", INT_TEST_TYPE, osAccountInfo));
     setuid(ROOT_UID);
     EXPECT_EQ(ERR_OK, osAccountManagerService_->RemoveOsAccount(osAccountInfo.GetLocalId()));
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 }
 
 /**
@@ -1556,7 +1556,7 @@ HWTEST_F(OsAccountManagerServiceModuleTest, OsAccountManagerServiceModuleTest128
 }
 #endif
 
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 /**
  * @tc.name: OsAccountManagerServiceModuleTest129
  * @tc.desc: Test EDM-created admin account has ADMIN type and admin.authorize constraint.
@@ -1581,7 +1581,7 @@ HWTEST_F(OsAccountManagerServiceModuleTest, OsAccountManagerServiceModuleTest129
 
     EXPECT_EQ(ERR_OK, osAccountManagerService_->RemoveOsAccount(createdInfo.GetLocalId()));
 }
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 
 #ifdef ENABLE_MULTIPLE_OS_ACCOUNTS
 /**
@@ -1603,7 +1603,7 @@ HWTEST_F(OsAccountManagerServiceModuleTest, OsAccountManagerServiceModuleTest131
 
     uint64_t oldTokenId = IPCSkeleton::GetSelfTokenID();
 
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     // Step 2: cache holds ADMIN with restricted=true; TEE has no role info for this user.
     {
         auto cachedType = IInnerOsAccountManager::GetInstance().osAccountCacheManager_.GetAccountTypeFromCache(localId);
@@ -1616,7 +1616,7 @@ HWTEST_F(OsAccountManagerServiceModuleTest, OsAccountManagerServiceModuleTest131
         EXPECT_EQ(ERR_ACCOUNT_COMMON_TEE_ACCOUNT_NOT_EXIST,
             IInnerOsAccountManager::GetInstance().teeAdapter_.GetOsAccountType(localId, typeTee));
     }
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 
     // Step 3: caller WITH MANAGE_LOCAL_ACCOUNTS queries the type (core regression: old code returned -1 here).
     {
@@ -1639,15 +1639,15 @@ HWTEST_F(OsAccountManagerServiceModuleTest, OsAccountManagerServiceModuleTest131
         ASSERT_TRUE(RecoveryPermission(tokenWithoutPerm, oldTokenId));
     }
 
-    // Step 5: admin.authorize constraint visibility depends on SUPPORT_AUTHORIZATION (needs MANAGE_LOCAL_ACCOUNTS).
+    // Step 5: admin.authorize constraint visibility depends on SUPPORT_ADMIN_ACCESS_CONTROL.
     bool isEnable = false;
     EXPECT_EQ(ERR_OK, osAccountManagerService_->IsOsAccountConstraintEnable(
         localId, "constraint.os.account.admin.authorize", isEnable));
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     EXPECT_TRUE(isEnable);
 #else
     EXPECT_FALSE(isEnable);
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 
     // Cleanup
     EXPECT_EQ(ERR_OK, osAccountManagerService_->RemoveOsAccount(localId));
@@ -1694,7 +1694,7 @@ HWTEST_F(OsAccountManagerServiceModuleTest, GetOsAccountType001, TestSize.Level1
     EXPECT_EQ(osAccountManagerService_->RemoveOsAccount(osAccountInfoA.GetLocalId()), ERR_OK);
 }
 
-#ifndef SUPPORT_AUTHORIZATION
+#ifndef SUPPORT_ADMIN_ACCESS_CONTROL
 /**
  * @tc.name: SetOsAccountType001
  * @tc.desc: Test SetOsAccountType.
@@ -2729,10 +2729,10 @@ HWTEST_F(OsAccountManagerServiceModuleTest, GetForegroundOsAccountDisplayIdsTest
 }
 #endif // ENABLE_MULTIPLE_OS_ACCOUNTS
 
-#ifndef SUPPORT_AUTHORIZATION
+#ifndef SUPPORT_ADMIN_ACCESS_CONTROL
 /**
  * @tc.name: CreateOsAccountTokenNotSupported001
- * @tc.desc: Test CreateOsAccount with token when SUPPORT_AUTHORIZATION is not defined
+ * @tc.desc: Test CreateOsAccount with token when SUPPORT_ADMIN_ACCESS_CONTROL is not defined
  * @tc.type: FUNC
  * @tc.require:
  */
@@ -2748,7 +2748,7 @@ HWTEST_F(OsAccountManagerServiceModuleTest, CreateOsAccountTokenNotSupported001,
 
 /**
  * @tc.name: CreateOsAccountForDomainTokenNotSupported001
- * @tc.desc: Test CreateOsAccountForDomain with token when SUPPORT_AUTHORIZATION is not defined
+ * @tc.desc: Test CreateOsAccountForDomain with token when SUPPORT_ADMIN_ACCESS_CONTROL is not defined
  * @tc.type: FUNC
  * @tc.require:
  */
@@ -2767,7 +2767,7 @@ HWTEST_F(OsAccountManagerServiceModuleTest, CreateOsAccountForDomainTokenNotSupp
 
 /**
  * @tc.name: RemoveOsAccountTokenNotSupported001
- * @tc.desc: Test RemoveOsAccount with token when SUPPORT_AUTHORIZATION is not defined
+ * @tc.desc: Test RemoveOsAccount with token when SUPPORT_ADMIN_ACCESS_CONTROL is not defined
  * @tc.type: FUNC
  * @tc.require:
  */
@@ -2782,7 +2782,7 @@ HWTEST_F(OsAccountManagerServiceModuleTest, RemoveOsAccountTokenNotSupported001,
     errCode = osAccountManagerService_->RemoveOsAccount(osAccountInfoOne.GetLocalId(), options);
     EXPECT_EQ(errCode, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
 }
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 
 /**
  * @tc.name: GetOsAccountLocalIdsTest001

@@ -194,10 +194,10 @@ private:
     ErrCode CheckLocalIdRestricted(int32_t localId);
     ErrCode ActivateOsAccountCommon(const int32_t id, const uint64_t displayId);
     ErrCode RemoveOsAccountCommon(int32_t id);
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     ErrCode PrivilegeCheck(const std::optional<std::vector<uint8_t>> &token,
         const std::string &privilegeName, const std::map<int32_t, std::function<ErrCode()>> bypassStrategy = {});
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 private:
     IInnerOsAccountManager &innerManager_;
     OsAccountConstraintManager &constraintManger_;

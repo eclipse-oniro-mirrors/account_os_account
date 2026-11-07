@@ -123,7 +123,7 @@ private:
 #ifdef HAS_APP_ACCOUNT_PART
     void MoveAppAccountData();
 #endif
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     void StartOsAccountTypeMigrationAsync();
 #endif
     ErrCode InnerQueryOsAccountDistributedInfo(

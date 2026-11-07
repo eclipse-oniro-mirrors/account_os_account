@@ -90,6 +90,9 @@ ohos_moduletest("authorization_client_module_cov_test") {
   cflags_cc = []
   if (os_account_support_authorization) {
     cflags_cc += [ "-DSUPPORT_AUTHORIZATION" ]
+    if (os_account_support_admin_access_control) {
+      cflags_cc += [ "-DSUPPORT_ADMIN_ACCESS_CONTROL" ]
+    }
   }
 
   if (use_libfuzzer) {
@@ -156,6 +159,9 @@ ohos_moduletest("acquire_admin_authorization_test") {
   cflags_cc = []
   if (os_account_support_authorization) {
     cflags_cc += [ "-DSUPPORT_AUTHORIZATION" ]
+    if (os_account_support_admin_access_control) {
+      cflags_cc += [ "-DSUPPORT_ADMIN_ACCESS_CONTROL" ]
+    }
   }
 
   if (use_libfuzzer) {

@@ -951,11 +951,11 @@ HWTEST_F(OsAccountInfoTest, CreateOsAccountWithFullInfo0101, TestSize.Level1)
     EXPECT_EQ(ERR_OK, CreateOsAccountWithFullInfoForTest(osAccountInfo, options));
 
     osAccountInfo.SetLocalName("update117");
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     EXPECT_EQ(ERR_AUTHORIZATION_PRIVILEGE_DENIED, OsAccountManager::UpdateOsAccountWithFullInfo(osAccountInfo));
 #else
     EXPECT_EQ(ERR_OK, OsAccountManager::UpdateOsAccountWithFullInfo(osAccountInfo));
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
     RemoveOsAccountForTest(osAccountInfo.GetLocalId());
 }
 
@@ -978,11 +978,11 @@ HWTEST_F(OsAccountInfoTest, CreateOsAccountWithFullInfo0102, TestSize.Level1)
     EXPECT_EQ(ERR_OK, CreateOsAccountWithFullInfoForTest(osAccountInfo, options));
 
     osAccountInfo.SetLastLoginTime(1695863290000);
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     EXPECT_EQ(ERR_AUTHORIZATION_PRIVILEGE_DENIED, OsAccountManager::UpdateOsAccountWithFullInfo(osAccountInfo));
 #else
     EXPECT_EQ(ERR_OK, OsAccountManager::UpdateOsAccountWithFullInfo(osAccountInfo));
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
     RemoveOsAccountForTest(osAccountInfo.GetLocalId());
 }
 
@@ -1005,11 +1005,11 @@ HWTEST_F(OsAccountInfoTest, CreateOsAccountWithFullInfo0103, TestSize.Level1)
     EXPECT_EQ(ERR_OK, CreateOsAccountWithFullInfoForTest(osAccountInfo, options));
 
     osAccountInfo.SetLastLoginTime(1695863290000);
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     EXPECT_EQ(ERR_AUTHORIZATION_PRIVILEGE_DENIED, OsAccountManager::UpdateOsAccountWithFullInfo(osAccountInfo));
 #else
     EXPECT_EQ(ERR_OK, OsAccountManager::UpdateOsAccountWithFullInfo(osAccountInfo));
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
     RemoveOsAccountForTest(osAccountInfo.GetLocalId());
 }
 
@@ -1028,12 +1028,12 @@ HWTEST_F(OsAccountInfoTest, CreateOsAccountWithFullInfo0104, TestSize.Level1)
     osAccountInfo.SetSerialNumber(1100);
     osAccountInfo.SetCreateTime(1695883215000);
     osAccountInfo.SetLastLoginTime(1695863290000);
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     EXPECT_EQ(ERR_AUTHORIZATION_PRIVILEGE_DENIED, OsAccountManager::UpdateOsAccountWithFullInfo(osAccountInfo));
 #else
     EXPECT_EQ(ERR_ACCOUNT_COMMON_ACCOUNT_NOT_EXIST_ERROR,
         OsAccountManager::UpdateOsAccountWithFullInfo(osAccountInfo));
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 }
 
 /**
@@ -1052,20 +1052,20 @@ HWTEST_F(OsAccountInfoTest, CreateOsAccountWithFullInfo0105, TestSize.Level1)
     osAccountInfo.SetLastLoginTime(1695863290000);
     osAccountInfo.SetConstraints(VECTOR_CONSTRAINTS);
 
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     EXPECT_EQ(ERR_AUTHORIZATION_PRIVILEGE_DENIED, OsAccountManager::UpdateOsAccountWithFullInfo(osAccountInfo));
 #else
     EXPECT_EQ(ERR_OK, OsAccountManager::UpdateOsAccountWithFullInfo(osAccountInfo));
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 
     osAccountInfo.SetType(OsAccountType::GUEST);
     EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, OsAccountManager::UpdateOsAccountWithFullInfo(osAccountInfo));
 
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     EXPECT_EQ(ERR_AUTHORIZATION_PRIVILEGE_DENIED, OsAccountManager::UpdateOsAccountWithFullInfo(osAccountInfoBak));
 #else
     EXPECT_EQ(ERR_OK, OsAccountManager::UpdateOsAccountWithFullInfo(osAccountInfoBak));
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 }
 
 /**

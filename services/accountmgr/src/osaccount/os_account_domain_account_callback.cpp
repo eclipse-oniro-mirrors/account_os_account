@@ -25,9 +25,9 @@
 #include "ios_account_control.h"
 #include "os_account_constants.h"
 #include "os_account_control_file_manager.h"
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 #include "tee_auth_adapter.h"
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 
 #include "domain_plugin_adapter.h"
 
@@ -145,7 +145,7 @@ void BindDomainAccountCallback::OnResult(int32_t errCode, Parcel &parcel)
         CreateOsAccountOptions options;
         options.disallowedHapList = accountOptions_.disallowedHapList;
         options.allowedHapList = accountOptions_.allowedHapList;
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
         OsAccountTeeAdapter teeAdapter;
         errCode = teeAdapter.SetOsAccountType(osAccountInfo_.GetLocalId(),
             osAccountInfo_.GetType(), accountOptions_.token);
@@ -157,7 +157,7 @@ void BindDomainAccountCallback::OnResult(int32_t errCode, Parcel &parcel)
         }
         IInnerOsAccountManager::GetInstance()
             .UpdateAccountTypeCache(osAccountInfo_.GetLocalId(), osAccountInfo_.GetType(), false);
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
         errCode = IInnerOsAccountManager::GetInstance().SendMsgForAccountCreate(osAccountInfo_, options);
         if (errCode != ERR_OK) {
             HandleUnbindDomainAccountFailed();

@@ -157,6 +157,10 @@ declare_args() {
 }
 
 declare_args() {
+  os_account_support_admin_access_control = true
+}
+
+declare_args() {
   os_account_support_backup_restore = false
 }
 

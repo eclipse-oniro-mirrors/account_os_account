@@ -1071,7 +1071,7 @@ HWTEST_F(OsAccountTest, OsAccountGetForegroundOsAccountLocalIdTest002, TestSize.
     }
 }
 
-#ifndef SUPPORT_AUTHORIZATION
+#ifndef SUPPORT_ADMIN_ACCESS_CONTROL
 /**
  * @tc.name: OsAccountSetOsAccountTypeTest001
  * @tc.desc: Test SetOsAccountType success or reasonable failure.

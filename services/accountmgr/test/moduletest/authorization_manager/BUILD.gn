@@ -110,6 +110,9 @@ if (os_account_support_authorization) {
     if (os_account_support_authorization) {
       cflags += [ "-DSUPPORT_AUTHORIZATION" ]
     }
+    if (os_account_support_admin_access_control) {
+      cflags += [ "-DSUPPORT_ADMIN_ACCESS_CONTROL" ]
+    }
     part_name = "os_account"
   }
 }
@@ -161,8 +164,11 @@ if (os_account_support_authorization) {
 
     cflags_cc = [
       "-DACCOUNT_TEST",
-    "-DSUPPORT_AUTHORIZATION"
+      "-DSUPPORT_AUTHORIZATION"
     ]
+    if (os_account_support_admin_access_control) {
+      cflags_cc += [ "-DSUPPORT_ADMIN_ACCESS_CONTROL" ]
+    }
     if (hicollie_enable == true) {
       external_deps += [ "hicollie:libhicollie" ]
       cflags_cc += [ "-DHICOLLIE_ENABLE" ]
@@ -235,6 +241,9 @@ if (os_account_support_authorization) {
       "-DACCOUNT_TEST",
       "-DSUPPORT_AUTHORIZATION"
     ]
+    if (os_account_support_admin_access_control) {
+      cflags_cc += [ "-DSUPPORT_ADMIN_ACCESS_CONTROL" ]
+    }
 
     if (hicollie_enable == true) {
       external_deps += [ "hicollie:libhicollie" ]

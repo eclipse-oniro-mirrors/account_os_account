@@ -842,7 +842,7 @@ HWTEST_F(OsAccountInnerAccmgrMockTest, AccountStatusTest001, TestSize.Level1)
     EXPECT_EQ(ERR_OK, innerMgrService_->RemoveOsAccount(id));
 }
 
-#ifndef SUPPORT_AUTHORIZATION
+#ifndef SUPPORT_ADMIN_ACCESS_CONTROL
 /*
  * @tc.name: SetOsAccountTypeMockTest001
  * @tc.desc: Set os account type successfully

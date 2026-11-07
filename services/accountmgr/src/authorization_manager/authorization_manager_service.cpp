@@ -505,7 +505,6 @@ ErrCode AuthorizationManagerService::CheckAuthorizationToken(const std::vector<u
 ErrCode AuthorizationManagerService::AcquireAdminAuthorization(const std::string &adminName,
     const std::vector<uint8_t> &challenge, const sptr<IRemoteObject> &callback, const std::string &privilege)
 {
-#ifdef SUPPORT_AUTHORIZATION
     int32_t callingPid = IPCSkeleton::GetCallingPid();
     sptr<IAdminAuthorizationCallback> callbackProxy;
     ErrCode errCode = ValidateAdminAuthParams(adminName, callback, callbackProxy);
@@ -547,9 +546,6 @@ ErrCode AuthorizationManagerService::AcquireAdminAuthorization(const std::string
     }
 
     return ERR_OK;
-#else
-    return ERR_ACCOUNT_COMMON_NOT_SUPPORT;
-#endif // SUPPORT_AUTHORIZATION
 }
 
 ErrCode AuthorizationManagerService::CheckPublicPermission(int32_t localId)
@@ -578,6 +574,12 @@ bool AuthorizationManagerService::CheckKernelPermission(const PrivilegeBriefDef 
     int32_t localId, AuthorizationResult &authorizationResult,
     const sptr<IAuthorizationCallback> &callback)
 {
+#ifndef SUPPORT_ADMIN_ACCESS_CONTROL
+    ACCOUNT_LOGE("Kernel privilege not supported without admin access control");
+    authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
+    callback->OnResult(ERR_OK, authorizationResult);
+    return false;
+#else
     ErrCode permResult = AccountPermissionManager::VerifyPermission(def.kernelPermission);
     if (permResult == ERR_OK) {
         return true;
@@ -587,6 +589,7 @@ bool AuthorizationManagerService::CheckKernelPermission(const PrivilegeBriefDef 
     authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_DENIED;
     callback->OnResult(ERR_OK, authorizationResult);
     return false;
+#endif
 }
 
 ErrCode AuthorizationManagerService::AcquireAuthorizationForPublic(const std::string &privilege,
