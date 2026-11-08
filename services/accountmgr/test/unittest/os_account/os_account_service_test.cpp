@@ -238,7 +238,7 @@ HWTEST_F(OsAccountServiceTest, GetDomainInfo002, TestSize.Level1)
     EXPECT_EQ(controlManager->DelOsAccount(TEST_ACCOUNT_ID), ERR_OK);
 }
 #endif //SUPPORT_DOMAIN_ACCOUNTS
-#ifndef SUPPORT_AUTHORIZATION
+#ifndef SUPPORT_ADMIN_ACCESS_CONTROL
 /**
  * @tc.name: SetOsAccountType001
  * @tc.desc: Test SetOsAccountType with invalid ID parameters.

@@ -211,6 +211,9 @@ ohos_unittest("account_iam_callback_test") {
   }
   if (os_account_support_authorization) {
     cflags_cc += [ "-DSUPPORT_AUTHORIZATION" ]
+    if (os_account_support_admin_access_control) {
+      cflags_cc += [ "-DSUPPORT_ADMIN_ACCESS_CONTROL" ]
+    }
     configs += [ "${services_path}/accountmgr:authorization_config" ]
     include_dirs +=
         [ "${services_path}/accountmgr/include/bundle_manager_adapter" ]
@@ -306,6 +309,9 @@ ohos_unittest("account_iam_manager_test") {
   include_dirs = []
   if (os_account_support_authorization) {
     cflags_cc += [ "-DSUPPORT_AUTHORIZATION" ]
+    if (os_account_support_admin_access_control) {
+      cflags_cc += [ "-DSUPPORT_ADMIN_ACCESS_CONTROL" ]
+    }
     configs += [ "${services_path}/accountmgr:authorization_config"]
     include_dirs += [
       "${services_path}/accountmgr/include/bundle_manager_adapter",

@@ -195,9 +195,9 @@ private:
     std::mutex baseOAConstraintsFileLock_;
     std::mutex globalOAConstraintsFileLock_;
     std::mutex specificOAConstraintsFileLock_;
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     std::once_flag onceFlag_;
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 };
 }  // namespace AccountSA
 }  // namespace OHOS

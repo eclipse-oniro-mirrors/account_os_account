@@ -30,6 +30,7 @@
       "os_account_enable_account_1",
       "os_account_support_lock_os_account",
       "os_account_support_authorization",
+      "os_account_support_admin_access_control",
       "os_account_support_backup_restore"
     ],
     "hisysevent_config": [

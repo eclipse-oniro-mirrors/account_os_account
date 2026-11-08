@@ -45,6 +45,9 @@ ohos_source_set("account_test_common_source_set") {
   }
   if (os_account_support_authorization) {
     cflags_cc += [ "-DSUPPORT_AUTHORIZATION" ]
+    if (os_account_support_admin_access_control) {
+      cflags_cc += [ "-DSUPPORT_ADMIN_ACCESS_CONTROL" ]
+    }
   }
 
   defines = [

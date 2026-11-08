@@ -106,10 +106,10 @@ const std::set<int32_t> INIT_ACCOUNT_ID_SET = {
 const bool REGISTER_RESULT =
     SystemAbility::MakeAndRegisterAbility(&DelayedRefSingleton<AccountMgrService>::GetInstance());
 const char DEVICE_OWNER_DIR[] = "/data/service/el1/public/account/0/";
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 const int32_t MAX_RETRY_TIMES = 3;
 const uint32_t RETRY_SLEEP_MS = 10;
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 
 std::shared_ptr<void> RequestTimer(std::string eventStr)
 {
@@ -1058,11 +1058,12 @@ bool AccountMgrService::Init()
     if (ret != ERR_OK) {
         ACCOUNT_LOGE("Recover cache from file failed, ret=%{public}d", ret);
     }
-
+#endif // SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     // Migrate existing account types to TEE for upgrade compatibility
     // Start migration in separate thread to avoid blocking service startup
     StartOsAccountTypeMigrationAsync();
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 #ifdef ENABLE_MULTIPLE_OS_ACCOUNT_SUBSPACE
     OhosAccountManager::GetInstance().InitOsAccountSubProfileManager(ACCOUNT_CFG_DIR_ROOT_PATH);
 #endif  // ENABLE_MULTIPLE_OS_ACCOUNT_SUBSPACE
@@ -1081,7 +1082,7 @@ bool AccountMgrService::Init()
     return true;
 }
 
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 void AccountMgrService::StartOsAccountTypeMigrationAsync()
 {
     // Start OS account type migration in a detached thread to avoid blocking service startup
@@ -1112,7 +1113,7 @@ void AccountMgrService::StartOsAccountTypeMigrationAsync()
     // The thread will clean up itself when complete
     migrationTask.detach();
 }
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 
 ErrCode AccountMgrService::Dump(std::int32_t fd, const std::vector<std::u16string> &args)
 {

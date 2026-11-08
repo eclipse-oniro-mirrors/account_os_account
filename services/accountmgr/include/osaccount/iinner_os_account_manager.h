@@ -209,9 +209,9 @@ private:
         const CreateOsAccountOptions &options = {});
     ErrCode AssignSpecifiedLocalId(int32_t specifiedId, int &id);
     ErrCode PrepareOsAccountInfoWithFullInfo(OsAccountInfo &osAccountInfo);
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     ErrCode HandleCreateOsAccountToken(OsAccountInfo &osAccountInfo, const CreateOsAccountOptions &options);
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
     ErrCode SendMsgForAccountActivate(OsAccountInfo &osAccountInfo, const bool startStorage = true,
                                       const uint64_t dispalyId = 0, const bool isAppRecovery = false);
     void ActivateSubprofile(const OsAccountInfo &osAccountInfo);
@@ -242,12 +242,12 @@ private:
     std::shared_ptr<std::mutex> GetOrInsertUpdateLock(int32_t id);
     ErrCode SetOsAccountTypeInTEE(int32_t id, OsAccountType type,
         const std::optional<std::vector<uint8_t>>& token);
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     ErrCode InsertOsAccountTypeToTee(int32_t localId, const OsAccountType &type, const std::vector<uint8_t>& token);
     ErrCode RefreshAccountTypeInCache(
         int32_t id, OsAccountType localType, std::pair<OsAccountType, bool> &outType);
     void ApplyCachedAccountType(int32_t id, OsAccountInfo &osAccountInfo);
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
     ErrCode UpdateAccountToBackground(int32_t oldId);
     ErrCode IsValidOsAccount(const OsAccountInfo &osAccountInfo);
     ErrCode GetNonSACreatedOACount(unsigned int &nonSACreatedOACount) const;

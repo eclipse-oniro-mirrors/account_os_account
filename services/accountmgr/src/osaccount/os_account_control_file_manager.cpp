@@ -725,7 +725,7 @@ ErrCode OsAccountControlFileManager::GetOsAccountInfoById(const int id, OsAccoun
             return ERR_ACCOUNT_COMMON_ACCOUNT_NOT_EXIST_ERROR;
         }
     }
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     if (static_cast<int32_t>(osAccountInfo.GetType()) == -1) {
         // -1 indicates that the account type is RESTRICTED_ADMIN.
         // Modification for RESTRICTED_ADMIN overriding and this should be deleted in later version.
@@ -734,7 +734,7 @@ ErrCode OsAccountControlFileManager::GetOsAccountInfoById(const int id, OsAccoun
             REPORT_OS_ACCOUNT_FAIL(id, Constants::OPERATION_SET_TYPE, ERR_OK, "Return from RESTRICTED_ADMIN to ADMIN");
         });
     }
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
     return ERR_OK;
 }
 

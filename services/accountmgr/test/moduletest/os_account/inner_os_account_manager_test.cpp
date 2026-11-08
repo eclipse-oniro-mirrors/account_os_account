@@ -1765,7 +1765,7 @@ HWTEST_F(IInnerOsAccountManagerTest, MigrateOsAccountTypesToTEE002, TestSize.Lev
 }
 
 #ifdef ENABLE_MULTIPLE_OS_ACCOUNTS
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 /**
  * @tc.name: OsAccountCacheManagerBasicOperations001
  * @tc.desc: Verify OsAccountCacheManager basic set/get/clear operations work correctly.
@@ -2087,7 +2087,7 @@ HWTEST_F(IInnerOsAccountManagerTest, CreateOsAccountTypeCacheConsistencyAfterIdR
     // Cleanup.
     EXPECT_EQ(RemoveOsAccountForTest(recycledId), ERR_OK);
 }
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 #endif // ENABLE_MULTIPLE_OS_ACCOUNTS
 
 struct ParseAllDefaultActivateIdsState {

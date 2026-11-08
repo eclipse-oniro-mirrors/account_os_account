@@ -305,6 +305,9 @@ ohos_shared_library("accountmgr") {
   if (os_account_support_authorization) {
     cflags += [ "-DSUPPORT_AUTHORIZATION" ]
     cflags += [ "-DSUPPORT_SAMGR_USER_STATE" ]
+    if (os_account_support_admin_access_control) {
+      cflags += [ "-DSUPPORT_ADMIN_ACCESS_CONTROL" ]
+    }
     configs += [ ":authorization_config" ]
     sources += [
       "${authorization_framework_path}/src/authorization_common.cpp",
@@ -708,6 +711,9 @@ ohos_source_set("accountmgr_test_source_set") {
   if (os_account_support_authorization) {
     cflags += [ "-DSUPPORT_AUTHORIZATION" ]
     cflags += [ "-DSUPPORT_SAMGR_USER_STATE" ]
+    if (os_account_support_admin_access_control) {
+      cflags += [ "-DSUPPORT_ADMIN_ACCESS_CONTROL" ]
+    }
     configs += [ ":authorization_config" ]
     sources += [
       "${authorization_framework_path}/src/authorization_common.cpp",
@@ -1037,6 +1043,9 @@ ohos_source_set("accountmgr_test_source_set_no_bms") {
   if (os_account_support_authorization) {
     cflags += [ "-DSUPPORT_AUTHORIZATION" ]
     cflags += [ "-DSUPPORT_SAMGR_USER_STATE" ]
+    if (os_account_support_admin_access_control) {
+      cflags += [ "-DSUPPORT_ADMIN_ACCESS_CONTROL" ]
+    }
     configs += [ ":authorization_config" ]
     sources += [
       "${authorization_framework_path}/src/authorization_common.cpp",

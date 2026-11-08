@@ -60,9 +60,6 @@
 #include <thread>
 #include <unordered_set>
 #include <set>
-#ifdef SUPPORT_AUTHORIZATION
-#include "tee_auth_adapter.h"
-#endif
 #ifdef HICOLLIE_ENABLE
 #include "account_timer.h"
 #include "xcollie/xcollie.h"
@@ -82,9 +79,9 @@ namespace OHOS {
 namespace AccountSA {
 
 namespace {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 const char OPERATION_GET_TYPE[] = "getType";
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 const char ADMIN_LOCAL_NAME[] = "admin";
 #ifdef ENABLE_DEFAULT_ADMIN_NAME
 const char STANDARD_LOCAL_NAME[] = "user";
@@ -218,7 +215,7 @@ IInnerOsAccountManager &IInnerOsAccountManager::GetInstance()
     return *instance;
 }
 
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 ErrCode IInnerOsAccountManager::RefreshAccountTypeInCache(
     int32_t id, OsAccountType localType, std::pair<OsAccountType, bool> &outType)
 {
@@ -245,7 +242,7 @@ ErrCode IInnerOsAccountManager::RefreshAccountTypeInCache(
     ACCOUNT_LOGE("GetOsAccountType from TEE failed, id=%{public}d, err=%{public}d", id, errCode);
     return errCode;
 }
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 
 #ifdef FUZZ_TEST
 // LCOV_EXCL_START
@@ -434,7 +431,7 @@ ErrCode IInnerOsAccountManager::GetRealOsAccountInfoById(const int id, OsAccount
         return errCode;
     }
 
-#if defined(SUPPORT_AUTHORIZATION) && !defined(IS_EMULATOR)
+#if defined(SUPPORT_ADMIN_ACCESS_CONTROL) && !defined(IS_EMULATOR)
     // Try to get account type from cache first; if absent, refresh from TEE/local and reuse the result.
     auto cachedType = osAccountCacheManager_.GetAccountTypeFromCache(id);
     std::pair<OsAccountType, bool> refreshedCachedType = {osAccountInfo.GetType(), false};
@@ -457,7 +454,7 @@ ErrCode IInnerOsAccountManager::GetRealOsAccountInfoById(const int id, OsAccount
         }
     }
     osAccountInfo.SetType(refreshedCachedType.first);
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 
     bool isVerified = false;
     verifiedAccounts_.Find(id, isVerified);
@@ -865,7 +862,7 @@ bool IInnerOsAccountManager::CheckAndCleanOsAccounts()
 
 void IInnerOsAccountManager::RollbackOsAccount(OsAccountInfo &osAccountInfo, bool needDelStorage, bool needDelBms)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     OsAccountTeeAdapter teeAdapter;
     ErrCode res = teeAdapter.DelOsAccountType(osAccountInfo.GetLocalId());
     if (res != ERR_OK) {
@@ -875,7 +872,7 @@ void IInnerOsAccountManager::RollbackOsAccount(OsAccountInfo &osAccountInfo, boo
         return;
     }
     osAccountCacheManager_.ClearAccountCache(osAccountInfo.GetLocalId());
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
     if (!osAccountInfo.GetIsDataRemovable()) {
         (void)osAccountControl_->DelOsAccount(osAccountInfo.GetLocalId());
         return;
@@ -1053,7 +1050,7 @@ ErrCode IInnerOsAccountManager::UpdateFirstOsAccountInfo(OsAccountInfo& accountI
     return ERR_OK;
 }
 
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 ErrCode IInnerOsAccountManager::InsertOsAccountTypeToTee(const int32_t localId, const OsAccountType &type,
     const std::vector<uint8_t>& token)
 {
@@ -1077,9 +1074,9 @@ ErrCode IInnerOsAccountManager::InsertOsAccountTypeToTee(const int32_t localId, 
     }
     return ERR_OK;
 }
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 ErrCode IInnerOsAccountManager::HandleCreateOsAccountToken(
     OsAccountInfo &osAccountInfo, const CreateOsAccountOptions &options)
 {
@@ -1109,7 +1106,7 @@ ErrCode IInnerOsAccountManager::HandleCreateOsAccountToken(
     }
     return ERR_OK;
 }
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 
 ErrCode IInnerOsAccountManager::CreateOsAccount(const std::string &localName, const std::string &shortName,
     const OsAccountType &type, OsAccountInfo &osAccountInfo, const CreateOsAccountOptions &options)
@@ -1136,12 +1133,12 @@ ErrCode IInnerOsAccountManager::CreateOsAccount(const std::string &localName, co
         RemoveLocalIdToOperating(osAccountInfo.GetLocalId());
         return errCode;
     }
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     errCode = HandleCreateOsAccountToken(osAccountInfo, options);
     if (errCode != ERR_OK) {
         return errCode;
     }
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
     errCode = SendMsgForAccountCreate(osAccountInfo, options);
     RemoveLocalIdToOperating(osAccountInfo.GetLocalId());
     return errCode;
@@ -1189,7 +1186,7 @@ ErrCode IInnerOsAccountManager::CreateOsAccountWithFullInfo(OsAccountInfo &osAcc
         RemoveLocalIdToOperating(osAccountInfo.GetLocalId());
         return errCode;
     }
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     if (options.token.has_value()) {
         errCode = InsertOsAccountTypeToTee(osAccountInfo.GetLocalId(), osAccountInfo.GetType(), options.token.value());
         if (errCode != ERR_OK) {
@@ -1201,7 +1198,7 @@ ErrCode IInnerOsAccountManager::CreateOsAccountWithFullInfo(OsAccountInfo &osAcc
     } else {
         UpdateAccountTypeCache(osAccountInfo.GetLocalId(), osAccountInfo.GetType(), true);
     }
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
     errCode = SendMsgForAccountCreate(osAccountInfo, options);
     RemoveLocalIdToOperating(osAccountInfo.GetLocalId());
     return errCode;
@@ -1534,7 +1531,7 @@ ErrCode IInnerOsAccountManager::RemoveOsAccountOperate(const int id, OsAccountIn
         ACCOUNT_LOGI("Account cannot be removed id=%{public}d.", id);
         return ERR_OK;
     }
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     OsAccountTeeAdapter teeAdapter;
     ErrCode res = teeAdapter.DelOsAccountType(id);
     if (res != ERR_OK) {
@@ -1544,7 +1541,7 @@ ErrCode IInnerOsAccountManager::RemoveOsAccountOperate(const int id, OsAccountIn
     }
     // Clear cache after successful TEE deletion
     osAccountCacheManager_.ClearAccountCache(id);
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
     ErrCode errCode = PrepareRemoveOsAccount(osAccountInfo, isCleanGarbage);
     if (errCode != ERR_OK) {
         ACCOUNT_LOGE("PrepareRemoveOsAccount failed, errCode %{public}d.", errCode);
@@ -2481,7 +2478,7 @@ ErrCode IInnerOsAccountManager::GetOsAccountType(const int id, OsAccountType &ty
     if (errCode != ERR_OK) {
         return ERR_ACCOUNT_COMMON_ACCOUNT_NOT_EXIST_ERROR;
     }
-#if defined(SUPPORT_AUTHORIZATION) && !defined(IS_EMULATOR)
+#if defined(SUPPORT_ADMIN_ACCESS_CONTROL) && !defined(IS_EMULATOR)
     auto cachedType = osAccountCacheManager_.GetAccountTypeFromCache(id);
     if (cachedType.has_value()) {
         type = cachedType.value().first;
@@ -2493,7 +2490,7 @@ ErrCode IInnerOsAccountManager::GetOsAccountType(const int id, OsAccountType &ty
         type = refreshedCachedType.first;
         return ERR_OK;
     }
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
     type = osAccountInfo.GetType();
     return ERR_OK;
 }
@@ -2561,11 +2558,11 @@ ErrCode IInnerOsAccountManager::SetOsAccountType(const int id,
     errCode = osAccountControl_->UpdateOsAccount(osAccountInfo);
     if (errCode != ERR_OK) {
         ACCOUNT_LOGE("Update os account failed, id: %{public}d, errCode: %{public}d", id, errCode);
-#ifndef SUPPORT_AUTHORIZATION
+#ifndef SUPPORT_ADMIN_ACCESS_CONTROL
         RemoveLocalIdToOperating(id);
         ReportOsAccountOperationFail(id, Constants::OPERATION_SET_TYPE, errCode, "UpdateOsAccount failed!");
         return errCode;
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
     }
 
     ReportAccountOperationEvent(ACCOUNT_OPERATION_TYPE_UPDATE_TYPE, osAccountInfo.GetLocalName(), id);
@@ -2578,7 +2575,7 @@ ErrCode IInnerOsAccountManager::SetOsAccountType(const int id,
 ErrCode IInnerOsAccountManager::SetOsAccountTypeInTEE(
     int32_t id, OsAccountType type, const std::optional<std::vector<uint8_t>>& token)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     // token is guaranteed to have value by the caller
     const std::vector<uint8_t>& tokenData = token.value();
     ErrCode errCode = teeAdapter_.SetOsAccountType(id, static_cast<int32_t>(type), tokenData);
@@ -2591,20 +2588,20 @@ ErrCode IInnerOsAccountManager::SetOsAccountTypeInTEE(
 #else
     // If TEE is not supported, always return success
     return ERR_OK;
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 }
 
 void IInnerOsAccountManager::UpdateAccountTypeCache(int32_t id, OsAccountType type, bool isRestricted)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     // Cache + TEE is the source of truth when authorization is enabled.
     osAccountCacheManager_.SetAccountTypeInCache(id, {type, isRestricted});
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 }
 
 ErrCode IInnerOsAccountManager::MigrateOsAccountTypesToTEE()
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     ACCOUNT_LOGI("Start migrating OS account types to TEE for upgrade compatibility");
 
     // Get all created and non-to-be-removed accounts
@@ -2664,12 +2661,12 @@ ErrCode IInnerOsAccountManager::MigrateOsAccountTypesToTEE()
     // If TEE is not supported, migration is not needed
     ACCOUNT_LOGI("TEE is not supported, skip migration");
     return ERR_OK;
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 }
 
 ErrCode IInnerOsAccountManager::PreloadAccountTypesFromTee(const std::vector<int32_t> &ids)
 {
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     ACCOUNT_LOGI("Start preloading account types from TEE to cache");
 
     if (ids.empty()) {
@@ -2702,7 +2699,7 @@ ErrCode IInnerOsAccountManager::PreloadAccountTypesFromTee(const std::vector<int
     return ERR_OK;
 #else
     return ERR_OK;
-#endif // SUPPORT_AUTHORIZATION
+#endif // SUPPORT_ADMIN_ACCESS_CONTROL
 }
 
 ErrCode IInnerOsAccountManager::GetOsAccountProfilePhoto(const int id, std::string &photo)

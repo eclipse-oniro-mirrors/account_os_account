@@ -59,8 +59,11 @@ config("authorization_stub_fuzztest_config") {
 config("authorization_stub_config") {
   cflags = [
     "-DENABLE_FILE_WATCHER",
-    "-DSUPPORT_AUTHORIZATION",
+    "-DSUPPORT_AUTHORIZATION"
   ]
+  if (os_account_support_admin_access_control) {
+    cflags += [ "-DSUPPORT_ADMIN_ACCESS_CONTROL" ]
+  }
 
   if (has_user_auth_part) {
     cflags += [

@@ -130,6 +130,9 @@ ohos_shared_library("account_iam_innerkits") {
 
   if (os_account_support_authorization) {
     cflags_cc += [ "-DSUPPORT_AUTHORIZATION" ]
+    if (os_account_support_admin_access_control) {
+      cflags_cc += [ "-DSUPPORT_ADMIN_ACCESS_CONTROL" ]
+    }
     deps += [
       "${authorization_framework_path}:authorization_innerkits"
     ]

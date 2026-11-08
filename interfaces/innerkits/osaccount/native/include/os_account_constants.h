@@ -81,7 +81,9 @@ const char OPERATION_LOCK[] = "lock";
 const char OPERATION_UPDATE[] = "update";
 const char OPERATION_SET_TYPE[] = "setType";
 const char OPERATION_SET_TO_BE_REMOVED[] = "setToBeRemoved";
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 const char OPERATION_MIGRATE_TYPE_TO_TEE[] = "migrateOSAccountTypeToTee";
+#endif
 
 // Backup restore DFX flag
 const char OPERATION_BACKUP[] = "backup";
@@ -163,7 +165,7 @@ const char SHORT_NAME[] = "shortName";
 
 // start type
 const OS_ACCOUNT_SWITCH_MOD NOW_OS_ACCOUNT_SWITCH_MOD = OS_ACCOUNT_SWITCH_MOD::HOT_SWITCH;
-#ifdef SUPPORT_AUTHORIZATION
+#ifdef SUPPORT_ADMIN_ACCESS_CONTROL
 const size_t MAX_TOKEN_SIZE = 1024 + 116 + 8;
 #endif
 // SubspaceId encoding base.  subspaceId is independently allocated in [osAccountId*MULTIPLIER+1,
