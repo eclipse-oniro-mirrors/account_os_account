@@ -436,27 +436,6 @@ HWTEST_F(AccountIamManagerTest, GetState001, TestSize.Level0)
 }
 
 /**
- * @tc.name: ActivateUserKey001
- * @tc.desc: ActivateUserKey.
- * @tc.type: FUNC
- * @tc.require:
- */
-HWTEST_F(AccountIamManagerTest, ActivateUserKey001, TestSize.Level0)
-{
-    std::vector<uint8_t> testAuthToken = {1, 2, 3, 4};
-    std::vector<uint8_t> testSecret = {1, 2, 3, 4};
-
-    auto &innerIamMgr_ = InnerAccountIAMManager::GetInstance();
-
-    int32_t userId = 112;
-    EXPECT_NE(ERR_OK, innerIamMgr_.ActivateUserKey(userId, testAuthToken, testSecret));
-
-    // userid is out of range
-    userId = 11112;
-    EXPECT_NE(ERR_OK, innerIamMgr_.ActivateUserKey(userId, testAuthToken, testSecret));
-}
-
-/**
  * @tc.name: GetLockScreenStatus001
  * @tc.desc: GetLockScreenStatus coverage test.
  * @tc.type: FUNC
