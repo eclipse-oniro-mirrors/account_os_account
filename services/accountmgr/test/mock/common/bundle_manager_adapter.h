@@ -20,6 +20,7 @@
 #include <string>
 #include "ability_info.h"
 #include "bundle_info.h"
+#include "bundle_mgr_interface.h"
 #include "want.h"
 
 namespace OHOS {
@@ -29,6 +30,16 @@ private:
     BundleManagerAdapter();
     virtual ~BundleManagerAdapter();
     DISALLOW_COPY_AND_MOVE(BundleManagerAdapter);
+    // These data members mirror the real adapter class
+    // (services/accountmgr/include/bundle_manager_adapter/bundle_manager_adapter.h).
+    // The mock interposes only on a few exported symbols such as GetInstance(),
+    // so non-virtual methods statically bind to the real implementation, which
+    // then accesses proxyMutex_, proxy_ and deathRecipient_ through the mock
+    // instance. Removing them would shrink the mock object and reintroduce
+    // out-of-bounds member access (Signal 11) in the real implementation.
+    std::mutex proxyMutex_;
+    sptr<AppExecFwk::IBundleMgr> proxy_;
+    sptr<IRemoteObject::DeathRecipient> deathRecipient_;
 
 public:
     static BundleManagerAdapter* GetInstance();
