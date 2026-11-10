@@ -57,6 +57,10 @@
         {
             "name":"ohos.privilege.manage_global_scope_certificate",
             "description":"Manage certificate in the global scope of a device"
+        },
+        {
+            "name":"ohos.privilege.manage_launch_service_status",
+            "description":"Change the running status of a background service"
         }
     ]
 }
