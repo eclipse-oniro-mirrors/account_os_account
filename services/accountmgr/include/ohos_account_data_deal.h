@@ -47,6 +47,8 @@ private:
     ErrCode GetAccountInfo(AccountInfo &accountInfo, const int32_t userId);
     ErrCode ParseJsonFromFile(const std::string &filePath, CJsonUnique &jsonData, int32_t userId);
     ErrCode GetAccountInfoFromJson(CJsonUnique &jsonData, AccountInfo &accountInfo, const int32_t userId);
+    std::string GetConfigFilePath(int32_t userId) const;
+    std::string GetAvatarFilePath(int32_t userId) const;
 #ifdef ENABLE_FILE_WATCHER
     bool DealWithFileModifyEvent(const std::string &fileName, const int32_t id);
     void DealWithFileDeleteEvent(const std::string &fileName, const int32_t id);

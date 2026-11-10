@@ -12,18 +12,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <cerrno>
 #include <chrono>
-#include <cstdio>
-#include <fstream>
-#include <iostream>
-#include <unistd.h>
 #include <vector>
 #include "account_error_no.h"
 #include "account_info.h"
 #include "account_log_wrapper.h"
-#include "directory_ex.h"
-#include "file_ex.h"
 #include "iinner_os_account_manager.h"
 #include "data_size_report_adapter.h"
 #include "ohos_account_data_deal.h"
@@ -151,14 +144,24 @@ void OhosAccountDataDeal::DealWithFileDeleteEvent(const std::string &fileName, c
 
 void OhosAccountDataDeal::AddFileWatcher(const int32_t id)
 {
-    std::string configFile = configFileDir_ + std::to_string(id) + ACCOUNT_CFG_FILE_NAME;
+    std::string configFile = GetConfigFilePath(id);
     accountFileWatcherMgr_.AddFileWatcher(id, checkCallbackFunc_, configFile);
 }
 #endif // ENABLE_FILE_WATCHER
 
+std::string OhosAccountDataDeal::GetConfigFilePath(int32_t userId) const
+{
+    return configFileDir_ + std::to_string(userId) + ACCOUNT_CFG_FILE_NAME;
+}
+
+std::string OhosAccountDataDeal::GetAvatarFilePath(int32_t userId) const
+{
+    return configFileDir_ + std::to_string(userId) + ACCOUNT_AVATAR_NAME;
+}
+
 ErrCode OhosAccountDataDeal::Init(int32_t userId)
 {
-    std::string configFile = configFileDir_ + std::to_string(userId) + ACCOUNT_CFG_FILE_NAME;
+    std::string configFile = GetConfigFilePath(userId);
     if (!accountFileOperator_->IsExistFile(configFile)) {
         ACCOUNT_LOGI("file %{public}s not exist, create!", configFile.c_str());
         BuildJsonFileFromScratch(userId);
@@ -168,37 +171,34 @@ ErrCode OhosAccountDataDeal::Init(int32_t userId)
         ACCOUNT_LOGE("Config file %{public}s size exceeds limit, remove and rebuild.", configFile.c_str());
         ReportOhosAccountOperationFail(userId, Constants::OPERATION_INIT,
             ERR_ACCOUNT_DATADEAL_INPUT_FILE_ERROR, "File size exceeds limit: " + configFile);
-        if (!RemoveFile(configFile)) {
-            int32_t err = errno;
-            ACCOUNT_LOGW("Remove oversized json file %{public}s failed.", configFile.c_str());
+        ErrCode delRet = accountFileOperator_->DeleteFile(configFile);
+        if (delRet != ERR_OK) {
+            ACCOUNT_LOGW("Remove oversized json file %{public}s failed, ret = %{public}d.", configFile.c_str(), delRet);
             ReportOhosAccountOperationFail(userId, Constants::OPERATION_INIT,
-                err, "Remove oversized file failed: " + configFile);
+                delRet, "Remove oversized file failed: " + configFile);
         }
         BuildJsonFileFromScratch(userId);
     }
 
-    std::ifstream fin(configFile);
-    if (!fin) {
-        int32_t err = errno;
-        ACCOUNT_LOGE("Failed to open config file %{public}s, errno %{public}d.", configFile.c_str(), err);
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string fileContent;
+    ErrCode readRet = accountFileOperator_->GetFileContentByPath(configFile, fileContent);
+    if (readRet != ERR_OK) {
+        ACCOUNT_LOGE("Failed to read config file %{public}s, ret = %{public}d.", configFile.c_str(), readRet);
         ReportOhosAccountOperationFail(userId, Constants::OPERATION_INIT,
-            err, "Open config file failed: " + configFile);
+            readRet, "Read config file failed: " + configFile);
         return ERR_ACCOUNT_DATADEAL_INPUT_FILE_ERROR;
     }
-
-    std::lock_guard<std::mutex> lock(mutex_);
-    std::string fileContent((std::istreambuf_iterator<char>(fin)), std::istreambuf_iterator<char>());
-    fin.close();
     auto jsonData = CreateJsonFromString(fileContent);
     if (jsonData == nullptr || !IsObject(jsonData)) {
         ACCOUNT_LOGE("Invalid json file, remove");
         ReportOhosAccountOperationFail(userId, Constants::OPERATION_INIT,
             ERR_ACCOUNT_DATADEAL_JSON_FILE_CORRUPTION, "Invalid json file: " + configFile);
-        if (!RemoveFile(configFile)) {
-            int32_t err = errno;
-            ACCOUNT_LOGE("Remove invalid json file %{public}s failed, errno %{public}d.", configFile.c_str(), err);
+        ErrCode delRet = accountFileOperator_->DeleteFile(configFile);
+        if (delRet != ERR_OK) {
+            ACCOUNT_LOGE("Remove invalid json file %{public}s failed, ret = %{public}d.", configFile.c_str(), delRet);
             ReportOhosAccountOperationFail(userId, Constants::OPERATION_INIT,
-                err, "Remove invalid file failed: " + configFile);
+                delRet, "Remove invalid file failed: " + configFile);
         }
         return ERR_ACCOUNT_DATADEAL_JSON_FILE_CORRUPTION;
     }
@@ -272,7 +272,7 @@ ErrCode OhosAccountDataDeal::SaveAccountInfo(const AccountInfo &accountInfo)
         return ERR_ACCOUNT_COMMON_DUMP_JSON_ERROR;
     }
 
-    std::string avatarFile = configFileDir_ + std::to_string(accountInfo.userId_) + ACCOUNT_AVATAR_NAME;
+    std::string avatarFile = GetAvatarFilePath(accountInfo.userId_);
     ErrCode ret = accountFileOperator_->InputFileByPathAndContentWithTransaction(
         avatarFile, accountInfo.ohosAccountInfo_.avatar_);
     if (ret != ERR_OK) {
@@ -282,7 +282,7 @@ ErrCode OhosAccountDataDeal::SaveAccountInfo(const AccountInfo &accountInfo)
         return ret;
     }
     std::string accountInfoValue = PackJsonToString(jsonData);
-    std::string configFile = configFileDir_ + std::to_string(accountInfo.userId_) + ACCOUNT_CFG_FILE_NAME;
+    std::string configFile = GetConfigFilePath(accountInfo.userId_);
 
     ret = accountFileOperator_->InputFileByPathAndContent(configFile, accountInfoValue);
     if (ret == ERR_OHOSACCOUNT_SERVICE_FILE_CHANGE_DIR_MODE_ERROR) {
@@ -331,29 +331,27 @@ ErrCode OhosAccountDataDeal::ParseJsonFromFile(const std::string &filePath, CJso
         ACCOUNT_LOGE("Config file %{public}s size exceeds limit, remove and rebuild.", filePath.c_str());
         ReportOhosAccountOperationFail(userId, Constants::OPERATION_OPEN_FILE_TO_READ,
             ERR_ACCOUNT_DATADEAL_INPUT_FILE_ERROR, "File size exceeds limit: " + filePath);
-        if (!RemoveFile(filePath)) {
-            int32_t err = errno;
-            ACCOUNT_LOGE("Remove oversized json file %{public}s failed, errno %{public}d.", filePath.c_str(), err);
+        ErrCode delRet = accountFileOperator_->DeleteFile(filePath);
+        if (delRet != ERR_OK) {
+            ACCOUNT_LOGE("Remove oversized json file %{public}s failed, ret = %{public}d.", filePath.c_str(), delRet);
             ReportOhosAccountOperationFail(userId, Constants::OPERATION_OPEN_FILE_TO_READ,
-                err, "Remove oversized file failed: " + filePath);
+                delRet, "Remove oversized file failed: " + filePath);
             return ERR_ACCOUNT_DATADEAL_INPUT_FILE_ERROR;
         }
         BuildJsonFileFromScratch(userId);
     }
 
-    std::ifstream fin(filePath);
-    if (!fin) {
-        int32_t err = errno;
-        ACCOUNT_LOGE("Failed to open config file %{public}s, errno %{public}d.", filePath.c_str(), err);
+    std::string fileContent;
+    ErrCode readRet = accountFileOperator_->GetFileContentByPath(filePath, fileContent);
+    if (readRet != ERR_OK) {
+        ACCOUNT_LOGE("Failed to read config file %{public}s, ret = %{public}d.", filePath.c_str(), readRet);
         ReportOhosAccountOperationFail(userId, Constants::OPERATION_OPEN_FILE_TO_READ,
-            err, "Open config file failed: " + filePath);
+            readRet, "Read config file failed: " + filePath);
         return ERR_ACCOUNT_DATADEAL_INPUT_FILE_ERROR;
     }
-    std::string fileContent((std::istreambuf_iterator<char>(fin)), std::istreambuf_iterator<char>());
-    fin.close();
     jsonData = CreateJsonFromString(fileContent);
     if (jsonData == nullptr || !IsObject(jsonData)) {
-        ACCOUNT_LOGE("Invalid json file,  %{public}s, remove", filePath.c_str());
+        ACCOUNT_LOGE("Invalid json file: %{public}s", filePath.c_str());
         ReportOhosAccountOperationFail(userId, Constants::OPERATION_OPEN_FILE_TO_READ,
             ERR_ACCOUNT_DATADEAL_JSON_FILE_CORRUPTION, "Invalid json file: " + filePath);
         return ERR_ACCOUNT_DATADEAL_JSON_FILE_CORRUPTION;
@@ -442,7 +440,7 @@ ErrCode OhosAccountDataDeal::GetAccountInfo(AccountInfo &accountInfo, const int3
         ACCOUNT_LOGW("invalid userid = %{public}d", userId);
         return ERR_OSACCOUNT_SERVICE_MANAGER_ID_ERROR;
     }
-    std::string configFile = configFileDir_ + std::to_string(userId) + ACCOUNT_CFG_FILE_NAME;
+    std::string configFile = GetConfigFilePath(userId);
     ErrCode ret = accountFileOperator_->CheckFileExistence(configFile);
     if (ret != ERR_OK) {
         if (ret != ERR_ACCOUNT_COMMON_FILE_NOT_EXIST) {
