@@ -17,6 +17,7 @@
 #define OS_ACCOUNT_SERVICES_AUTHORIZATION_INCLUDE_INNER_AUTHORIZATION_MANAGER_H
 
 #include <atomic>
+#include <memory>
 #include <mutex>
 
 #include "account_iam_callback.h"
@@ -76,6 +77,8 @@ public:
     void UpdateAuthorizationResult(ErrCode errCode, AuthorizationResultCode &resultCode,
         const std::vector<uint8_t> &taToken, int32_t remainValidityTime);
     bool IsSameSession(std::string &sessionId);
+    void SetBatchResults(std::map<std::string, AuthorizationResult> results);
+    std::map<std::string, AuthorizationResult> MoveBatchResults();
 private:
     /// The callback function to invoke
     AcquireOnResultfunc func_ = nullptr;
@@ -86,6 +89,7 @@ private:
     ErrCode errCode_ = ERR_OK;
     std::atomic<bool> hasUpdateAuthInfo_{false};
     std::mutex dataMutex_;
+    std::map<std::string, AuthorizationResult> batchResults_;
 };
 
 class AdminAuthCallback final : public AuthenticationCallback {
@@ -138,8 +142,14 @@ public:
      * @param requestRemoteObj Remote object of the requesting application
      * @return ERR_OK on success, error code on failure
      */
-    ErrCode AcquireAuthorization(const PrivilegeBriefDef &pdef, const AcquireAuthorizationOptions &options,
-        const OsAccountConfig &config, const sptr<IRemoteObject> &authorizationResultCallback,
+    struct AuthorizationRequest {
+        std::vector<std::string> privilegesToAuthorize;
+        std::map<std::string, AuthorizationResult> results;
+    };
+
+    ErrCode AcquireAuthorization(AuthorizationRequest &request,
+        const AcquireAuthorizationOptions &options, const OsAccountConfig &config,
+        const sptr<IRemoteObject> &authorizationResultCallback,
         const sptr<IRemoteObject> &requestRemoteObj);
 
     /**
@@ -156,19 +166,44 @@ public:
     bool GetAuthSessionInfo(const std::vector<uint8_t> &inputChallenge, std::string &outSessionId,
         std::vector<uint8_t> &outChallenge, int32_t widgetPid);
     /**
-     * @brief Applies TA authorization and updates privilege cache.
+     * @brief Calls TA batch authorization for multiple privileges in a single TEE invocation.
      *
-     * This method verifies the account type, communicates with the TEE
-     * to obtain authorization token, and updates the privilege cache.
+     * This method constructs a batch parameter from the privilege list and calls
+     * the TEE adapter's batch authorization interface once, obtaining per-privilege
+     * tokens and result codes.
      *
      * @param iamToken The IAM token from authorization service
      * @param accountId The account ID
-     * @param tokenResult Output token application result
+     * @param privileges The list of privileges to authorize
+     * @param batchResult Output batch token result containing per-privilege tokens and codes
      * @param info The connection ability information
-     * @return Pair of error code and authorization result code
+     * @return ERR_OK on success, error code on failure
      */
-    std::pair<ErrCode, AuthorizationResultCode> ApplyTaAuthorization(const std::vector<uint8_t> &iamToken,
-        int32_t accountId, ApplyUserTokenResult &tokenResult, ConnectAbilityInfo &info);
+    ErrCode CallTaAuthorization(const std::vector<uint8_t> &iamToken, int32_t accountId,
+        ApplyUserTokenResultV2 &tokenResult, const ConnectAbilityInfo &info);
+
+    struct BatchTaAuthResult {
+        std::vector<AuthorizationResult> results;
+        AuthorizationResultCode resultCode = AuthorizationResultCode::AUTHORIZATION_SUCCESS;
+        ErrCode errCode = ERR_OK;
+        std::vector<uint8_t> token;
+        int32_t remainValidityTime = 0;
+    };
+
+    struct TaBatchResult {
+        ErrCode errCode = ERR_OK;
+        ApplyUserTokenResultV2 tokenResult;
+    };
+
+    BatchTaAuthResult ApplyTaAuthorization(const std::vector<uint8_t> &iamToken, int32_t accountId,
+        std::map<std::string, AuthorizationResult> &results, const ConnectAbilityInfo &info);
+
+    struct AuthUpdateResult {
+        ErrCode errCode = ERR_OK;
+        AuthorizationResultCode resultCode = AuthorizationResultCode::AUTHORIZATION_SUCCESS;
+        std::vector<uint8_t> token;
+        int32_t remainValidityTime = 0;
+    };
 
     /**
      * @brief Check privilege from privilege cache.
@@ -252,17 +287,6 @@ private:
     ~InnerAuthorizationManager();
 
     /**
-     * @brief Calls TA authorization interface to get token.
-     * @param iamToken The IAM token
-     * @param accountId The account ID
-     * @param tokenResult Output token application result
-     * @param info The connection ability information
-     * @return ERR_OK on success, error code on failure
-     */
-    ErrCode CallTaAuthorization(const std::vector<uint8_t> &iamToken, int32_t accountId,
-        ApplyUserTokenResult &tokenResult, ConnectAbilityInfo &info);
-
-    /**
      * @brief Updates privilege cache with granted token.
      * @param info The connection ability information
      * @param tokenResult The token application result
@@ -290,8 +314,9 @@ private:
      * @param requestRemoteObj The requesting application remote object
      * @return ERR_OK on success, error code on failure
      */
-    ErrCode StartUIExtensionConnection(const ConnectAbilityInfo &info, const std::string &uiAbilityName,
-        const sptr<IAuthorizationCallback> &callback, const AuthorizationResult &result,
+    ErrCode StartUIExtensionConnection(const ConnectAbilityInfo &info,
+        const std::string &uiAbilityName, const sptr<IAuthorizationCallback> &callback,
+        const std::map<std::string, AuthorizationResult> &results,
         const sptr<IRemoteObject> &requestRemoteObj);
     ErrCode ValidateUIExtensionParams(const ConnectAbilityInfo &info,
         const sptr<IAuthorizationCallback> &callback, const sptr<IRemoteObject> &requestRemoteObj);
@@ -320,6 +345,8 @@ private:
         sptr<IAuthorizationCallback> &callback, AuthorizationResult &result,
         const sptr<IRemoteObject> &requestRemoteObj);
 
+    void PopulateResultsFromTokenResult(std::map<std::string, AuthorizationResult> &batchResults,
+        BatchTaAuthResult &result, const TaBatchResult &taResult, const ConnectAbilityInfo &info);
     DISALLOW_COPY_AND_MOVE(InnerAuthorizationManager);
 };
 }

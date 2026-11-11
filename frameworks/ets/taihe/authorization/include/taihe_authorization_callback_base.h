@@ -18,11 +18,13 @@
 
 #include <condition_variable>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
+#include <vector>
 #include "account_constants.h"
 #include "account_error_no.h"
 #include "account_log_wrapper.h"
@@ -35,10 +37,26 @@ namespace AccountSA {
 ErrCode NotifyAuthorizationResultWithRetry(const sptr<IRemoteObject>& callback, int32_t errCode,
     const std::vector<uint8_t> &iamToken = {}, int32_t accountId = -1, int32_t resultCode = 0);
 
+static inline bool CheckAllBatchResultsMatch(const std::vector<AuthorizationResult> &results,
+    AuthorizationResultCode code)
+{
+    if (results.empty()) {
+        return false;
+    }
+    for (const auto &result : results) {
+        if (result.resultCode != code) {
+            return false;
+        }
+    }
+    return true;
+}
+
 template <typename ResultType>
 class TaiheAuthorizationCallback : public AuthorizationCallback {
 public:
     using BuildResultFunc = std::function<ResultType(const AuthorizationResult&, const std::string&)>;
+    using BuildBatchResultFunc = std::function<ResultType(
+        const std::vector<AuthorizationResult>&)>;
 
     TaiheAuthorizationCallback(
         std::shared_ptr<TaiheAcquireAuthorizationContext> &context,
@@ -47,6 +65,14 @@ public:
     {
         context_ = context;
         privilege_ = std::move(privilege);
+    }
+
+    TaiheAuthorizationCallback(
+        std::shared_ptr<TaiheAcquireAuthorizationContext> &context,
+        BuildBatchResultFunc buildBatchResultFunc)
+        : buildBatchResultFunc_(std::move(buildBatchResultFunc))
+    {
+        context_ = context;
     }
 
     ~TaiheAuthorizationCallback() override = default;
@@ -73,7 +99,40 @@ public:
             }
         }
         if (errCode_ == ERR_OK && buildResultFunc_ != nullptr) {
-            taiheResult_ = buildResultFunc_(result, privilege_);
+            const std::string &privilege = result.privilege.empty() ? privilege_ : result.privilege;
+            taiheResult_ = buildResultFunc_(result, privilege);
+        }
+        onResultCalled_ = true;
+        cv_.notify_one();
+        return ERR_OK;
+    }
+
+    ErrCode OnBatchResult(int32_t resultCode,
+        const std::vector<AuthorizationResult> &results) override
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (onResultCalled_) {
+            ACCOUNT_LOGE("OnBatchResult has been called.");
+            return ERR_OK;
+        }
+        if (context_ != nullptr && context_->hasOptions && context_->options.hasContext) {
+            CloseUIExtension(context_);
+        }
+        errCode_ = resultCode;
+        if (context_ != nullptr && context_->isPublicApi && errCode_ == ERR_OK) {
+            if (CheckAllBatchResultsMatch(results,
+                    AccountSA::AuthorizationResultCode::AUTHORIZATION_SERVICE_BUSY)) {
+                errCode_ = ERR_JS_AUTHORIZATION_SERVICE_BUSY;
+            } else if (CheckAllBatchResultsMatch(results,
+                    AccountSA::AuthorizationResultCode::AUTHORIZATION_INTERACTION_NOT_ALLOWED)) {
+                errCode_ = ERR_JS_AUTHORIZATION_INTERACTION_NOT_ALLOWED;
+            }
+        }
+        if (errCode_ == ERR_OK && buildBatchResultFunc_ != nullptr) {
+            taiheResult_ = buildBatchResultFunc_(results);
+        } else if (errCode_ == ERR_OK && buildResultFunc_ != nullptr && !results.empty()) {
+            const std::string &privilege = results[0].privilege.empty() ? privilege_ : results[0].privilege;
+            taiheResult_ = buildResultFunc_(results[0], privilege);
         }
         onResultCalled_ = true;
         cv_.notify_one();
@@ -122,6 +181,7 @@ public:
 
 private:
     BuildResultFunc buildResultFunc_;
+    BuildBatchResultFunc buildBatchResultFunc_;
 };
 
 template <typename ResultType>

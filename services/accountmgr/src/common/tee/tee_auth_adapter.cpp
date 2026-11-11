@@ -17,6 +17,7 @@
 
 #include <mutex>
 #include "account_log_wrapper.h"
+#include "authorization_common.h"
 #include "tee_client_api.h"  // TEE API only included in .cpp file
 
 namespace OHOS {
@@ -49,6 +50,7 @@ namespace {
         CHECK_TIMESTAMP_EXPIRE_CMD_ID = 0x00020003,
         USER_TOKEN_APPLY_CMD_ID = 0x00020001,
         USER_ROLE_BATCH_SET_CMD_ID = 0X00010004,
+        USER_TOKEN_APPLY_MULTI_PERMISSION_CMD_ID = 0x00020004,
     };
 }
 
@@ -75,8 +77,14 @@ public:
     ErrCode CheckTimestampExpired(const uint32_t grantTime, const int32_t period,
         int32_t &remainTimeSec, bool &isValid);
     ErrCode TaAcquireAuthorization(const ApplyUserTokenParam &param, ApplyUserTokenResult &result);
+    ErrCode TaAcquireAuthorizationBatch(const ApplyUserTokenParamV2 &param,
+        ApplyUserTokenResultV2 &result);
 
 private:
+    static int32_t cachedTeeVersion_;
+    ErrCode GetTeeVersion();
+    ErrCode TaAcquireAuthorizationBatchViaV1(
+        const ApplyUserTokenParamV2 &param, ApplyUserTokenResultV2 &tokenResult);
     /**
      * @brief A RAII wrapper class for TEEC_Context.
      * Moved to pImpl implementation to hide TEE types.
@@ -138,6 +146,8 @@ private:
      */
     static ErrCode ConvertTeecErrCode(TEEC_Result teeResult);
 };
+
+int32_t OsAccountTeeAdapter::Impl::cachedTeeVersion_ = TEE_TA_VERSION_UNKNOWN;
 
 // TeecContextGuard implementation
 OsAccountTeeAdapter::Impl::TeecContextGuard::~TeecContextGuard()
@@ -462,6 +472,100 @@ ErrCode OsAccountTeeAdapter::Impl::TaAcquireAuthorization(
     return ERR_OK;
 }
 
+ErrCode OsAccountTeeAdapter::Impl::GetTeeVersion()
+{
+    if (cachedTeeVersion_ > TEE_TA_VERSION_UNKNOWN) {
+        return ERR_OK;
+    }
+    int32_t version = 0;
+    std::function<ErrCode(TEEC_Operation &)> setParamTask = [&version](TEEC_Operation &operation) {
+        (void)memset_s(&operation, sizeof(TEEC_Operation), 0, sizeof(TEEC_Operation));
+        operation.started = 1;
+        operation.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_OUTPUT, TEEC_NONE, TEEC_NONE, TEEC_NONE);
+        return ERR_OK;
+    };
+    std::function<ErrCode(TEEC_Operation &)> processResultTask = [&version](TEEC_Operation &operation) {
+        version = static_cast<int32_t>(operation.params[INDEX_ZERO].value.a);
+        return ERR_OK;
+    };
+    ErrCode ret = ExecuteCommand(USER_ROLE_GET_VERSION_CMD_ID, setParamTask, processResultTask);
+    if (ret != ERR_OK) {
+        ACCOUNT_LOGE("Failed to get TEE version, fallback to V1, errCode:%{public}d", ret);
+        cachedTeeVersion_ = TEE_TA_VERSION_V1;
+    } else {
+        cachedTeeVersion_ = version;
+    }
+    ACCOUNT_LOGI("TEE TA version: %{public}d", cachedTeeVersion_);
+    return ERR_OK;
+}
+
+ErrCode OsAccountTeeAdapter::Impl::TaAcquireAuthorizationBatchViaV1(
+    const ApplyUserTokenParamV2 &param, ApplyUserTokenResultV2 &tokenResult)
+{
+    if (param.permissionsNum > 1) {
+        ACCOUNT_LOGE("TEE V1 does not support batch authorization, permissionsNum:%{public}u",
+            param.permissionsNum);
+        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+    }
+    ApplyUserTokenParam v1Param;
+    v1Param.pid = param.pid;
+    v1Param.grantValidityPeriod = param.grantValidityPeriod;
+    v1Param.grantUserId = param.grantUserId;
+    v1Param.authTokenSize = static_cast<size_t>(param.authTokenSize);
+    (void)memcpy_s(v1Param.authToken, AUTH_TOKEN_LEN, param.authToken, AUTH_TOKEN_LEN);
+    (void)memcpy_s(v1Param.challenge, CHALLENGE_LEN, param.challenge, CHALLENGE_LEN);
+    size_t permSize = param.permissionSizes[0];
+    if (permSize > PERMISSION_MAX_LEN) {
+        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+    }
+    (void)memcpy_s(v1Param.permission, PERMISSION_MAX_LEN + 1, param.permission[0], permSize);
+    v1Param.permissionSize = permSize;
+    ApplyUserTokenResult v1Result;
+    ErrCode ret = TaAcquireAuthorization(v1Param, v1Result);
+    if (ret != ERR_OK) {
+        return ret;
+    }
+    if (v1Result.userTokenSize > 0 && v1Result.userTokenSize <= USER_TOKEN_LEN) {
+        tokenResult.userTokenSize = static_cast<uint32_t>(v1Result.userTokenSize);
+        tokenResult.remainValidityTime = v1Result.remainValidityTime;
+        tokenResult.grantTime = v1Result.grantTime;
+        (void)memcpy_s(tokenResult.userToken, USER_TOKEN_LEN,
+            v1Result.userToken, v1Result.userTokenSize);
+    }
+    return ERR_OK;
+}
+
+ErrCode OsAccountTeeAdapter::Impl::TaAcquireAuthorizationBatch(
+    const ApplyUserTokenParamV2 &param, ApplyUserTokenResultV2 &tokenResult)
+{
+    if (param.permissionsNum == 0 || param.permissionsNum > static_cast<uint32_t>(MAX_BATCH_PRIVILEGE_COUNT)) {
+        ACCOUNT_LOGE("Invalid permissionsNum: %{public}u", param.permissionsNum);
+        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+    }
+    GetTeeVersion();
+    if (cachedTeeVersion_ < TEE_TA_VERSION_V2) {
+        ACCOUNT_LOGI("TEE version < 2, fallback to V1 single-permission loop");
+        return TaAcquireAuthorizationBatchViaV1(param, tokenResult);
+    }
+    std::function<ErrCode(TEEC_Operation &)> setParamTask = [&param, &tokenResult](TEEC_Operation &operation) {
+        (void)memset_s(&operation, sizeof(TEEC_Operation), 0, sizeof(TEEC_Operation));
+        operation.started = 1;
+        operation.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT, TEEC_MEMREF_TEMP_OUTPUT, TEEC_NONE, TEEC_NONE);
+        operation.params[INDEX_ZERO].tmpref.buffer =
+            reinterpret_cast<uint8_t *>(const_cast<ApplyUserTokenParamV2 *>(&param));
+        operation.params[INDEX_ZERO].tmpref.size = sizeof(param);
+        operation.params[INDEX_ONE].tmpref.buffer = reinterpret_cast<uint8_t *>(&tokenResult);
+        operation.params[INDEX_ONE].tmpref.size = sizeof(tokenResult);
+        return ERR_OK;
+    };
+    ErrCode ret = ExecuteCommand(USER_TOKEN_APPLY_MULTI_PERMISSION_CMD_ID, setParamTask);
+    if (ret != ERR_OK) {
+        ACCOUNT_LOGE("Failed to TaAcquireAuthorizationBatch, errCode:%{public}d", ret);
+        return ERR_AUTHORIZATION_TA_ERROR;
+    }
+    return ERR_OK;
+}
+
 // Public interface implementation - delegates to pImpl
 OsAccountTeeAdapter::OsAccountTeeAdapter() : impl_(std::make_unique<Impl>()) {}
 OsAccountTeeAdapter::~OsAccountTeeAdapter() = default;
@@ -508,6 +612,12 @@ ErrCode OsAccountTeeAdapter::CheckTimestampExpired(const uint32_t grantTime, con
 ErrCode OsAccountTeeAdapter::TaAcquireAuthorization(const ApplyUserTokenParam &param, ApplyUserTokenResult &result)
 {
     return impl_->TaAcquireAuthorization(param, result);
+}
+
+ErrCode OsAccountTeeAdapter::TaAcquireAuthorizationBatch(const ApplyUserTokenParamV2 &param,
+    ApplyUserTokenResultV2 &result)
+{
+    return impl_->TaAcquireAuthorizationBatch(param, result);
 }
 } // namespace AccountSA
 } // namespace OHOS

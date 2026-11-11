@@ -42,6 +42,10 @@ interface AuthorizationManager {
     @promise
     AcquireAuthorizationPromise(privilege: Privilege, context: @sts_type("UIAbilityContext")Opaque): AuthorizationResult;
 
+    @rename("requestBatchAuthorization")
+    @promise
+    AcquireBatchAuthorizationPromise(privileges: Array<Privilege>, context: @sts_type("UIAbilityContext")Opaque): Map<Privilege, AuthorizationResult>;
+
     @rename("hasAuthorization")
     @promise
     HasAuthorizationPromise(privilege: Privilege): bool;

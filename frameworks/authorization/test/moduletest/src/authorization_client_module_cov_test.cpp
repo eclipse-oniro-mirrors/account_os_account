@@ -80,6 +80,15 @@ public:
         return ERR_OK;
     }
 
+    ErrCode OnBatchResult(int32_t resultCode,
+        const std::vector<AccountSA::AuthorizationResult>& results) override
+    {
+        recvErrCode_ = resultCode;
+        batchResults_ = results;
+        batchCalled_ = true;
+        return ERR_OK;
+    }
+
     ErrCode OnConnectAbility(const AccountSA::ConnectAbilityInfo& info, const sptr<IRemoteObject>& callback) override
     {
         return ERR_OK;
@@ -88,6 +97,31 @@ public:
     int32_t recvErrCode_ = -1;
     AccountSA::AuthorizationResult recvResult_;
     bool called_ = false;
+    std::vector<AccountSA::AuthorizationResult> batchResults_;
+    bool batchCalled_ = false;
+};
+
+class OnResultOnlyCallback final : public AccountSA::AuthorizationCallback {
+public:
+    ErrCode OnResult(int32_t resultCode, const AccountSA::AuthorizationResult& result) override
+    {
+        onResultCalled_ = true;
+        onResultCount_++;
+        recvResultCode_ = resultCode;
+        recvResults_.push_back(result);
+        return ERR_OK;
+    }
+
+    ErrCode OnConnectAbility(const AccountSA::ConnectAbilityInfo& info,
+        const sptr<IRemoteObject>& callback) override
+    {
+        return ERR_OK;
+    }
+
+    bool onResultCalled_ = false;
+    size_t onResultCount_ = 0;
+    int32_t recvResultCode_ = -1;
+    std::vector<AccountSA::AuthorizationResult> recvResults_;
 };
 
 /**
@@ -575,7 +609,7 @@ HWTEST_F(AuthorizationClientModuleCovTest, AcquireAuthorizationForPublic001, Tes
     std::string privilege = PRIVILEGE_NAME;
     std::shared_ptr<MockAuthorizationResultCallback> callback = nullptr;
     ErrCode errCode = AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
-        privilege, true, callback);
+        {privilege}, true, callback);
     EXPECT_EQ(errCode, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
 }
 
@@ -590,7 +624,7 @@ HWTEST_F(AuthorizationClientModuleCovTest, AcquireAuthorizationForPublic002, Tes
     std::string privilege = PRIVILEGE_NAME;
     auto callback = std::make_shared<MockAuthorizationResultCallback>();
     ErrCode errCode = AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
-        privilege, true, callback);
+        {privilege}, true, callback);
     EXPECT_NE(errCode, ERR_OK);
 }
 
@@ -605,7 +639,7 @@ HWTEST_F(AuthorizationClientModuleCovTest, AcquireAuthorizationForPublic003, Tes
     std::string privilege = PRIVILEGE_NAME_TEST;
     auto callback = std::make_shared<MockAuthorizationResultCallback>();
     ErrCode errCode = AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
-        privilege, true, callback);
+        {privilege}, true, callback);
     EXPECT_NE(errCode, ERR_OK);
 }
 
@@ -731,7 +765,7 @@ HWTEST_F(AuthorizationClientModuleCovTest, AcquireAuthorizationForPublic_NoSuppo
     std::string privilege = PRIVILEGE_NAME;
     auto callback = std::make_shared<MockAuthorizationResultCallback>();
     ErrCode errCode = AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
-        privilege, true, callback);
+        {privilege}, true, callback);
     EXPECT_EQ(errCode, ERR_ACCOUNT_COMMON_PERMISSION_DENIED);
 }
 
@@ -749,11 +783,21 @@ HWTEST_F(AuthorizationClientModuleCovTest, AcquireAuthorizationForPublic_NoSuppo
     std::vector<std::string> authPermissions = ALL_ACCOUNT_PERMISSION_LIST;
     authPermissions.push_back("ohos.permission.REQUEST_LOCAL_ACCOUNT_AUTHORIZATION");
     ASSERT_TRUE(AllocPermission(authPermissions, tokenID, true));
-    std::string privilege = PRIVILEGE_PUBLIC_NAME;
+    std::vector<std::string> privileges = {PRIVILEGE_PUBLIC_NAME};
     auto callback = std::make_shared<MockAuthorizationResultCallback>();
     ErrCode errCode = AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
-        privilege, true, callback);
-    EXPECT_TRUE(errCode == ERR_OK || errCode == ERR_ACCOUNT_COMMON_PERMISSION_DENIED);
+        privileges, true, callback);
+    if (errCode == ERR_OK) {
+        EXPECT_EQ(errCode, ERR_OK);
+        EXPECT_TRUE(callback->batchCalled_);
+        EXPECT_EQ(callback->recvErrCode_, ERR_OK);
+        ASSERT_EQ(callback->batchResults_.size(), privileges.size());
+        EXPECT_EQ(callback->batchResults_[0].privilege, PRIVILEGE_PUBLIC_NAME);
+        EXPECT_EQ(callback->batchResults_[0].resultCode,
+            AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED);
+    } else {
+        EXPECT_EQ(errCode, ERR_ACCOUNT_COMMON_PERMISSION_DENIED);
+    }
     ASSERT_TRUE(RecoveryPermission(tokenID, selfTokenId));
 }
 
@@ -785,8 +829,8 @@ HWTEST_F(AuthorizationClientModuleCovTest, ConnectAbilityInfo001, TestSize.Level
 {
     ConnectAbilityInfo connectAbilityInfo;
     std::vector<uint8_t> challenge;
-    connectAbilityInfo.privilege = PRIVILEGE_NAME_TEST;
-    connectAbilityInfo.description = PRIVILEGE_NAME_TEST;
+    connectAbilityInfo.privileges = {PRIVILEGE_NAME_TEST};
+    connectAbilityInfo.descriptions = {PRIVILEGE_NAME_TEST};
     connectAbilityInfo.bundleName = PRIVILEGE_NAME_TEST;
     connectAbilityInfo.abilityName = PRIVILEGE_NAME_TEST;
     connectAbilityInfo.callingUid = 0;
@@ -802,7 +846,8 @@ HWTEST_F(AuthorizationClientModuleCovTest, ConnectAbilityInfo001, TestSize.Level
     ConnectAbilityInfo* result = connectAbilityInfo2.Unmarshalling(parcel);
     ASSERT_NE(result, nullptr);
     std::shared_ptr<ConnectAbilityInfo> resultPtr(result);
-    EXPECT_EQ(result->description, PRIVILEGE_NAME_TEST);
+    EXPECT_EQ(result->descriptions.size(), 1u);
+    EXPECT_EQ(result->descriptions[0], PRIVILEGE_NAME_TEST);
 }
 
 /**
@@ -1199,4 +1244,189 @@ HWTEST_F(AuthorizationClientModuleCovTest, AcquireAuthorizationOptions_SubjectIn
     ASSERT_NE(unmarshalled, nullptr);
     EXPECT_FALSE(unmarshalled->subjectInfo.has_value());
     delete unmarshalled;
+}
+
+/**
+ * @tc.name: AcquireAuthorizationForPublic_001
+ * @tc.desc: test AcquireAuthorizationForPublic with null callback.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+#ifdef SUPPORT_AUTHORIZATION
+HWTEST_F(AuthorizationClientModuleCovTest, AcquireAuthorizationForPublic_001, TestSize.Level0)
+{
+    std::vector<std::string> privileges = {PRIVILEGE_PUBLIC_NAME};
+    ErrCode ret = AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
+        privileges, true, nullptr);
+    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+}
+#else
+HWTEST_F(AuthorizationClientModuleCovTest, AcquireAuthorizationForPublic_001, TestSize.Level0)
+{
+    std::vector<std::string> privileges = {PRIVILEGE_PUBLIC_NAME};
+    ErrCode ret = AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
+        privileges, true, nullptr);
+    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_PERMISSION_DENIED);
+}
+#endif
+
+/**
+ * @tc.name: AcquireAuthorizationForPublic_002
+ * @tc.desc: test AcquireAuthorizationForPublic with empty privileges.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+#ifdef SUPPORT_AUTHORIZATION
+HWTEST_F(AuthorizationClientModuleCovTest, AcquireAuthorizationForPublic_002, TestSize.Level0)
+{
+    auto callback = std::make_shared<MockAuthorizationResultCallback>();
+    std::vector<std::string> privileges;
+    ErrCode ret = AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
+        privileges, true, callback);
+    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+}
+#else
+HWTEST_F(AuthorizationClientModuleCovTest, AcquireAuthorizationForPublic_002, TestSize.Level0)
+{
+    auto callback = std::make_shared<MockAuthorizationResultCallback>();
+    std::vector<std::string> privileges;
+    ErrCode ret = AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
+        privileges, true, callback);
+    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_PERMISSION_DENIED);
+}
+#endif
+
+/**
+ * @tc.name: AcquireAuthorizationForPublic_003
+ * @tc.desc: test AcquireAuthorizationForPublic with multiple privileges.
+ *           With SUPPORT_AUTHORIZATION: proxy unavailable (NE ERR_OK).
+ *           Without SUPPORT_AUTHORIZATION: permission granted, all results NOT_SUPPORTED.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+#ifdef SUPPORT_AUTHORIZATION
+HWTEST_F(AuthorizationClientModuleCovTest, AcquireAuthorizationForPublic_003, TestSize.Level0)
+{
+    auto callback = std::make_shared<MockAuthorizationResultCallback>();
+    std::vector<std::string> privileges = {PRIVILEGE_PUBLIC_NAME, PRIVILEGE_NAME_TEST};
+    ErrCode ret = AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
+        privileges, true, callback);
+    EXPECT_NE(ret, ERR_OK);
+}
+#else
+HWTEST_F(AuthorizationClientModuleCovTest, AcquireAuthorizationForPublic_003, TestSize.Level0)
+{
+    uint64_t selfTokenId = IPCSkeleton::GetSelfTokenID();
+    uint64_t tokenID;
+    std::vector<std::string> authPermissions = ALL_ACCOUNT_PERMISSION_LIST;
+    authPermissions.push_back("ohos.permission.REQUEST_LOCAL_ACCOUNT_AUTHORIZATION");
+    ASSERT_TRUE(AllocPermission(authPermissions, tokenID, true));
+    auto callback = std::make_shared<MockAuthorizationResultCallback>();
+    std::vector<std::string> privileges = {PRIVILEGE_PUBLIC_NAME, PRIVILEGE_NAME_TEST};
+    ErrCode ret = AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
+        privileges, true, callback);
+    EXPECT_EQ(ret, ERR_OK);
+    EXPECT_TRUE(callback->batchCalled_);
+    EXPECT_EQ(callback->recvErrCode_, ERR_OK);
+    ASSERT_EQ(callback->batchResults_.size(), privileges.size());
+    EXPECT_EQ(callback->batchResults_[0].privilege, PRIVILEGE_PUBLIC_NAME);
+    EXPECT_EQ(callback->batchResults_[0].resultCode,
+        AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED);
+    EXPECT_EQ(callback->batchResults_[1].privilege, PRIVILEGE_NAME_TEST);
+    EXPECT_EQ(callback->batchResults_[1].resultCode,
+        AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED);
+    ASSERT_TRUE(RecoveryPermission(tokenID, selfTokenId));
+}
+#endif
+
+/**
+ * @tc.name: AuthorizationCallbackService_OnBatchResult_001
+ * @tc.desc: test AuthorizationCallbackService::OnBatchResult with null inner callback.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AuthorizationClientModuleCovTest, AuthorizationCallbackService_OnBatchResult_001, TestSize.Level0)
+{
+    bool afterCalled = false;
+    auto svc = std::make_shared<AuthorizationCallbackService>(nullptr,
+        [&afterCalled]() { afterCalled = true; });
+    std::vector<AuthorizationResult> results;
+    AuthorizationResult r;
+    r.privilege = PRIVILEGE_PUBLIC_NAME;
+    r.resultCode = AuthorizationResultCode::AUTHORIZATION_SUCCESS;
+    results.push_back(r);
+    ErrCode ret = svc->OnBatchResult(ERR_OK, results);
+    EXPECT_EQ(ret, ERR_OK);
+    EXPECT_TRUE(afterCalled);
+}
+
+/**
+ * @tc.name: AuthorizationCallbackService_OnBatchResult_002
+ * @tc.desc: test AuthorizationCallbackService::OnBatchResult forwarding to inner callback.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AuthorizationClientModuleCovTest, AuthorizationCallbackService_OnBatchResult_002, TestSize.Level0)
+{
+    auto innerCallback = std::make_shared<MockAuthorizationResultCallback>();
+    bool afterCalled = false;
+    auto svc = std::make_shared<AuthorizationCallbackService>(innerCallback,
+        [&afterCalled]() { afterCalled = true; });
+    std::vector<AuthorizationResult> results;
+    AuthorizationResult r;
+    r.privilege = PRIVILEGE_PUBLIC_NAME;
+    r.resultCode = AuthorizationResultCode::AUTHORIZATION_DENIED;
+    results.push_back(r);
+    ErrCode ret = svc->OnBatchResult(ERR_OK, results);
+    EXPECT_EQ(ret, ERR_OK);
+    EXPECT_TRUE(innerCallback->batchCalled_);
+    EXPECT_TRUE(afterCalled);
+}
+
+/**
+ * @tc.name: AuthorizationCallback_OnBatchResult_Default_001
+ * @tc.desc: test AuthorizationCallback::OnBatchResult default impl with empty results.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AuthorizationClientModuleCovTest, AuthorizationCallback_OnBatchResult_Default_001, TestSize.Level0)
+{
+    auto cb = std::make_shared<OnResultOnlyCallback>();
+    std::vector<AuthorizationResult> emptyResults;
+    ErrCode ret = cb->OnBatchResult(ERR_OK, emptyResults);
+    EXPECT_EQ(ret, ERR_OK);
+    EXPECT_FALSE(cb->onResultCalled_);
+}
+
+/**
+ * @tc.name: AuthorizationCallback_OnBatchResult_Default_002
+ * @tc.desc: test AuthorizationCallback::OnBatchResult default impl forwards each result to OnResult.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AuthorizationClientModuleCovTest, AuthorizationCallback_OnBatchResult_Default_002, TestSize.Level0)
+{
+    auto cb = std::make_shared<OnResultOnlyCallback>();
+    const int32_t testResultCode = 123456;
+    std::vector<AuthorizationResult> results;
+    AuthorizationResult r1;
+    r1.privilege = PRIVILEGE_PUBLIC_NAME;
+    r1.resultCode = AuthorizationResultCode::AUTHORIZATION_SUCCESS;
+    results.push_back(r1);
+    AuthorizationResult r2;
+    r2.privilege = PRIVILEGE_NAME_TEST;
+    r2.resultCode = AuthorizationResultCode::AUTHORIZATION_DENIED;
+    results.push_back(r2);
+    AuthorizationResult r3;
+    r3.privilege = PRIVILEGE_NAME;
+    r3.resultCode = AuthorizationResultCode::AUTHORIZATION_CANCELED;
+    results.push_back(r3);
+    ErrCode ret = cb->OnBatchResult(testResultCode, results);
+    EXPECT_EQ(ret, ERR_OK);
+    ASSERT_EQ(cb->onResultCount_, 3u);
+    EXPECT_EQ(cb->recvResultCode_, testResultCode);
+    ASSERT_EQ(cb->recvResults_.size(), 3u);
+    EXPECT_EQ(cb->recvResults_[0].privilege, PRIVILEGE_PUBLIC_NAME);
+    EXPECT_EQ(cb->recvResults_[1].privilege, PRIVILEGE_NAME_TEST);
+    EXPECT_EQ(cb->recvResults_[2].privilege, PRIVILEGE_NAME);
 }

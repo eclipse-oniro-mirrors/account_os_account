@@ -16,13 +16,16 @@
 #ifndef NAPI_AUTHORIZATION_CALLBACK_BASE_H
 #define NAPI_AUTHORIZATION_CALLBACK_BASE_H
 
+#include <atomic>
 #include <memory>
 #include <functional>
+#include <vector>
 #include "account_error_no.h"
 #include "authorization_callback.h"
 #include "authorization_ui_extension_callback.h"
 #include "napi/native_api.h"
 #include "napi_account_common.h"
+#include "napi_account_error.h"
 #include "ui_content.h"
 #include "ui_extension_context.h"
 #include "want.h"
@@ -35,6 +38,7 @@ struct AcquireAuthorizationContext : public CommonAsyncContext {
     AccountSA::AcquireAuthorizationOptions options;
     AccountSA::AuthorizationResult authorizationResult;
     std::string privilege;
+    std::vector<std::string> privileges;
     bool hasOptions = false;
     bool uiAbilityFlag = false;
     bool isPublicApi = false;
@@ -91,6 +95,38 @@ private:
     std::shared_ptr<AcquireAuthorizationContext> context_ = nullptr;
     ResultToJsFunc resultToJsFunc_;
     bool isPublicApi_ = false;
+    std::atomic<bool> resolved_{false};
+};
+
+class NapiBatchAuthorizationResultCallback final : public AccountSA::AuthorizationCallback {
+public:
+    explicit NapiBatchAuthorizationResultCallback(AcquireAuthorizationContext *asyncContextPtr)
+    {
+        env_ = asyncContextPtr->env;
+        deferred_ = asyncContextPtr->deferred;
+        if (asyncContextPtr->hasOptions) {
+            context_ = std::make_shared<AcquireAuthorizationContext>(env_, true);
+            context_->hasOptions = asyncContextPtr->hasOptions;
+            context_->privilege = asyncContextPtr->privilege;
+            context_->privileges = asyncContextPtr->privileges;
+            context_->uiAbilityFlag = asyncContextPtr->uiAbilityFlag;
+            context_->isPublicApi = asyncContextPtr->isPublicApi;
+            context_->sessionId = asyncContextPtr->sessionId;
+            context_->abilityContext = asyncContextPtr->abilityContext;
+            context_->uiExtensionContext = asyncContextPtr->uiExtensionContext;
+            context_->options.hasContext = asyncContextPtr->options.hasContext;
+        }
+    }
+    ErrCode OnResult(int32_t resultCode, const AccountSA::AuthorizationResult& result) override;
+    ErrCode OnBatchResult(int32_t resultCode,
+        const std::vector<AccountSA::AuthorizationResult>& results) override;
+    ErrCode OnConnectAbility(const AccountSA::ConnectAbilityInfo &info,
+        const sptr<IRemoteObject> &callback) override;
+private:
+    napi_env env_;
+    napi_deferred deferred_ = nullptr;
+    std::shared_ptr<AcquireAuthorizationContext> context_ = nullptr;
+    std::atomic<bool> resolved_{false};
 };
 
 bool ConvertContextObject(napi_env env, napi_value contextValue,

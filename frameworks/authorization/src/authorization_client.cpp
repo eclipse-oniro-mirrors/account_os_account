@@ -403,14 +403,10 @@ sptr<IAuthorization> AuthorizationClient::GetAuthorizationProxy()
 }
 #endif // SUPPORT_AUTHORIZATION
 
-ErrCode AuthorizationClient::AcquireAuthorizationForPublic(const std::string &privilege, bool isContextValid,
-    const std::shared_ptr<AuthorizationCallback> &callback)
-{
 #ifdef SUPPORT_AUTHORIZATION
-    if (callback == nullptr) {
-        ACCOUNT_LOGE("Callback is nullptr");
-        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
-    }
+ErrCode AuthorizationClient::AcquireAuthorizationForPublicInner(const std::vector<std::string> &privileges,
+    bool isContextValid, const std::shared_ptr<AuthorizationCallback> &callback)
+{
     sptr<AuthRemoteObjectStub> requestRemoteObj = GetOrCreateRequestRemoteObject();
     if (requestRemoteObj == nullptr) {
         ACCOUNT_LOGE("Failed to get or create request remote object");
@@ -424,7 +420,7 @@ ErrCode AuthorizationClient::AcquireAuthorizationForPublic(const std::string &pr
         ACCOUNT_LOGE("Failed to get authorization proxy");
         return ERR_ACCOUNT_COMMON_GET_PROXY;
     }
-    ErrCode errCode = proxy->AcquireAuthorizationForPublic(privilege, isContextValid,
+    ErrCode errCode = proxy->AcquireAuthorizationForPublic(privileges, isContextValid,
         resultCallback->AsObject(), requestRemoteObj->AsObject());
     if (errCode != ERR_OK) {
         ACCOUNT_LOGE("Failed to acquire authorization for public, errCode:%{public}d", errCode);
@@ -435,6 +431,19 @@ ErrCode AuthorizationClient::AcquireAuthorizationForPublic(const std::string &pr
         callbackService_ = resultCallback;
     }
     return ERR_OK;
+}
+#endif // SUPPORT_AUTHORIZATION
+
+ErrCode AuthorizationClient::AcquireAuthorizationForPublic(const std::vector<std::string> &privileges,
+    bool isContextValid, const std::shared_ptr<AuthorizationCallback> &callback)
+{
+#ifdef SUPPORT_AUTHORIZATION
+    if (callback == nullptr || privileges.empty() || privileges.size() > MAX_BATCH_PRIVILEGE_COUNT) {
+        ACCOUNT_LOGE("Invalid parameter, callback null or privileges size invalid, size:%{public}zu",
+            privileges.size());
+        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+    }
+    return AcquireAuthorizationForPublicInner(privileges, isContextValid, callback);
 #else
     ErrCode errCode = AccountPermissionManager::VerifyPermission(IPCSkeleton::GetSelfTokenID(),
         PERMISSION_ACQUIRE_AUTHORIZATION_FOR_PUBLIC);
@@ -442,14 +451,19 @@ ErrCode AuthorizationClient::AcquireAuthorizationForPublic(const std::string &pr
         ACCOUNT_LOGE("Failed to check permission.");
         return ERR_ACCOUNT_COMMON_PERMISSION_DENIED;
     }
-    AuthorizationResult result;
-    result.privilege = privilege;
-    result.resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
+    std::vector<AuthorizationResult> results;
+    results.reserve(privileges.size());
+    for (const auto &privilege : privileges) {
+        AuthorizationResult r;
+        r.privilege = privilege;
+        r.resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
+        results.push_back(r);
+    }
     if (callback != nullptr) {
-        callback->OnResult(ERR_OK, result);
+        callback->OnBatchResult(ERR_OK, results);
     }
     return ERR_OK;
-#endif // SUPPORT_AUTHORIZATION
+#endif
 }
 
 ErrCode AuthorizationClient::HasAuthorizationForPublic(const std::string &privilege, bool &isAuthorized)

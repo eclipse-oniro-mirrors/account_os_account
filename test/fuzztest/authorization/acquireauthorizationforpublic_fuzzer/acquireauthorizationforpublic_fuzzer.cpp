@@ -16,8 +16,10 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <vector>
 #include "authorization_callback.h"
 #include "authorization_client.h"
+#include "authorization_common.h"
 #include "fuzz_data.h"
 
 using namespace std;
@@ -28,6 +30,10 @@ public:
     MockAuthCallback() = default;
     ~MockAuthCallback() override = default;
     OHOS::ErrCode OnResult(int32_t resultCode, const AuthorizationResult& result) override
+    {
+        return OHOS::ERR_OK;
+    }
+    OHOS::ErrCode OnBatchResult(int32_t resultCode, const std::vector<AuthorizationResult>& results) override
     {
         return OHOS::ERR_OK;
     }
@@ -45,15 +51,23 @@ bool AcquireAuthorizationForPublicFuzzTest(const uint8_t* data, size_t size)
         return false;
     }
     FuzzData fuzzData(data, size);
-    std::string privilege = fuzzData.GenerateString();
     bool isContextValid = fuzzData.GenerateBool();
+
+    std::vector<std::string> privileges;
+    uint32_t count = fuzzData.GetData<uint32_t>() %
+        (static_cast<uint32_t>(MAX_BATCH_PRIVILEGE_COUNT) + 1);
+    for (uint32_t i = 0; i < count; ++i) {
+        privileges.push_back(fuzzData.GenerateString());
+    }
 
     uint32_t callbackType = fuzzData.GetData<uint32_t>() % 2;
     if (callbackType == 1) {
         auto callback = std::make_shared<MockAuthCallback>();
-        AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(privilege, isContextValid, callback);
+        AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
+            privileges, isContextValid, callback);
     } else {
-        AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(privilege, isContextValid, nullptr);
+        AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
+            privileges, isContextValid, nullptr);
     }
     return true;
 }

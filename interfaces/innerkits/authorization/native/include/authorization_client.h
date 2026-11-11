@@ -118,7 +118,7 @@ public:
     ErrCode AcquireAdminAuthorization(const std::string &adminName, std::vector<uint8_t> &challenge,
         const std::shared_ptr<AdminAuthorizationCallback> &callback, const std::string &privilege = "");
 
-    ErrCode AcquireAuthorizationForPublic(const std::string &privilege, bool isContextValid,
+    ErrCode AcquireAuthorizationForPublic(const std::vector<std::string> &privileges, bool isContextValid,
         const std::shared_ptr<AuthorizationCallback> &callback);
 
     ErrCode HasAuthorizationForPublic(const std::string &privilege, bool &isAuthorized);
@@ -130,6 +130,8 @@ private:
     void EraseAuthCallBack();
 
 #ifdef SUPPORT_AUTHORIZATION
+    ErrCode AcquireAuthorizationForPublicInner(const std::vector<std::string> &privileges,
+        bool isContextValid, const std::shared_ptr<AuthorizationCallback> &callback);
     sptr<AuthRemoteObjectStub> GetOrCreateRequestRemoteObject();
     /**
      * @brief Death recipient for monitoring authorization service death.
