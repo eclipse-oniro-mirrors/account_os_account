@@ -46,7 +46,6 @@ public:
         const std::shared_ptr<GetCredentialInfoCallback> &callback), (override));
     MOCK_METHOD(int32_t, GetSecUserInfo,
         (int32_t userId, const std::shared_ptr<GetSecUserInfoCallback> &callback), (override));
-    MOCK_METHOD(void, ClearRedundancyCredential, (const std::shared_ptr<UserIdmClientCallback> &callback), (override));
     MOCK_METHOD(void, DeleteSubProfile, (int32_t userId, int32_t subProfileId,
         const std::shared_ptr<UserIdmClientCallback> &callback), (override));
     MOCK_METHOD(int32_t, RegistCredChangeEventListener, (const std::vector<AuthType> &authTypes,
@@ -55,8 +54,6 @@ public:
         (const std::shared_ptr<CredChangeEventListener> &listener), (override));
     MOCK_METHOD(int32_t, GetCredentialInfoSync, (int32_t userId, AuthType authType,
         std::vector<CredentialInfo> &credentialInfoList), (override));
-    MOCK_METHOD(int32_t, GetLatestEnrollmentTime, (int32_t userId, AuthType authType,
-        uint64_t &latestEnrollmentTime), (override));
 };
 } // namespace UserAuth
 } // namespace UserIam
