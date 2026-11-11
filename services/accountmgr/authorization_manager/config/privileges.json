@@ -60,7 +60,7 @@
         },
         {
             "name":"ohos.privilege.manage_launch_service_status",
-            "description":"Change the running status of a background service"
+            "description":"Manage the status of a launch service"
         }
     ]
 }
