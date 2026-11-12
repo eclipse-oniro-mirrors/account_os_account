@@ -77,6 +77,8 @@
         "constraint.enterprise.bundles.local.install.disallow",
         "constraint.multiWindow",
         "constraint.distributed.transmission",
-        "constraint.freeWindow"
+        "constraint.freeWindow",
+        "constraint.screen.shot",
+        "constraint.screen.record"
     ]
 }
