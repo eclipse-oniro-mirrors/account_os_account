@@ -135,6 +135,16 @@ void OsAccountManagerServiceModuleTest::SetUpTestCase(void)
 #endif  // ACCOUNT_TEST
     ASSERT_NE(g_accountFileOperator, nullptr);
     IInnerOsAccountManager::GetInstance().Init();
+#ifdef ENABLE_FILE_WATCHER
+    {
+        auto osAccountControl = std::static_pointer_cast<OsAccountControlFileManager>(
+            IInnerOsAccountManager::GetInstance().osAccountControl_);
+        osAccountControl->eventCallbackFunc_ = nullptr;
+        for (auto &fileNameMgr : osAccountControl->accountFileWatcherMgr_.fileNameMgrMap_) {
+            fileNameMgr.second->eventCallbackFunc_ = nullptr;
+        }
+    }
+#endif // ENABLE_FILE_WATCHER
     IInnerOsAccountManager::GetInstance().ActivateDefaultOsAccount();
 }
 

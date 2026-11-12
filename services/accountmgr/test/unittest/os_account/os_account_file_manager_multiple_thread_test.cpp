@@ -63,6 +63,12 @@ void OsAccountFileManagerMultipleThreadTest::SetUpTestCase(void)
 #endif  // ACCOUNT_TEST
     ASSERT_NE(g_controlManager, nullptr);
     g_controlManager->Init();
+#ifdef ENABLE_FILE_WATCHER
+    g_controlManager->eventCallbackFunc_ = nullptr;
+    for (auto &fileNameMgr : g_controlManager->accountFileWatcherMgr_.fileNameMgrMap_) {
+        fileNameMgr.second->eventCallbackFunc_ = nullptr;
+    }
+#endif // ENABLE_FILE_WATCHER
     g_controlManager->GetAllowCreateId(g_id);
     OsAccountInfo osAccountTestInfo(g_id, STRING_TEST_USER_NAME, OS_ACCOUNT_TYPE, STRING_TEST_USER_SHELLNUMBER);
     osAccountTestInfo.SetIsCreateCompleted(true);
