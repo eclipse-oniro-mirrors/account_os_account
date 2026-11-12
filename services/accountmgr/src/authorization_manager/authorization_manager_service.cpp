@@ -17,6 +17,7 @@
 
 #include <fstream>
 #include <securec.h>
+#include <set>
 #include <sstream>
 
 #include "account_error_no.h"
@@ -29,7 +30,6 @@
 #include "inner_authorization_manager.h"
 #include "ipc_skeleton.h"
 #include "os_account_control_file_manager.h"
-#include "parameters.h"
 #include "privilege_cache_manager.h"
 #include "privilege_hisysevent_utils.h"
 #include "service_extension_connect.h"
@@ -197,9 +197,12 @@ ErrCode AuthorizationManagerService::AcquireAuthorization(const std::string &pri
         return ERR_OK;
     }
     PrivilegeBriefDef def;
-    result = GetPrivilegeDefinition(authorizationResult, def, localId);
-    if (result != ERR_OK) {
-        return result;
+    bool ret = GetPrivilegeBriefDef(privilege, def);
+    if (!ret) {
+        ACCOUNT_LOGE("Fail to check privilege, privilege:%{public}s", privilege.c_str());
+        REPORT_OS_ACCOUNT_FAIL(localId, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_ACCOUNT_COMMON_INVALID_PARAMETER,
+            "Fail to check privilege");
+        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
     }
     if (!options.isReuseNeeded && !options.isInteractionAllowed) {
         REPORT_OS_ACCOUNT_FAIL(localId, PRIVILEGE_OPT_ACQUIRE_AUTH,
@@ -210,13 +213,36 @@ ErrCode AuthorizationManagerService::AcquireAuthorization(const std::string &pri
         return ERR_OK;
     }
     if (options.isReuseNeeded) {
-        result = HandleWhenReuse(authorizationResult, options, callback, localId);
-        if (result != ERR_AUTHORIZATION_NO_CACHE) {
-            return result;
+        uint32_t code;
+        if (!TransferPrivilegeToCode(privilege, code)) {
+            REPORT_OS_ACCOUNT_FAIL(localId, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_ACCOUNT_COMMON_INVALID_PARAMETER,
+                "Fail to check privilege");
+            return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+        }
+        AuthenCallerInfo info;
+        info.privilegeIdx = code;
+        int32_t validityPeriod = -1;
+        ErrCode cacheResult = PrivilegeCacheManager::GetInstance().CheckPrivilege(info, validityPeriod);
+        if (cacheResult == ERR_OK) {
+            authorizationResult.validityPeriod = validityPeriod;
+            authorizationResult.isReused = options.isReuseNeeded;
+            callback->OnResult(ERR_OK, authorizationResult);
+            return ERR_OK;
+        }
+        if (!options.isInteractionAllowed) {
+            REPORT_OS_ACCOUNT_FAIL(localId, PRIVILEGE_OPT_ACQUIRE_AUTH,
+                static_cast<int32_t>(AUTHORIZATION_INTERACTION_NOT_ALLOWED), "Fail to check privilege");
+            authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_INTERACTION_NOT_ALLOWED;
+            callback->OnResult(ERR_OK, authorizationResult);
+            return ERR_OK;
         }
     }
-    return InnerAuthorizationManager::GetInstance().AcquireAuthorization(def, options,
-        config_, authorizationResultCallback, requestRemoteObj);
+    InnerAuthorizationManager::AuthorizationRequest sysRequest;
+    sysRequest.privilegesToAuthorize = {privilege};
+    authorizationResult.isReused = false;
+    sysRequest.results[privilege] = std::move(authorizationResult);
+    return InnerAuthorizationManager::GetInstance().AcquireAuthorization(
+        sysRequest, options, config_, authorizationResultCallback, requestRemoteObj);
 }
 
 ErrCode AuthorizationManagerService::CheckPermissionAndIdentity(const AcquireAuthorizationOptions &options,
@@ -287,54 +313,6 @@ ErrCode AuthorizationManagerService::CheckCallbackAndConnections(const sptr<IAut
         return ERR_OK;
     }
     return ERR_OK;
-}
-
-ErrCode AuthorizationManagerService::GetPrivilegeDefinition(AuthorizationResult &authorizationResult,
-    PrivilegeBriefDef &def, int32_t localId)
-{
-    bool ret = GetPrivilegeBriefDef(authorizationResult.privilege, def);
-    if (!ret) {
-        ACCOUNT_LOGE("Fail to check privilege, privilege:%{public}s", authorizationResult.privilege.c_str());
-        REPORT_OS_ACCOUNT_FAIL(localId, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_ACCOUNT_COMMON_INVALID_PARAMETER,
-            "Fail to check privilege");
-        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
-    }
-    return ERR_OK;
-}
-
-ErrCode AuthorizationManagerService::HandleWhenReuse(AuthorizationResult &authorizationResult,
-    const AcquireAuthorizationOptions &options, const sptr<IAuthorizationCallback> &callback, int32_t localId)
-{
-    uint32_t code;
-    bool ret = TransferPrivilegeToCode(authorizationResult.privilege, code);
-    if (!ret) {
-        REPORT_OS_ACCOUNT_FAIL(localId, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_ACCOUNT_COMMON_INVALID_PARAMETER,
-            "Fail to check privilege");
-        ACCOUNT_LOGE("Fail to check privilege, privilege:%{public}s", authorizationResult.privilege.c_str());
-        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
-    }
-
-    AuthenCallerInfo info;
-    info.privilegeIdx = code;
-    int32_t validityPeriod = -1;
-    ErrCode result = PrivilegeCacheManager::GetInstance().CheckPrivilege(info, validityPeriod);
-    if (result == ERR_OK) {
-        authorizationResult.validityPeriod = validityPeriod;
-        authorizationResult.isReused = options.isReuseNeeded;
-        callback->OnResult(ERR_OK, authorizationResult);
-        return ERR_OK;
-    }
-
-    if (!options.isInteractionAllowed) {
-        REPORT_OS_ACCOUNT_FAIL(localId, PRIVILEGE_OPT_ACQUIRE_AUTH,
-            static_cast<int32_t>(AUTHORIZATION_INTERACTION_NOT_ALLOWED), "Fail to check privilege");
-        ACCOUNT_LOGE("Fail to check privilege=%{public}s approved, errCode:%{public}d",
-            authorizationResult.privilege.c_str(), result);
-        authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_INTERACTION_NOT_ALLOWED;
-        callback->OnResult(ERR_OK, authorizationResult);
-        return ERR_OK;
-    }
-    return ERR_AUTHORIZATION_NO_CACHE;
 }
 
 ErrCode AuthorizationManagerService::ReleaseAuthorization(const std::string &privilege)
@@ -558,26 +536,13 @@ ErrCode AuthorizationManagerService::CheckPublicPermission(int32_t localId)
     return ERR_OK;
 }
 
-bool AuthorizationManagerService::CheckPrivilegeEnumValid(const std::string &privilege,
-    AuthorizationResult &authorizationResult, const sptr<IAuthorizationCallback> &callback)
-{
-    bool isValidPrivilege = AccountSA::PRIVILEGE_MAP.find(privilege) != AccountSA::PRIVILEGE_MAP.end();
-    if (!isValidPrivilege) {
-        authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
-        callback->OnResult(ERR_OK, authorizationResult);
-        return false;
-    }
-    return true;
-}
-
 bool AuthorizationManagerService::CheckKernelPermission(const PrivilegeBriefDef &def, const std::string &privilege,
-    int32_t localId, AuthorizationResult &authorizationResult,
-    const sptr<IAuthorizationCallback> &callback)
+    AuthorizationResult &authorizationResult)
 {
 #ifndef SUPPORT_ADMIN_ACCESS_CONTROL
-    ACCOUNT_LOGE("Kernel privilege not supported without admin access control");
+    ACCOUNT_LOGE("Kernel privilege not supported without admin access control, privilege:%{public}s",
+        privilege.c_str());
     authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
-    callback->OnResult(ERR_OK, authorizationResult);
     return false;
 #else
     ErrCode permResult = AccountPermissionManager::VerifyPermission(def.kernelPermission);
@@ -587,63 +552,142 @@ bool AuthorizationManagerService::CheckKernelPermission(const PrivilegeBriefDef 
     ACCOUNT_LOGE("Caller does not have kernel permission %{public}s for privilege %{public}s",
         def.kernelPermission, privilege.c_str());
     authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_DENIED;
-    callback->OnResult(ERR_OK, authorizationResult);
     return false;
 #endif
 }
 
-ErrCode AuthorizationManagerService::AcquireAuthorizationForPublic(const std::string &privilege,
-    bool isContextValid, const sptr<IRemoteObject> &authorizationResultCallback,
+ErrCode AuthorizationManagerService::AcquireAuthorizationForPublic(
+    const std::vector<std::string> &privileges, bool isContextValid,
+    const sptr<IRemoteObject> &authorizationResultCallback,
     const sptr<IRemoteObject> &requestRemoteObj)
 {
-    int32_t localId = IPCSkeleton::GetCallingUid() / UID_TRANSFORM_DIVISOR;
-    ErrCode result = CheckPublicPermission(localId);
-    if (result != ERR_OK) {
-        return result;
-    }
-    AuthorizationResult authorizationResult;
-    authorizationResult.privilege = privilege;
     auto callback = iface_cast<IAuthorizationCallback>(authorizationResultCallback);
     if (callback == nullptr) {
         ACCOUNT_LOGE("Callback is nullptr");
         return ERR_AUTHORIZATION_GET_PROXY_ERROR;
     }
-    AcquireAuthorizationOptions options;
-    options.hasContext = true;
-    options.isContextValid = isContextValid;
-    options.isPublicApi = true;
-    if (!CheckPrivilegeEnumValid(privilege, authorizationResult, callback)) {
-        return ERR_OK;
-    }
-    PrivilegeBriefDef def;
-    result = GetPrivilegeDefinition(authorizationResult, def, localId);
-    if (result != ERR_OK) {
-        authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
-        callback->OnResult(ERR_OK, authorizationResult);
-        return ERR_OK;
-    }
-    if (def.kernelPermission != nullptr &&
-        !CheckKernelPermission(def, privilege, localId, authorizationResult, callback)) {
-        return ERR_OK;
-    }
-
-    result = CheckCallbackAndConnections(callback, options, localId, authorizationResult);
+    int32_t localId = IPCSkeleton::GetCallingUid() / UID_TRANSFORM_DIVISOR;
+    std::vector<std::string> privilegesToAuthorize;
+    std::map<std::string, AuthorizationResult> results;
+    ErrCode result = PrecheckBatchPrivileges(privileges, localId, privilegesToAuthorize, results);
     if (result != ERR_OK) {
         return result;
     }
-    if (authorizationResult.resultCode != AuthorizationResultCode::AUTHORIZATION_SUCCESS) {
-        callback->OnResult(ERR_OK, authorizationResult);
+    if (!privilegesToAuthorize.empty()) {
+        result = CheckBatchCacheReuse(privilegesToAuthorize, results);
+        if (result != ERR_OK) {
+            return result;
+        }
+    }
+    if (privilegesToAuthorize.empty()) {
+        std::vector<AuthorizationResult> resultVec;
+        for (const auto &[k, v] : results) {
+            resultVec.push_back(v);
+        }
+        callback->OnBatchResult(ERR_OK, resultVec);
         return ERR_OK;
     }
-    result = HandleWhenReuse(authorizationResult, options, callback, localId);
-    if (result == ERR_AUTHORIZATION_NO_CACHE) {
-        return InnerAuthorizationManager::GetInstance().AcquireAuthorization(
-            def, options, config_, callback->AsObject(), requestRemoteObj);
-    }
+    auto options = std::make_unique<AcquireAuthorizationOptions>();
+    options->hasContext = true;
+    options->isContextValid = isContextValid;
+    options->isPublicApi = true;
+    AuthorizationResult dummyResult;
+    result = CheckCallbackAndConnections(callback, *options, localId, dummyResult);
     if (result != ERR_OK) {
-        authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
-        callback->OnResult(ERR_OK, authorizationResult);
+        return result;
     }
+    if (dummyResult.resultCode == AuthorizationResultCode::AUTHORIZATION_SERVICE_BUSY) {
+        for (auto &[k, v] : results) {
+            if (v.resultCode == AuthorizationResultCode::AUTHORIZATION_SUCCESS && !v.isReused) {
+                v.resultCode = AuthorizationResultCode::AUTHORIZATION_SERVICE_BUSY;
+            }
+        }
+        std::vector<AuthorizationResult> resultVec;
+        for (const auto &[k, v] : results) {
+            resultVec.push_back(v);
+        }
+        callback->OnBatchResult(ERR_OK, resultVec);
+        return ERR_OK;
+    }
+    InnerAuthorizationManager::AuthorizationRequest request;
+    request.privilegesToAuthorize = std::move(privilegesToAuthorize);
+    request.results = std::move(results);
+    return InnerAuthorizationManager::GetInstance().AcquireAuthorization(request, *options,
+        config_, callback->AsObject(), requestRemoteObj);
+}
+
+ErrCode AuthorizationManagerService::PrecheckBatchPrivileges(const std::vector<std::string> &privileges,
+    int32_t localId, std::vector<std::string> &privilegesToAuthorize,
+    std::map<std::string, AuthorizationResult> &results)
+{
+    ErrCode result = CheckPublicPermission(localId);
+    if (result != ERR_OK) {
+        return result;
+    }
+    if (privileges.empty() || privileges.size() > MAX_BATCH_PRIVILEGE_COUNT) {
+        ACCOUNT_LOGE("Invalid privileges size: %{public}zu", privileges.size());
+        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+    }
+    for (const auto &privilege : privileges) {
+        if (results.find(privilege) != results.end()) {
+            continue;
+        }
+        AuthorizationResult authResult;
+        authResult.privilege = privilege;
+        authResult.isReused = false;
+        bool isValid = AccountSA::PRIVILEGE_MAP.find(privilege) != AccountSA::PRIVILEGE_MAP.end();
+        if (!isValid) {
+            authResult.resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
+            results[privilege] = authResult;
+            continue;
+        }
+        PrivilegeBriefDef def;
+        if (!GetPrivilegeBriefDef(privilege, def)) {
+            ACCOUNT_LOGE("Fail to check privilege, privilege:%{public}s", privilege.c_str());
+            REPORT_OS_ACCOUNT_FAIL(localId, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_ACCOUNT_COMMON_INVALID_PARAMETER,
+                "Fail to check privilege");
+            authResult.resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
+            results[privilege] = authResult;
+            continue;
+        }
+        if (def.kernelPermission != nullptr && !CheckKernelPermission(def, privilege, authResult)) {
+            results[privilege] = authResult;
+            continue;
+        }
+        authResult.resultCode = AuthorizationResultCode::AUTHORIZATION_SUCCESS;
+        results[privilege] = authResult;
+        privilegesToAuthorize.push_back(privilege);
+    }
+    return ERR_OK;
+}
+
+ErrCode AuthorizationManagerService::CheckBatchCacheReuse(std::vector<std::string> &privilegesToAuthorize,
+    std::map<std::string, AuthorizationResult> &results)
+{
+    std::vector<std::string> remainingPrivileges;
+    for (const auto &privilege : privilegesToAuthorize) {
+        uint32_t code = 0;
+        if (!TransferPrivilegeToCode(privilege, code)) {
+            ACCOUNT_LOGE("Fail to transfer privilege to code, privilege:%{public}s", privilege.c_str());
+            results[privilege].resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
+            continue;
+        }
+        AuthenCallerInfo info;
+        info.privilegeIdx = code;
+        int32_t validityPeriod = -1;
+        ErrCode cacheResult = PrivilegeCacheManager::GetInstance().CheckPrivilege(info, validityPeriod);
+        if (cacheResult == ERR_OK) {
+            results[privilege].resultCode = AuthorizationResultCode::AUTHORIZATION_SUCCESS;
+            results[privilege].isReused = true;
+            results[privilege].validityPeriod = validityPeriod;
+            ACCOUNT_LOGI("Privilege %{public}s reused from cache, validityPeriod=%{public}d",
+                privilege.c_str(), validityPeriod);
+        } else {
+            results[privilege].isReused = false;
+            remainingPrivileges.push_back(privilege);
+        }
+    }
+    privilegesToAuthorize = std::move(remainingPrivileges);
     return ERR_OK;
 }
 

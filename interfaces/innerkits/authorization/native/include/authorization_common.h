@@ -23,6 +23,9 @@
 
 namespace OHOS {
 namespace AccountSA {
+
+constexpr size_t MAX_BATCH_PRIVILEGE_COUNT = 5;
+
 struct CheckAuthorizationResult : public Parcelable {
     bool ReadFromParcel(Parcel &parcel);
     bool Marshalling(Parcel &parcel) const override;
@@ -43,8 +46,8 @@ public:
     ConnectAbilityInfo() = default;
     ConnectAbilityInfo(const ConnectAbilityInfo& other)
     {
-        privilege = other.privilege;
-        description = other.description;
+        privileges = other.privileges;
+        descriptions = other.descriptions;
         bundleName = other.bundleName;
         abilityName = other.abilityName;
         callingUid = other.callingUid;
@@ -59,10 +62,10 @@ public:
     ~ConnectAbilityInfo();
     ConnectAbilityInfo& operator=(const ConnectAbilityInfo& other);
 
-    /// The privilege to authorize
-    std::string privilege = "";
-    /// Description of the authorization request
-    std::string description = "";
+    /// The privilege list to authorize (unified for single and batch authorization)
+    std::vector<std::string> privileges;
+    /// Descriptions of the authorization request, one per privilege
+    std::vector<std::string> descriptions;
     /// Name of the calling bundle
     std::string callingBundleName = "";
     /// Bundle name of the UI extension ability

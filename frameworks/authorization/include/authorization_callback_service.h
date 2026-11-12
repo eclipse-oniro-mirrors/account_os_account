@@ -57,6 +57,9 @@ public:
      */
     ErrCode OnResult(int32_t resultCode, const AccountSA::AuthorizationResult& result) override;
 
+    ErrCode OnBatchResult(int32_t resultCode,
+        const std::vector<AccountSA::AuthorizationResult>& results) override;
+
     /**
      * @brief Handle connect ability callback for UI extension.
      *

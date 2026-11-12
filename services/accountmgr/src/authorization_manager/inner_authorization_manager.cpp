@@ -54,15 +54,27 @@
 
 namespace OHOS {
 namespace AccountSA {
+#ifdef ACCOUNT_TEST
+extern std::mutex g_mutex;
+extern std::map<int32_t, sptr<IAuthorizationCallback>> g_callbackMap;
+extern std::map<int32_t, sptr<IRemoteObject>> g_requestRemoteObjectMap;
+extern std::map<int32_t, sptr<ConnectAbilityCallback>> g_connectbackMap;
+extern std::map<int32_t, int32_t> g_pidToUidMap;
+extern std::map<int32_t, SmartPidFd> g_pidFdMap;
+extern std::map<std::string, int32_t> g_sessionIdToPidMap;
 namespace {
 constexpr size_t MAX_CALLBACK_MAP_SIZE = 65535;
-std::mutex g_mutex;
+#else
+namespace {
+constexpr size_t MAX_CALLBACK_MAP_SIZE = 65535;
+static std::mutex g_mutex;
 static std::map<int32_t, sptr<IAuthorizationCallback>> g_callbackMap;
 static std::map<int32_t, sptr<IRemoteObject>> g_requestRemoteObjectMap;
 static std::map<int32_t, sptr<ConnectAbilityCallback>> g_connectbackMap;
 static std::map<int32_t, int32_t> g_pidToUidMap;
-std::map<int32_t, SmartPidFd> g_pidFdMap;
-static std::map<std::string, int32_t> g_sessionIdToPidMap;  // sessionId → callingPid (modal app only)
+static std::map<int32_t, SmartPidFd> g_pidFdMap;
+static std::map<std::string, int32_t> g_sessionIdToPidMap;
+#endif
 static const std::int32_t GRANT_VALIDITY_PERIOD = 300;
 const std::int32_t START_USER_ID = 100;
 const std::string PERMISSION_START_SYSTEM_DIALOG = "ohos.permission.START_SYSTEM_DIALOG";
@@ -161,38 +173,134 @@ static std::string VectorToString(const std::vector<uint8_t>& vec)
 }
 
 ConnectAbilityCallback::ConnectAbilityCallback(ConnectAbilityInfo &info,
-    AcquireOnResultfunc authorizationOnResultfunc, const AuthorizationResult &result)
+    AcquireOnResultfunc acquireAuthorizationOnResultfunc, const AuthorizationResult &result)
 {
-    func_ = authorizationOnResultfunc;
+    func_ = std::move(acquireAuthorizationOnResultfunc);
     result_ = result;
     info_ = info;
 }
 
-std::function<ErrCode(int32_t,  AuthorizationResult &, int32_t)> acquireAuthorizationOnResultfunc()
+void ConnectAbilityCallback::SetBatchResults(std::map<std::string, AuthorizationResult> results)
+{
+    std::lock_guard<std::mutex> lock(dataMutex_);
+    batchResults_ = std::move(results);
+}
+
+std::map<std::string, AuthorizationResult> ConnectAbilityCallback::MoveBatchResults()
+{
+    std::lock_guard<std::mutex> lock(dataMutex_);
+    auto result = std::move(batchResults_);
+    batchResults_.clear();
+    return result;
+}
+
+static void OverrideBatchResults(std::map<std::string, AuthorizationResult> &resultMap,
+    int32_t errorCode, const AuthorizationResult &result)
+{
+    bool shouldOverride = (errorCode != ERR_OK ||
+        result.resultCode != AuthorizationResultCode::AUTHORIZATION_SUCCESS);
+    if (!shouldOverride || resultMap.empty()) {
+        return;
+    }
+    AuthorizationResultCode overrideCode = (errorCode != ERR_OK)
+        ? AuthorizationResultCode::AUTHORIZATION_CANCELED
+        : result.resultCode;
+    for (auto &[k, v] : resultMap) {
+        if (v.resultCode == AuthorizationResultCode::AUTHORIZATION_SUCCESS && !v.isReused) {
+            v.resultCode = overrideCode;
+        }
+    }
+}
+
+static void FillCanceledResult(std::map<std::string, AuthorizationResult> &resultMap,
+    const AuthorizationResult &result)
+{
+    if (!resultMap.empty()) {
+        return;
+    }
+    AuthorizationResult canceledResult;
+    canceledResult.privilege = result.privilege;
+    canceledResult.resultCode = AuthorizationResultCode::AUTHORIZATION_CANCELED;
+    resultMap[result.privilege] = canceledResult;
+}
+
+static void NotifyBatchCanceled(const sptr<IAuthorizationCallback> &callback,
+    const sptr<ConnectAbilityCallback> &connectCallback,
+    AuthorizationResultCode overrideCode)
+{
+    auto resultMap = connectCallback->MoveBatchResults();
+    if (resultMap.empty()) {
+        ConnectAbilityInfo cbInfo;
+        connectCallback->GetConnectInfo(cbInfo);
+        for (const auto &p : cbInfo.privileges) {
+            AuthorizationResult canceled;
+            canceled.privilege = p;
+            canceled.resultCode = overrideCode;
+            resultMap[p] = canceled;
+        }
+    }
+    for (auto &[k, v] : resultMap) {
+        if (v.resultCode == AuthorizationResultCode::AUTHORIZATION_SUCCESS && !v.isReused) {
+            v.resultCode = overrideCode;
+        }
+    }
+    std::vector<AuthorizationResult> resultVec;
+    for (const auto &[k, v] : resultMap) {
+        resultVec.push_back(v);
+    }
+    callback->OnBatchResult(ERR_OK, resultVec);
+}
+
+std::function<ErrCode(int32_t, AuthorizationResult &, int32_t)> acquireAuthorizationOnResultfunc()
 {
     return [](int32_t errorCode, AuthorizationResult &result, int32_t callingPid) -> ErrCode {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        auto it = g_callbackMap.find(callingPid);
-        if (it == g_callbackMap.end()) {
-            ACCOUNT_LOGE("Can not find AuthorizationResultCallback.");
-            REPORT_OS_ACCOUNT_FAIL(-1, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_AUTHORIZATION_GET_PROXY_ERROR,
-                "Can not find AuthorizationResultCallback.");
-            return ERR_AUTHORIZATION_GET_PROXY_ERROR;
+        sptr<IAuthorizationCallback> callback;
+        std::map<std::string, AuthorizationResult> resultMap;
+        {
+            std::lock_guard<std::mutex> lock(g_mutex);
+            auto it = g_callbackMap.find(callingPid);
+            if (it == g_callbackMap.end()) {
+                ACCOUNT_LOGI("AuthorizationResultCallback for batch already removed, callingPid=%{public}d",
+                    callingPid);
+                return ERR_OK;
+            }
+            if (it->second == nullptr) {
+                ACCOUNT_LOGE("AuthorizationResultCallback is nullptr for batch");
+                REPORT_OS_ACCOUNT_FAIL(-1, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_AUTHORIZATION_GET_PROXY_ERROR,
+                    "AuthorizationResultCallback is nullptr for batch");
+                g_callbackMap.erase(it);
+                return ERR_AUTHORIZATION_GET_PROXY_ERROR;
+            }
+            callback = it->second;
+            auto connectIt = g_connectbackMap.find(callingPid);
+            if (connectIt != g_connectbackMap.end()) {
+                ConnectAbilityInfo cbInfo;
+                connectIt->second->GetConnectInfo(cbInfo);
+                resultMap = connectIt->second->MoveBatchResults();
+                OverrideBatchResults(resultMap, errorCode, result);
+                if (resultMap.empty() && !cbInfo.privileges.empty()) {
+                    for (const auto &p : cbInfo.privileges) {
+                        AuthorizationResult canceled;
+                        canceled.privilege = p;
+                        canceled.resultCode = AuthorizationResultCode::AUTHORIZATION_CANCELED;
+                        resultMap[p] = canceled;
+                    }
+                }
+            }
+            FillCanceledResult(resultMap, result);
+            CleanupAuthorizationSessionMaps(callingPid);
+            g_callbackMap.erase(it);
         }
-        if (it->second == nullptr) {
-            ACCOUNT_LOGE("AuthorizationResultCallback is nullptr");
-            REPORT_OS_ACCOUNT_FAIL(-1, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_AUTHORIZATION_GET_PROXY_ERROR,
-                "AuthorizationResultCallback is nullptr.");
-            return ERR_AUTHORIZATION_GET_PROXY_ERROR;
+        std::vector<AuthorizationResult> resultVec;
+        for (const auto &[k, v] : resultMap) {
+            resultVec.push_back(v);
         }
-        ErrCode errCode = it->second->OnResult(errorCode, result);
+        ErrCode errCode = callback->OnBatchResult(ERR_OK, resultVec);
         if (errCode != ERR_OK) {
-            ACCOUNT_LOGE("OnResult failed, errCode:%{public}d", errCode);
+            ACCOUNT_LOGE("OnBatchResult failed, errCode:%{public}d", errCode);
             REPORT_OS_ACCOUNT_FAIL(-1, PRIVILEGE_OPT_ACQUIRE_AUTH,
-                errCode, "Return uiextension result failed");
+                errCode, "Return batch uiextension result failed");
         }
-        CleanupAuthorizationSessionMaps(callingPid);
-        g_callbackMap.erase(it);
         return errCode;
     };
 }
@@ -207,7 +315,7 @@ void ConnectAbilityCallback::UpdateAuthorizationResult(ErrCode errCode, Authoriz
 {
     std::lock_guard<std::mutex> lock(dataMutex_);
     errCode_ = errCode;
-    result_.privilege = info_.privilege;
+    result_.privilege = info_.privileges.empty() ? "" : info_.privileges[0];
     result_.resultCode = resultCode;
     result_.validityPeriod = remainValidityTime;
     result_.token = taToken;
@@ -230,7 +338,7 @@ ErrCode ConnectAbilityCallback::OnResult(int32_t errorCode, const std::vector<ui
         return ERR_AUTHORIZATION_GET_PROXY_ERROR;
     }
     AuthorizationResult result;
-    result.privilege = info_.privilege;
+    result.privilege = info_.privileges.empty() ? "" : info_.privileges[0];
     if (errorCode != ERR_OK) {
         return func_(errorCode, result, info_.callingPid);
     }
@@ -250,33 +358,6 @@ ErrCode ConnectAbilityCallback::OnResult(int32_t errorCode, const std::vector<ui
     }
     result.resultCode = AuthorizationResultCode::AUTHORIZATION_CANCELED;
     return func_(ERR_OK, result, info_.callingPid);
-}
-
-std::pair<ErrCode, AuthorizationResultCode> InnerAuthorizationManager::ApplyTaAuthorization(
-    const std::vector<uint8_t> &iamToken, int32_t accountId, ApplyUserTokenResult &tokenResult,
-    ConnectAbilityInfo &info)
-{
-    // 1. Verify account type
-    auto [errCode, resultCode] = VerifyAdminAccount(accountId);
-    if (errCode != ERR_OK || resultCode != AuthorizationResultCode::AUTHORIZATION_SUCCESS) {
-        return {errCode, resultCode};
-    }
-
-    // 2. Call TA authorization
-    errCode = CallTaAuthorization(iamToken, accountId, tokenResult, info);
-    if (errCode != ERR_OK) {
-        return {errCode, AuthorizationResultCode::AUTHORIZATION_SUCCESS};
-    }
-
-    // 3. Update privilege cache
-    errCode = UpdatePrivilegeCache(info, tokenResult);
-    if (errCode == ERR_AUTHORIZATION_KERNEL_DEVICE_NOT_FOUND) {
-        if (info.isPublicApi) {
-            return {ERR_OK, AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED};
-        }
-        return {ERR_ACCOUNT_COMMON_INVALID_PARAMETER, AuthorizationResultCode::AUTHORIZATION_SUCCESS};
-    }
-    return {errCode, AuthorizationResultCode::AUTHORIZATION_SUCCESS};
 }
 
 void InnerAuthorizationManager::AppDeathRecipient::OnRemoteDied(const wptr<IRemoteObject>& remote)
@@ -337,79 +418,139 @@ std::pair<ErrCode, AuthorizationResultCode> InnerAuthorizationManager::VerifyAdm
     return {ERR_OK, AuthorizationResultCode::AUTHORIZATION_SUCCESS};
 }
 
-ErrCode InnerAuthorizationManager::CallTaAuthorization(const std::vector<uint8_t> &iamToken, int32_t accountId,
-    ApplyUserTokenResult &tokenResult, ConnectAbilityInfo &info)
+static ErrCode FillBatchPermissions(ApplyUserTokenParamV2 &param,
+    const std::vector<std::string> &privileges, int32_t accountId)
 {
-    ApplyUserTokenParam param;
-    param.pid = static_cast<uint32_t>(info.callingPid);
-    param.grantUserId = accountId;
-    int32_t ret = memcpy_s(param.permission, sizeof(param.permission), info.privilege.data(), info.privilege.size());
-    if (ret != EOK) {
-        ACCOUNT_LOGE("Get privilege failed due to memcpy_s failed, %{public}d", ret);
-        REPORT_OS_ACCOUNT_FAIL(accountId, PRIVILEGE_OPT_ACQUIRE_AUTH, ret,
-            "Get privilege failed due to memcpy_s failed");
-        return ERR_ACCOUNT_COMMON_INSUFFICIENT_MEMORY_ERROR;
+    param.permissionsNum = static_cast<uint32_t>(privileges.size());
+    for (size_t i = 0; i < privileges.size(); ++i) {
+        if (privileges[i].size() > PERMISSION_MAX_LEN) {
+            ACCOUNT_LOGE("Permission size %{public}zu exceeds maximum", privileges[i].size());
+            REPORT_OS_ACCOUNT_FAIL(accountId, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_ACCOUNT_COMMON_INVALID_PARAMETER,
+                "Permission size exceeds maximum in batch TA authorization");
+            return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+        }
+        int32_t ret = memcpy_s(param.permission[i], PERMISSION_MAX_LEN + 1,
+            privileges[i].data(), privileges[i].size());
+        if (ret != EOK) {
+            ACCOUNT_LOGE("Memcpy permission failed, %{public}d", ret);
+            REPORT_OS_ACCOUNT_FAIL(accountId, PRIVILEGE_OPT_ACQUIRE_AUTH, ret,
+                "Memcpy permission failed in batch TA authorization");
+            return ERR_ACCOUNT_COMMON_INSUFFICIENT_MEMORY_ERROR;
+        }
+        param.permissionSizes[i] = static_cast<uint32_t>(privileges[i].size());
     }
-    param.permissionSize = info.privilege.size();
+    return ERR_OK;
+}
+
+static ErrCode FillBatchAuthData(ApplyUserTokenParamV2 &param,
+    const std::vector<uint8_t> &iamToken, const ConnectAbilityInfo &info, int32_t accountId)
+{
     param.authTokenSize = 0;
     (void)memset_s(param.authToken, sizeof(param.authToken), 0, sizeof(param.authToken));
     if (iamToken.size() > AUTH_TOKEN_LEN) {
-        ACCOUNT_LOGE("AuthToken size %{public}zu exceeds maximum", iamToken.size());
         REPORT_OS_ACCOUNT_FAIL(accountId, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_ACCOUNT_COMMON_INVALID_PARAMETER,
-            "AuthToken size exceeds maximum");
+            "AuthToken size exceeds maximum in batch TA authorization");
         return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
     }
     if (iamToken.size() != 0) {
-        ret = memcpy_s(param.authToken, sizeof(param.authToken), iamToken.data(), iamToken.size());
+        int32_t ret = memcpy_s(param.authToken, sizeof(param.authToken), iamToken.data(), iamToken.size());
         if (ret != EOK) {
-            ACCOUNT_LOGE("Get token failed due to memcpy_s failed, %{public}d", ret);
             REPORT_OS_ACCOUNT_FAIL(accountId, PRIVILEGE_OPT_ACQUIRE_AUTH, ret,
-                "Get token failed due to memcpy_s failed");
+                "Memcpy authToken failed in batch TA authorization");
             return ERR_ACCOUNT_COMMON_INSUFFICIENT_MEMORY_ERROR;
         }
-        param.authTokenSize = iamToken.size();
+        param.authTokenSize = static_cast<uint32_t>(iamToken.size());
     }
-
     (void)memset_s(param.challenge, sizeof(param.challenge), 0, sizeof(param.challenge));
     if (info.challenge.size() > CHALLENGE_LEN) {
-        ACCOUNT_LOGE("Challenge size %{public}zu exceeds maximum", info.challenge.size());
         REPORT_OS_ACCOUNT_FAIL(accountId, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_ACCOUNT_COMMON_INVALID_PARAMETER,
-            "Challenge size exceeds maximum");
+            "Challenge size exceeds maximum in batch TA authorization");
         return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
     }
     if (info.challenge.size() != 0) {
-        ret = memcpy_s(param.challenge, sizeof(param.challenge), info.challenge.data(), info.challenge.size());
+        int32_t ret = memcpy_s(param.challenge, sizeof(param.challenge),
+            info.challenge.data(), info.challenge.size());
         if (ret != EOK) {
-            ACCOUNT_LOGE("Get challenge failed due to memcpy_s failed, %{public}d", ret);
             REPORT_OS_ACCOUNT_FAIL(accountId, PRIVILEGE_OPT_ACQUIRE_AUTH, ret,
-                "Get challenge failed due to memcpy_s failed");
+                "Memcpy challenge failed in batch TA authorization");
             return ERR_ACCOUNT_COMMON_INSUFFICIENT_MEMORY_ERROR;
         }
     }
+    return ERR_OK;
+}
 
+ErrCode InnerAuthorizationManager::CallTaAuthorization(const std::vector<uint8_t> &iamToken,
+    int32_t accountId, ApplyUserTokenResultV2 &tokenResult, const ConnectAbilityInfo &info)
+{
+    if (info.privileges.empty() || info.privileges.size() > MAX_BATCH_PRIVILEGE_COUNT) {
+        ACCOUNT_LOGE("Invalid privileges size: %{public}zu", info.privileges.size());
+        REPORT_OS_ACCOUNT_FAIL(accountId, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_ACCOUNT_COMMON_INVALID_PARAMETER,
+            "Invalid privileges size for batch TA authorization");
+        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+    }
+    auto paramPtr = std::make_unique<ApplyUserTokenParamV2>();
+    auto &param = *paramPtr;
+    param.pid = static_cast<uint32_t>(info.callingPid);
+    param.grantUserId = accountId;
     param.grantValidityPeriod = info.timeout;
-
+    ErrCode ret = FillBatchPermissions(param, info.privileges, accountId);
+    if (ret != ERR_OK) {
+        return ret;
+    }
+    ret = FillBatchAuthData(param, iamToken, info, accountId);
+    if (ret != ERR_OK) {
+        return ret;
+    }
     OsAccountTeeAdapter teeAdapter;
-    ErrCode errCode = teeAdapter.TaAcquireAuthorization(param, tokenResult);
+    ErrCode errCode = teeAdapter.TaAcquireAuthorizationBatch(param, tokenResult);
     if (errCode != ERR_OK) {
-        ACCOUNT_LOGE("Fail to get authorization from ta, errCode:%{public}d", errCode);
-        REPORT_OS_ACCOUNT_FAIL(accountId, PRIVILEGE_OPT_ACQUIRE_AUTH, errCode, "Fail to get authorization from ta");
+        ACCOUNT_LOGE("Fail to get batch authorization from ta, errCode:%{public}d", errCode);
+        REPORT_OS_ACCOUNT_FAIL(accountId, PRIVILEGE_OPT_ACQUIRE_AUTH, errCode,
+            "Fail to get batch authorization from ta");
     }
     return errCode;
+}
+
+static ErrCode AddPrivilegeToCache(const AuthenCallerInfo &callerInfo, const PrivilegeBriefDef &def,
+    const ConnectAbilityInfo &info, uint32_t grantTime)
+{
+    int32_t localId = info.callingUid / UID_TRANSFORM_DIVISOR;
+    if (def.kernelPermission != nullptr) {
+        ErrCode errCode = PrivilegeCacheManager::GetInstance().AddCacheAndNotifyKernel(
+            callerInfo, def.kernelPermission);
+        if (errCode == ERR_AUTHORIZATION_KERNEL_DEVICE_NOT_FOUND) {
+            REPORT_OS_ACCOUNT_FAIL(localId, PRIVILEGE_OPT_ACQUIRE_AUTH, errCode,
+                "Kernel device not found");
+            return ERR_AUTHORIZATION_KERNEL_DEVICE_NOT_FOUND;
+        }
+        if (errCode != ERR_OK) {
+            REPORT_OS_ACCOUNT_FAIL(localId, PRIVILEGE_OPT_ACQUIRE_AUTH, errCode,
+                "AddCacheAndNotifyKernel failed");
+            return ERR_AUTHORIZATION_CACHE_ERROR;
+        }
+    } else {
+        ErrCode errCode = PrivilegeCacheManager::GetInstance().AddCache(callerInfo, grantTime);
+        if (errCode != ERR_OK) {
+            REPORT_OS_ACCOUNT_FAIL(localId, PRIVILEGE_OPT_ACQUIRE_AUTH, errCode,
+                "Fail to add cache.");
+            return ERR_AUTHORIZATION_CACHE_ERROR;
+        }
+    }
+    return ERR_OK;
 }
 
 ErrCode InnerAuthorizationManager::UpdatePrivilegeCache(ConnectAbilityInfo &info,
     ApplyUserTokenResult &tokenResult)
 {
+    if (info.privileges.empty()) {
+        ACCOUNT_LOGE("Privileges is empty in UpdatePrivilegeCache");
+        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+    }
     uint32_t code;
-    bool ret = TransferPrivilegeToCode(info.privilege, code);
-    if (!ret) {
-        ACCOUNT_LOGE("Fail to check privilege, privilege:%{public}s", info.privilege.c_str());
-        REPORT_OS_ACCOUNT_FAIL(info.callingUid / UID_TRANSFORM_DIVISOR, PRIVILEGE_OPT_ACQUIRE_AUTH,
-            ret, "Fail to check privilege");
+    if (!TransferPrivilegeToCode(info.privileges[0], code)) {
+        ACCOUNT_LOGE("Fail to check privilege, privilege:%{public}s", info.privileges[0].c_str());
         return ERR_AUTHORIZATION_CACHE_ERROR;
     }
-
     AuthenCallerInfo callerInfo;
     callerInfo.privilegeIdx = code;
     callerInfo.pid = info.callingPid;
@@ -418,42 +559,15 @@ ErrCode InnerAuthorizationManager::UpdatePrivilegeCache(ConnectAbilityInfo &info
         callerInfo.remoteObject = g_requestRemoteObjectMap[info.callingPid];
         g_requestRemoteObjectMap.erase(info.callingPid);
     }
-
-    ErrCode errCode;
     PrivilegeBriefDef def;
-    if (!GetPrivilegeBriefDef(info.privilege, def)) {
-        ACCOUNT_LOGE("GetPrivilegeBriefDef failed, privilege=%{public}s", info.privilege.c_str());
+    if (!GetPrivilegeBriefDef(info.privileges[0], def)) {
+        ACCOUNT_LOGE("GetPrivilegeBriefDef failed, privilege=%{public}s", info.privileges[0].c_str());
         return ERR_AUTHORIZATION_CACHE_ERROR;
     }
-    if (def.kernelPermission != nullptr) {
-        errCode = PrivilegeCacheManager::GetInstance().AddCacheAndNotifyKernel(
-            callerInfo, def.kernelPermission);
-        if (errCode == ERR_AUTHORIZATION_KERNEL_DEVICE_NOT_FOUND) {
-            ACCOUNT_LOGE("AddCacheAndNotifyKernel kernel device not found, errCode=%{public}d", errCode);
-            REPORT_OS_ACCOUNT_FAIL(info.callingUid / UID_TRANSFORM_DIVISOR, PRIVILEGE_OPT_ACQUIRE_AUTH, errCode,
-                "Kernel device not found");
-            return ERR_AUTHORIZATION_KERNEL_DEVICE_NOT_FOUND;
-        }
-        if (errCode != ERR_OK) {
-            ACCOUNT_LOGE("AddCacheAndNotifyKernel failed, errCode=%{public}d", errCode);
-            REPORT_OS_ACCOUNT_FAIL(info.callingUid / UID_TRANSFORM_DIVISOR, PRIVILEGE_OPT_ACQUIRE_AUTH, errCode,
-                "AddCacheAndNotifyKernel failed");
-            return ERR_AUTHORIZATION_CACHE_ERROR;
-        }
-    } else {
-        errCode = PrivilegeCacheManager::GetInstance().AddCache(callerInfo, tokenResult.grantTime);
-        if (errCode != ERR_OK) {
-            REPORT_OS_ACCOUNT_FAIL(info.callingUid / UID_TRANSFORM_DIVISOR, PRIVILEGE_OPT_ACQUIRE_AUTH, errCode,
-                "Fail to add cache.");
-            ACCOUNT_LOGE("Fail to add cache privilege=%{public}s approved, errCode:%{public}d",
-                info.privilege.c_str(), errCode);
-            return ERR_AUTHORIZATION_CACHE_ERROR;
-        }
-    }
-    return ERR_OK;
+    return AddPrivilegeToCache(callerInfo, def, info, tokenResult.grantTime);
 }
 
-ErrCode InnerAuthorizationManager::AcquireAuthorization(const PrivilegeBriefDef &pdef,
+ErrCode InnerAuthorizationManager::AcquireAuthorization(AuthorizationRequest &request,
     const AcquireAuthorizationOptions &options, const OsAccountConfig &config,
     const sptr<IRemoteObject> &authorizationCallback, const sptr<IRemoteObject> &requestRemoteObj)
 {
@@ -464,16 +578,34 @@ ErrCode InnerAuthorizationManager::AcquireAuthorization(const PrivilegeBriefDef 
             ERR_AUTHORIZATION_GET_PROXY_ERROR, "Get AuthorizationResultCallback proxy is nullptr.");
         return ERR_AUTHORIZATION_GET_PROXY_ERROR;
     }
-
-    AuthorizationResult result;
-    result.privilege = pdef.privilegeName;
-    result.isReused = options.isReuseNeeded;
-
+    const auto &privileges = request.privilegesToAuthorize;
+    auto &results = request.results;
+    if (privileges.empty()) {
+        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+    }
+    if (results.empty()) {
+        for (const auto &p : privileges) {
+            AuthorizationResult r;
+            r.privilege = p;
+            r.isReused = false;
+            results[p] = r;
+        }
+    }
+    PrivilegeBriefDef def;
+    if (!GetPrivilegeBriefDef(privileges[0], def)) {
+        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+    }
     ConnectAbilityInfo info;
-    ErrCode errCode = InitializeConnectAbilityInfo(pdef, options, config, info);
+    ErrCode errCode = InitializeConnectAbilityInfo(def, options, config, info);
     if (errCode != ERR_OK) {
-        ACCOUNT_LOGE("InitializeConnectAbilityInfo failed, errCode=%{public}d", errCode);
         return errCode;
+    }
+    info.privileges = privileges;
+    info.descriptions.clear();
+    for (const auto &privilege : privileges) {
+        PrivilegeBriefDef privilegeDef;
+        GetPrivilegeBriefDef(privilege, privilegeDef);
+        info.descriptions.push_back(privilegeDef.description != nullptr ? privilegeDef.description : "");
     }
     info.isPublicApi = options.isPublicApi;
     if (!VerifyWidget(info.bundleName)) {
@@ -484,10 +616,14 @@ ErrCode InnerAuthorizationManager::AcquireAuthorization(const PrivilegeBriefDef 
     }
     if (options.hasContext) {
         return StartUIExtensionConnection(info, config.authAppUIExtensionAbilityName,
-            callback, result, requestRemoteObj);
+            callback, results, requestRemoteObj);
+    }
+    AuthorizationResult initResult;
+    if (!results.empty()) {
+        initResult = results.begin()->second;
     }
     return StartServiceExtensionConnection(info, config.authAppServiceExtensionAbilityName,
-        callback, result, requestRemoteObj);
+        callback, initResult, requestRemoteObj);
 }
 
 bool InnerAuthorizationManager::VerifyWidget(const std::string &bundleName)
@@ -546,57 +682,174 @@ bool InnerAuthorizationManager::GetAuthSessionInfo(const std::vector<uint8_t> &i
     return false;
 }
 
+static ErrCode SaveUpdateAuthResult(bool isModalSystem, const ConnectAbilityInfo &info,
+    InnerAuthorizationManager::AuthUpdateResult &result)
+{
+    ErrCode ret = ERR_OK;
+    if (isModalSystem) {
+        ret = SessionAbilityConnection::GetInstance().SaveAuthorizationResult(result.errCode,
+            result.resultCode, result.token, result.remainValidityTime);
+    } else {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        auto it = g_connectbackMap.find(info.callingPid);
+        if (it == g_connectbackMap.end()) {
+            (void)memset_s(result.token.data(), result.token.size(), 0, result.token.size());
+            return ERR_OK;
+        }
+        it->second->UpdateAuthorizationResult(result.errCode, result.resultCode,
+            result.token, result.remainValidityTime);
+    }
+    (void)memset_s(result.token.data(), result.token.size(), 0, result.token.size());
+    return ret;
+}
+
+void InnerAuthorizationManager::PopulateResultsFromTokenResult(
+    std::map<std::string, AuthorizationResult> &batchResults,
+    BatchTaAuthResult &result, const TaBatchResult &taResult, const ConnectAbilityInfo &info)
+{
+    const auto &tokenResult = taResult.tokenResult;
+    ErrCode teeErr = taResult.errCode;
+    for (const auto &privilege : info.privileges) {
+        auto it = batchResults.find(privilege);
+        if (it == batchResults.end()) {
+            continue;
+        }
+        auto &r = it->second;
+        r.privilege = privilege;
+        if (teeErr != ERR_OK) {
+            r.resultCode = AuthorizationResultCode::AUTHORIZATION_DENIED;
+            result.resultCode = AuthorizationResultCode::AUTHORIZATION_DENIED;
+            continue;
+        }
+        if (tokenResult.userTokenSize > 0 && tokenResult.userTokenSize <= USER_TOKEN_LEN) {
+            r.resultCode = AuthorizationResultCode::AUTHORIZATION_SUCCESS;
+            r.token.assign(tokenResult.userToken, tokenResult.userToken + tokenResult.userTokenSize);
+            r.validityPeriod = static_cast<int32_t>(tokenResult.remainValidityTime);
+            if (result.token.empty()) {
+                result.token = r.token;
+                result.remainValidityTime = static_cast<int32_t>(tokenResult.remainValidityTime);
+            }
+            ConnectAbilityInfo batchInfo = info;
+            batchInfo.privileges = {privilege};
+            ApplyUserTokenResult cacheTokenResult;
+            cacheTokenResult.grantTime = tokenResult.grantTime;
+            cacheTokenResult.remainValidityTime = static_cast<int32_t>(tokenResult.remainValidityTime);
+            cacheTokenResult.userTokenSize = static_cast<size_t>(tokenResult.userTokenSize);
+            (void)memcpy_s(cacheTokenResult.userToken, USER_TOKEN_LEN,
+                tokenResult.userToken, tokenResult.userTokenSize);
+            ErrCode cacheErr = UpdatePrivilegeCache(batchInfo, cacheTokenResult);
+            if (cacheErr == ERR_AUTHORIZATION_KERNEL_DEVICE_NOT_FOUND) {
+                if (info.isPublicApi) {
+                    r.resultCode = AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED;
+                } else {
+                    r.token.clear();
+                    result.token.clear();
+                }
+            } else if (cacheErr != ERR_OK) {
+                ACCOUNT_LOGE("UpdatePrivilegeCache failed, privilege=%{public}s, cacheErr=%{public}d",
+                    privilege.c_str(), cacheErr);
+                r.resultCode = AuthorizationResultCode::AUTHORIZATION_DENIED;
+                r.token.clear();
+                result.resultCode = AuthorizationResultCode::AUTHORIZATION_DENIED;
+            }
+        } else {
+            r.resultCode = AuthorizationResultCode::AUTHORIZATION_DENIED;
+            result.resultCode = AuthorizationResultCode::AUTHORIZATION_DENIED;
+        }
+    }
+}
+
+InnerAuthorizationManager::BatchTaAuthResult InnerAuthorizationManager::ApplyTaAuthorization(
+    const std::vector<uint8_t> &iamToken, int32_t accountId,
+    std::map<std::string, AuthorizationResult> &results, const ConnectAbilityInfo &info)
+{
+    BatchTaAuthResult result;
+    if (info.privileges.empty() || results.empty()) {
+        ACCOUNT_LOGE("Invalid privileges or results for callingPid=%{public}d", info.callingPid);
+        result.resultCode = AuthorizationResultCode::AUTHORIZATION_DENIED;
+        result.errCode = ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+        return result;
+    }
+    auto [verifyErr, verifyCode] = VerifyAdminAccount(accountId);
+    if (verifyErr != ERR_OK || verifyCode != AuthorizationResultCode::AUTHORIZATION_SUCCESS) {
+        AuthorizationResultCode code = (verifyErr != ERR_OK)
+            ? AuthorizationResultCode::AUTHORIZATION_DENIED : verifyCode;
+        for (const auto &privilege : info.privileges) {
+            auto it = results.find(privilege);
+            if (it != results.end() &&
+                it->second.resultCode == AuthorizationResultCode::AUTHORIZATION_SUCCESS) {
+                it->second.resultCode = code;
+            }
+        }
+        result.resultCode = code;
+        result.errCode = verifyErr;
+        return result;
+    }
+    TaBatchResult taResult;
+    taResult.errCode = CallTaAuthorization(iamToken, accountId, taResult.tokenResult, info);
+    result.errCode = taResult.errCode;
+    PopulateResultsFromTokenResult(results, result, taResult, info);
+    return result;
+}
+
 ErrCode InnerAuthorizationManager::UpdateAuthInfo(const std::vector<uint8_t> &iamToken, int32_t accountId,
     int32_t callingPid, const std::string &sessionId)
 {
     ConnectAbilityInfo info;
-    ApplyUserTokenResult tokenResult;
-    std::vector<uint8_t> token;
     bool isModalSystem = false;
-    // Determine if this is a modal system request by checking SessionAbilityConnection
     if (SessionAbilityConnection::GetInstance().GetConnectInfo(callingPid, info)) {
         if (sessionId == info.sessionId) {
             isModalSystem = true;
         }
     }
-    // Non-modal system: lookup sessionId -> callingPid -> connectIt chain with lock protection
     if (!isModalSystem) {
         std::lock_guard<std::mutex> lock(g_mutex);
         auto it = g_sessionIdToPidMap.find(sessionId);
         if (it == g_sessionIdToPidMap.end()) {
-            ACCOUNT_LOGI("Fail to pid");
             return ERR_AUTHORIZATION_UPDATE_INFO_ERROR;
         }
         auto connectIt = g_connectbackMap.find(it->second);
         if (connectIt == g_connectbackMap.end()) {
-            ACCOUNT_LOGI("Fail to getConnectInfo");
             return ERR_AUTHORIZATION_UPDATE_INFO_ERROR;
         }
         connectIt->second->GetConnectInfo(info);
     }
-    auto [errCode, resultCode] = ApplyTaAuthorization(iamToken, accountId, tokenResult, info);
-    if (errCode == ERR_OK && resultCode == AuthorizationResultCode::AUTHORIZATION_SUCCESS) {
-        token.assign(tokenResult.userToken, tokenResult.userToken + tokenResult.userTokenSize);
-    }
-    ErrCode ret = ERR_OK;
-    if (isModalSystem) {
-        ret = SessionAbilityConnection::GetInstance().SaveAuthorizationResult(errCode, resultCode, token,
-            tokenResult.remainValidityTime);
-    } else {
+    AuthUpdateResult authResult;
+    std::map<std::string, AuthorizationResult> results;
+    sptr<ConnectAbilityCallback> connectCallback;
+    {
         std::lock_guard<std::mutex> lock(g_mutex);
-        auto it = g_connectbackMap.find(info.callingPid);
-        // Callback not found is not an error - client may have disconnected, return ERR_OK
-        if (it == g_connectbackMap.end()) {
-            ACCOUNT_LOGE("Can not find AuthorizationResultCallback.");
-            REPORT_OS_ACCOUNT_FAIL(accountId, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_AUTHORIZATION_GET_PROXY_ERROR,
-                "Can not find AuthorizationResultCallback.");
-            return ERR_OK;
+        auto connectIt = g_connectbackMap.find(info.callingPid);
+        if (connectIt != g_connectbackMap.end()) {
+            connectCallback = connectIt->second;
         }
-        it->second->UpdateAuthorizationResult(errCode, resultCode, token, tokenResult.remainValidityTime);
     }
-    // Security practice: clear sensitive token data after use
-    (void)memset_s(token.data(), token.size(), 0, token.size());
-    return ret;
+    if (connectCallback != nullptr) {
+        results = connectCallback->MoveBatchResults();
+    }
+    if (info.privileges.empty()) {
+        ACCOUNT_LOGE("Privileges is empty in UpdateAuthInfo, callingPid=%{public}d", callingPid);
+        REPORT_OS_ACCOUNT_FAIL(accountId, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_AUTHORIZATION_UPDATE_INFO_ERROR,
+            "Privileges is empty in UpdateAuthInfo");
+        return ERR_AUTHORIZATION_UPDATE_INFO_ERROR;
+    }
+    if (results.empty()) {
+        for (const auto &p : info.privileges) {
+            AuthorizationResult r;
+            r.privilege = p;
+            r.isReused = false;
+            results[p] = r;
+        }
+    }
+    auto batchResult = ApplyTaAuthorization(iamToken, accountId, results, info);
+    authResult.errCode = batchResult.errCode;
+    authResult.resultCode = batchResult.resultCode;
+    authResult.token = std::move(batchResult.token);
+    authResult.remainValidityTime = batchResult.remainValidityTime;
+    if (connectCallback != nullptr && !results.empty()) {
+        connectCallback->SetBatchResults(std::move(results));
+    }
+    return SaveUpdateAuthResult(isModalSystem, info, authResult);
 }
 
 bool InnerAuthorizationManager::HasExtensionConnect()
@@ -614,8 +867,8 @@ bool InnerAuthorizationManager::HasExtensionConnect()
 ErrCode InnerAuthorizationManager::InitializeConnectAbilityInfo(const PrivilegeBriefDef &pdef,
     const AcquireAuthorizationOptions &options, const OsAccountConfig &config, ConnectAbilityInfo &info)
 {
-    info.privilege = pdef.privilegeName;
-    info.description = pdef.description;
+    info.privileges = {pdef.privilegeName};
+    info.descriptions = {pdef.description};
     info.timeout = pdef.timeout;
     info.bundleName = config.authAppBundleName;
     info.challenge = options.challenge;
@@ -639,7 +892,8 @@ ErrCode InnerAuthorizationManager::InitializeConnectAbilityInfo(const PrivilegeB
 
 ErrCode InnerAuthorizationManager::StartUIExtensionConnection(const ConnectAbilityInfo &info,
     const std::string &uiAbilityName, const sptr<IAuthorizationCallback> &callback,
-    const AuthorizationResult &result, const sptr<IRemoteObject> &requestRemoteObj)
+    const std::map<std::string, AuthorizationResult> &results,
+    const sptr<IRemoteObject> &requestRemoteObj)
 {
     ErrCode errCode = ValidateUIExtensionParams(info, callback, requestRemoteObj);
     if (errCode != ERR_OK) {
@@ -649,7 +903,13 @@ ErrCode InnerAuthorizationManager::StartUIExtensionConnection(const ConnectAbili
     ConnectAbilityInfo uiInfo = info;
     uiInfo.abilityName = uiAbilityName;
 
-    auto connectCallback = sptr<ConnectAbilityCallback>::MakeSptr(uiInfo, acquireAuthorizationOnResultfunc(), result);
+    AuthorizationResult initResult;
+    if (!results.empty()) {
+        initResult = results.begin()->second;
+    }
+    auto connectCallback = sptr<ConnectAbilityCallback>::MakeSptr(uiInfo,
+        acquireAuthorizationOnResultfunc(), initResult);
+    connectCallback->SetBatchResults(results);
     return StartUIExtensionTask(uiInfo, connectCallback, callback, requestRemoteObj);
 }
 
@@ -697,10 +957,8 @@ ErrCode InnerAuthorizationManager::StartUIExtensionTask(const ConnectAbilityInfo
     if (storeRet != ERR_OK) {
         ACCOUNT_LOGE("StoreCallbackMaps failed, errCode:%{public}d", storeRet);
         if (storeRet == ERR_ACCOUNT_COMMON_BUSY && callback != nullptr) {
-            AuthorizationResult result;
-            result.privilege = uiInfo.privilege;
-            result.resultCode = AuthorizationResultCode::AUTHORIZATION_SERVICE_BUSY;
-            callback->OnResult(ERR_OK, result);
+            NotifyBatchCanceled(callback, connectCallback,
+                AuthorizationResultCode::AUTHORIZATION_SERVICE_BUSY);
             return ERR_OK;
         }
         return storeRet;
@@ -744,14 +1002,8 @@ void InnerAuthorizationManager::ExecuteUIExtensionTask(const ConnectAbilityInfo 
         REPORT_OS_ACCOUNT_FAIL(uiInfo.callingUid / UID_TRANSFORM_DIVISOR, PRIVILEGE_OPT_ACQUIRE_AUTH,
             errCode, "OnConnectAbility failed");
         rollbackMaps();
-        AuthorizationResult result;
-        result.privilege = uiInfo.privilege;
-        ErrCode onResultRet = callback->OnResult(errCode, result);
-        if (onResultRet != ERR_OK) {
-            ACCOUNT_LOGE("OnResult failed, errCode:%{public}d", onResultRet);
-            REPORT_OS_ACCOUNT_FAIL(uiInfo.callingUid / UID_TRANSFORM_DIVISOR, PRIVILEGE_OPT_ACQUIRE_AUTH,
-                onResultRet, "ExecuteUIExtensionTask call OnResult failed");
-        }
+        NotifyBatchCanceled(callback, connectCallback,
+            AuthorizationResultCode::AUTHORIZATION_CANCELED);
         return;
     }
 

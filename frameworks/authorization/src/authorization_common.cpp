@@ -74,12 +74,12 @@ CheckAuthorizationResult *CheckAuthorizationResult::Unmarshalling(Parcel &parcel
 
 bool ConnectAbilityInfo::ReadFromParcel(Parcel &parcel)
 {
-    if (!parcel.ReadString(privilege)) {
-        ACCOUNT_LOGE("Read privilege failed.");
+    if (!parcel.ReadStringVector(&privileges)) {
+        ACCOUNT_LOGE("Read privileges failed.");
         return false;
     }
-    if (!parcel.ReadString(description)) {
-        ACCOUNT_LOGE("Read description failed.");
+    if (!parcel.ReadStringVector(&descriptions)) {
+        ACCOUNT_LOGE("Read descriptions failed.");
         return false;
     }
     if (!parcel.ReadString(bundleName)) {
@@ -114,12 +114,12 @@ ConnectAbilityInfo::~ConnectAbilityInfo()
 
 bool ConnectAbilityInfo::Marshalling(Parcel &parcel) const
 {
-    if (!parcel.WriteString(privilege)) {
-        ACCOUNT_LOGE("Failed to write privilege.");
+    if (!parcel.WriteStringVector(privileges)) {
+        ACCOUNT_LOGE("Failed to write privileges.");
         return false;
     }
-    if (!parcel.WriteString(description)) {
-        ACCOUNT_LOGE("Failed to write description.");
+    if (!parcel.WriteStringVector(descriptions)) {
+        ACCOUNT_LOGE("Failed to write descriptions.");
         return false;
     }
     if (!parcel.WriteString(bundleName)) {
@@ -148,8 +148,8 @@ bool ConnectAbilityInfo::Marshalling(Parcel &parcel) const
 ConnectAbilityInfo& ConnectAbilityInfo::operator=(const ConnectAbilityInfo& other)
 {
     if (this != &other) {
-        privilege = other.privilege;
-        description = other.description;
+        privileges = other.privileges;
+        descriptions = other.descriptions;
         bundleName = other.bundleName;
         abilityName = other.abilityName;
         callingUid = other.callingUid;

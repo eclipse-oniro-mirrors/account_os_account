@@ -15,6 +15,7 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <map>
 #include <memory>
 
 #include "account_error_no.h"
@@ -99,6 +100,16 @@ public:
         return 0;
     }
 
+    ErrCode OnBatchResult(int32_t resultCode,
+        const std::vector<AccountSA::AuthorizationResult>& results) override
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        isReady = true;
+        batchResults_ = results;
+        cv.notify_one();
+        return 0;
+    }
+
     ErrCode OnConnectAbility(const AccountSA::ConnectAbilityInfo& info, const sptr<IRemoteObject>& callback) override
     {
         auto connectCallback = iface_cast<IConnectAbilityCallback>(callback);
@@ -124,6 +135,7 @@ public:
     std::condition_variable cv;
     bool isReady = false;
     AccountSA::AuthorizationResult result_;
+    std::vector<AccountSA::AuthorizationResult> batchResults_;
 };
 
 /**
@@ -217,11 +229,10 @@ bool GetPrivilegeBriefDef(const std::string& privilege, PrivilegeBriefDef& privi
 
 bool TransferPrivilegeToCode(const std::string& privilegeName, uint32_t& code) { return g_transferPrivilegeToCode; }
 
-ErrCode InnerAuthorizationManager::AcquireAuthorization(const PrivilegeBriefDef& pdef,
-    const AcquireAuthorizationOptions& options,
-    const OsAccountConfig& config,
-    const sptr<IRemoteObject>& authorizationResultCallback,
-    const sptr<IRemoteObject>& requestRemoteObj)
+ErrCode InnerAuthorizationManager::AcquireAuthorization(AuthorizationRequest &request,
+    const AcquireAuthorizationOptions &options, const OsAccountConfig &config,
+    const sptr<IRemoteObject> &authorizationResultCallback,
+    const sptr<IRemoteObject> &requestRemoteObj)
 {
     return ERR_OK;
 }
@@ -290,6 +301,15 @@ void AuthorizationManagerServiceModuleTest::TearDownTestCase() { ACCOUNT_LOGI("T
 
 void AuthorizationManagerServiceModuleTest::SetUp()
 {
+    g_hasConnect = false;
+    g_callbackOnResult = ERR_OK;
+    g_getPrivilegeBriefDef = false;
+    g_transferPrivilegeToCode = false;
+    g_hasExtensionConnect = true;
+    g_checkPrivilegeResult = ERR_OK;
+    g_hasAuthorizationResult = ERR_OK;
+    g_hasAuthorizationAuthorized = true;
+    g_kernelPermission = "test_kernel_perm";
     // Set default mock behaviors
     EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_)).WillRepeatedly(Return(ERR_OK));
 
@@ -322,7 +342,7 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, RegisterAuthAppRemoteObjectTest_
     ACCOUNT_LOGI("RegisterAuthAppRemoteObjectTest_0100");
 
     g_hasConnect = false;
-    auto authAppRemoteObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> authAppRemoteObj = new MockAuthorizationCallbackStub();
 
     ErrCode ret = service_->RegisterAuthAppRemoteObject(authAppRemoteObj->AsObject());
 
@@ -363,7 +383,7 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, RegisterAuthAppRemoteObjectTest_
         .WillOnce(Return(ERR_ACCOUNT_COMMON_PERMISSION_DENIED));
 
     g_hasConnect = true;
-    auto authAppRemoteObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> authAppRemoteObj = new MockAuthorizationCallbackStub();
 
     ErrCode ret = service_->RegisterAuthAppRemoteObject(authAppRemoteObj->AsObject());
 
@@ -394,7 +414,7 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, RegisterAuthAppRemoteObjectTest_
         .WillOnce(Return(ERR_ACCOUNT_COMMON_PERMISSION_DENIED))
         .WillOnce(Return(ERR_ACCOUNT_COMMON_PERMISSION_DENIED));
 
-    auto authAppRemoteObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> authAppRemoteObj = new MockAuthorizationCallbackStub();
 
     ErrCode ret = service_->RegisterAuthAppRemoteObject(authAppRemoteObj->AsObject());
 
@@ -424,7 +444,7 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, RegisterAuthAppRemoteObjectTest_
         VerifyPermission(std::string("ohos.permission.ACCESS_USER_AUTH_INTERNAL")))
         .WillOnce(Return(ERR_ACCOUNT_COMMON_PERMISSION_DENIED));
 
-    auto authAppRemoteObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> authAppRemoteObj = new MockAuthorizationCallbackStub();
 
     ErrCode ret = service_->RegisterAuthAppRemoteObject(authAppRemoteObj->AsObject());
     EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_PERMISSION_DENIED);
@@ -446,7 +466,7 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, RegisterAuthAppRemoteObjectTest_
 
     EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_)).WillRepeatedly(Return(ERR_OK));
 
-    auto authAppRemoteObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> authAppRemoteObj = new MockAuthorizationCallbackStub();
 
     ErrCode ret = service_->RegisterAuthAppRemoteObject(authAppRemoteObj->AsObject());
 
@@ -469,7 +489,7 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, RegisterAuthAppRemoteObjectTest_
 
     EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_)).WillRepeatedly(Return(ERR_OK));
 
-    auto authAppRemoteObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> authAppRemoteObj = new MockAuthorizationCallbackStub();
     BundleManagerAdapter::GetInstance()->g_resultCode = FAIL_CODE;
     ErrCode ret =
         service_->RegisterAuthAppRemoteObject(authAppRemoteObj->AsObject());
@@ -508,8 +528,8 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_0100, T
     options.challenge = {1, 2, 3};
     options.isReuseNeeded = true;
 
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
     ErrCode ret =
         service_->AcquireAuthorization(TEST_PRIVILEGE, options, callbackObj->AsObject(), requestObj->AsObject());
 
@@ -536,8 +556,8 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_0200, T
     options.challenge = {1, 2, 3};
     options.isReuseNeeded = true;
 
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
 
     ErrCode ret =
         service_->AcquireAuthorization(TEST_PRIVILEGE, options, callbackObj->AsObject(), requestObj->AsObject());
@@ -580,7 +600,7 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_0400, T
 
     g_hasConnect = true;
 
-    auto callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
 
     AcquireAuthorizationOptions options;
     options.challenge = {1, 2, 3};
@@ -615,8 +635,8 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_0500, T
     options.isReuseNeeded = false;
     options.isInteractionAllowed = true;
 
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
     ErrCode ret =
         service_->AcquireAuthorization(invalidPrivilege, options, callbackObj->AsObject(), requestObj->AsObject());
 
@@ -643,8 +663,8 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_0600, T
     options.isInteractionAllowed = false;
     options.hasContext = false;
 
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
 
     auto callback = iface_cast<IAuthorizationCallback>(callbackObj);
     ErrCode ret = service_->AcquireAuthorization(TEST_PRIVILEGE, options, callback->AsObject(), requestObj->AsObject());
@@ -709,8 +729,8 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_0800, T
     options.isInteractionAllowed = true;
     options.hasContext = false;
     g_getPrivilegeBriefDef = true;
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
     ErrCode ret =
         service_->AcquireAuthorization(TEST_PRIVILEGE, options, callbackObj->AsObject(), requestObj->AsObject());
 
@@ -740,8 +760,8 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_0900, T
     options.isInteractionAllowed = true;
     options.hasContext = true;
 
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
 
     ErrCode ret =
         service_->AcquireAuthorization(TEST_PRIVILEGE, options, callbackObj->AsObject(), requestObj->AsObject());
@@ -773,8 +793,8 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_1000, T
     options.isInteractionAllowed = true;
     options.hasContext = false;
 
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
 
     ErrCode ret =
         service_->AcquireAuthorization(TEST_PRIVILEGE, options, callbackObj->AsObject(), requestObj->AsObject());
@@ -805,8 +825,8 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_1100, T
     options.isInteractionAllowed = true;
     options.hasContext = false;
 
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
 
     ErrCode ret =
         service_->AcquireAuthorization(TEST_PRIVILEGE, options, callbackObj->AsObject(), requestObj->AsObject());
@@ -838,8 +858,8 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_1200, T
     options.isInteractionAllowed = true;
     options.hasContext = false;
 
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
 
     ErrCode ret =
         service_->AcquireAuthorization(TEST_PRIVILEGE, options, callbackObj->AsObject(), requestObj->AsObject());
@@ -872,8 +892,8 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_1300, T
     options.hasContext = true;
     options.isContextValid = false;
 
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
 
     ErrCode ret =
         service_->AcquireAuthorization(TEST_PRIVILEGE, options, callbackObj->AsObject(), requestObj->AsObject());
@@ -907,8 +927,8 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_1400, T
     options.isInteractionAllowed = false;
     options.hasContext = false;
 
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
 
     ErrCode ret =
         service_->AcquireAuthorization(TEST_PRIVILEGE, options, callbackObj->AsObject(), requestObj->AsObject());
@@ -945,8 +965,8 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_1500, T
     options.isInteractionAllowed = true;
     options.hasContext = false;
 
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
 
     ErrCode ret =
         service_->AcquireAuthorization(TEST_PRIVILEGE, options, callbackObj->AsObject(), requestObj->AsObject());
@@ -1057,134 +1077,89 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, HasAuthorizationForPublicTest_06
 }
 
 /**
- * @tc.name: AcquireAuthorizationForPublicTest_0100
- * @tc.desc: test AcquireAuthorizationForPublic with permission denied.
+ * @tc.name: AcquireAuthorizationForPublicTest_1000
+ * @tc.desc: test AcquireAuthorizationForPublic with GetPrivilegeBriefDef failure.
  * @tc.type: FUNC
  * @tc.require: issueIXXXXX
  */
-HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0100, TestSize.Level0)
+HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_1000, TestSize.Level0)
 {
-    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0100");
-    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
-        .WillRepeatedly(Return(ERR_ACCOUNT_COMMON_PERMISSION_DENIED));
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
-    ErrCode ret = service_->AcquireAuthorizationForPublic(
-        TEST_PRIVILEGE, true, callbackObj->AsObject(), requestObj->AsObject());
-    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_PERMISSION_DENIED);
-}
-
-/**
- * @tc.name: AcquireAuthorizationForPublicTest_0200
- * @tc.desc: test AcquireAuthorizationForPublic with null callback.
- * @tc.type: FUNC
- * @tc.require: issueIXXXXX
- */
-HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0200, TestSize.Level0)
-{
-    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0200");
-    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
-        .WillRepeatedly(Return(ERR_OK));
-    g_getPrivilegeBriefDef = true;
-    g_kernelPermission = "test_kernel_perm";
-    auto requestObj = new MockAuthorizationCallbackStub();
-    ErrCode ret = service_->AcquireAuthorizationForPublic(
-        TEST_PUBLIC_PRIVILEGE, true, nullptr, requestObj->AsObject());
-    EXPECT_EQ(ret, ERR_AUTHORIZATION_GET_PROXY_ERROR);
-}
-
-/**
- * @tc.name: AcquireAuthorizationForPublicTest_0300
- * @tc.desc: test AcquireAuthorizationForPublic with invalid privilege.
- * @tc.type: FUNC
- * @tc.require: issueIXXXXX
- */
-HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0300, TestSize.Level0)
-{
-    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0300");
-    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
-        .WillRepeatedly(Return(ERR_OK));
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
-    ErrCode ret = service_->AcquireAuthorizationForPublic(
-        TEST_PRIVILEGE, true, callbackObj->AsObject(), requestObj->AsObject());
-    EXPECT_EQ(ret, ERR_OK);
-    EXPECT_EQ(callbackObj->result_.resultCode, AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED);
-}
-
-/**
- * @tc.name: AcquireAuthorizationForPublicTest_0400
- * @tc.desc: test AcquireAuthorizationForPublic with GetPrivilegeDefinition failure.
- * @tc.type: FUNC
- * @tc.require: issueIXXXXX
- */
-HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0400, TestSize.Level0)
-{
-    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0400");
+    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_1000");
     EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
         .WillRepeatedly(Return(ERR_OK));
     g_getPrivilegeBriefDef = false;
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
+    std::vector<std::string> privileges = {TEST_PUBLIC_PRIVILEGE};
     ErrCode ret = service_->AcquireAuthorizationForPublic(
-        TEST_PUBLIC_PRIVILEGE, true, callbackObj->AsObject(), requestObj->AsObject());
+        privileges, true, callbackObj->AsObject(), requestObj->AsObject());
     EXPECT_EQ(ret, ERR_OK);
-    EXPECT_EQ(callbackObj->result_.resultCode, AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED);
+    ASSERT_EQ(callbackObj->batchResults_.size(), 1u);
+    EXPECT_EQ(callbackObj->batchResults_[0].resultCode,
+        AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED);
     g_getPrivilegeBriefDef = true;
 }
 
 /**
- * @tc.name: AcquireAuthorizationForPublicTest_0500
+ * @tc.name: AcquireAuthorizationForPublicTest_1100
  * @tc.desc: test AcquireAuthorizationForPublic with null kernelPermission, skip kernel check.
  * @tc.type: FUNC
  * @tc.require: issueIXXXXX
  */
-HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0500, TestSize.Level0)
+HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_1100, TestSize.Level0)
 {
-    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0500");
+    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_1100");
     EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
         .WillRepeatedly(Return(ERR_OK));
     g_getPrivilegeBriefDef = true;
     g_kernelPermission = "";
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
+    std::vector<std::string> privileges = {TEST_PUBLIC_PRIVILEGE};
     ErrCode ret = service_->AcquireAuthorizationForPublic(
-        TEST_PUBLIC_PRIVILEGE, true, callbackObj->AsObject(), requestObj->AsObject());
+        privileges, true, callbackObj->AsObject(), requestObj->AsObject());
     EXPECT_EQ(ret, ERR_OK);
     g_kernelPermission = "test_kernel_perm";
 }
 
 /**
- * @tc.name: AcquireAuthorizationForPublicTest_0800
- * @tc.desc: test AcquireAuthorizationForPublic with kernel permission denied.
+ * @tc.name: AcquireAuthorizationForPublicTest_1200
+ * @tc.desc: test AcquireAuthorizationForPublic with HasExtensionConnect=true (service busy).
  * @tc.type: FUNC
  * @tc.require: issueIXXXXX
  */
-HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0800, TestSize.Level0)
+HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_1200, TestSize.Level0)
 {
-    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0800");
+    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_1200");
     EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
-        .WillOnce(Return(ERR_OK))
-        .WillOnce(Return(ERR_ACCOUNT_COMMON_PERMISSION_DENIED));
+        .WillRepeatedly(Return(ERR_OK));
     g_getPrivilegeBriefDef = true;
     g_kernelPermission = "test_kernel_perm";
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    g_transferPrivilegeToCode = true;
+    g_checkPrivilegeResult = ERR_ACCOUNT_COMMON_PERMISSION_DENIED;
+    g_hasConnect = false;
+    g_hasExtensionConnect = true;
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
+    std::vector<std::string> privileges = {TEST_PUBLIC_PRIVILEGE};
     ErrCode ret = service_->AcquireAuthorizationForPublic(
-        TEST_PUBLIC_PRIVILEGE, true, callbackObj->AsObject(), requestObj->AsObject());
+        privileges, true, callbackObj->AsObject(), requestObj->AsObject());
     EXPECT_EQ(ret, ERR_OK);
-    EXPECT_EQ(callbackObj->result_.resultCode, AuthorizationResultCode::AUTHORIZATION_DENIED);
+    ASSERT_EQ(callbackObj->batchResults_.size(), 1u);
+    EXPECT_EQ(callbackObj->batchResults_[0].resultCode,
+        AuthorizationResultCode::AUTHORIZATION_SERVICE_BUSY);
+    g_hasExtensionConnect = true;
 }
 
 /**
- * @tc.name: AcquireAuthorizationForPublicTest_0900
- * @tc.desc: test AcquireAuthorizationForPublic with HandleWhenReuse TransferPrivilegeToCode failure.
+ * @tc.name: AcquireAuthorizationForPublicTest_1300
+ * @tc.desc: test AcquireAuthorizationForPublic with TransferPrivilegeToCode failure.
  * @tc.type: FUNC
  * @tc.require: issueIXXXXX
  */
-HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0900, TestSize.Level0)
+HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_1300, TestSize.Level0)
 {
-    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0900");
+    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_1300");
     EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
         .WillRepeatedly(Return(ERR_OK));
     g_getPrivilegeBriefDef = true;
@@ -1192,63 +1167,16 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTes
     g_transferPrivilegeToCode = false;
     g_hasConnect = false;
     g_hasExtensionConnect = false;
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
+    std::vector<std::string> privileges = {TEST_PUBLIC_PRIVILEGE};
     ErrCode ret = service_->AcquireAuthorizationForPublic(
-        TEST_PUBLIC_PRIVILEGE, true, callbackObj->AsObject(), requestObj->AsObject());
+        privileges, true, callbackObj->AsObject(), requestObj->AsObject());
     EXPECT_EQ(ret, ERR_OK);
-    EXPECT_EQ(callbackObj->result_.resultCode, AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED);
+    ASSERT_EQ(callbackObj->batchResults_.size(), 1u);
+    EXPECT_EQ(callbackObj->batchResults_[0].resultCode,
+        AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED);
     g_transferPrivilegeToCode = true;
-}
-
-/**
- * @tc.name: AcquireAuthorizationForPublicTest_0600
- * @tc.desc: test AcquireAuthorizationForPublic with resultCode != AUTHORIZATION_SUCCESS.
- * @tc.type: FUNC
- * @tc.require: issueIXXXXX
- */
-HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0600, TestSize.Level0)
-{
-    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0600");
-    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
-        .WillRepeatedly(Return(ERR_OK));
-    g_getPrivilegeBriefDef = true;
-    g_kernelPermission = "test_kernel_perm";
-    g_hasConnect = false;
-    g_hasExtensionConnect = true;
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
-    ErrCode ret = service_->AcquireAuthorizationForPublic(
-        TEST_PUBLIC_PRIVILEGE, true, callbackObj->AsObject(), requestObj->AsObject());
-    EXPECT_EQ(ret, ERR_OK);
-    EXPECT_EQ(callbackObj->result_.resultCode, AuthorizationResultCode::AUTHORIZATION_SERVICE_BUSY);
-    g_hasExtensionConnect = true;
-}
-
-/**
- * @tc.name: AcquireAuthorizationForPublicTest_0700
- * @tc.desc: test AcquireAuthorizationForPublic with HandleWhenReuse returning ERR_OK.
- * @tc.type: FUNC
- * @tc.require: issueIXXXXX
- */
-HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0700, TestSize.Level0)
-{
-    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0700");
-    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
-        .WillRepeatedly(Return(ERR_OK));
-    g_getPrivilegeBriefDef = true;
-    g_kernelPermission = "test_kernel_perm";
-    g_transferPrivilegeToCode = true;
-    g_hasConnect = false;
-    g_hasExtensionConnect = false;
-    g_checkPrivilegeResult = ERR_OK;
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
-    ErrCode ret = service_->AcquireAuthorizationForPublic(
-        TEST_PUBLIC_PRIVILEGE, true, callbackObj->AsObject(), requestObj->AsObject());
-    EXPECT_EQ(ret, ERR_OK);
-    g_hasExtensionConnect = true;
-    g_checkPrivilegeResult = ERR_OK;
 }
 
 /**
@@ -1277,8 +1205,8 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_1600, T
     options.subjectInfo = SubjectInfo{};
     options.subjectInfo->pid = getpid();
     options.subjectInfo->uid = IPCSkeleton::GetCallingUid();
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
     ErrCode ret = service_->AcquireAuthorization(
         TEST_PUBLIC_PRIVILEGE, options, callbackObj->AsObject(), requestObj->AsObject());
     EXPECT_EQ(ret, ERR_OK);
@@ -1302,8 +1230,8 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_1800, T
     options.subjectInfo = SubjectInfo{};
     options.subjectInfo->pid = 0;
     options.subjectInfo->uid = 0;
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
     ErrCode ret = service_->AcquireAuthorization(
         TEST_PUBLIC_PRIVILEGE, options, callbackObj->AsObject(), requestObj->AsObject());
     EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
@@ -1325,8 +1253,8 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_1900, T
     options.subjectInfo = SubjectInfo{};
     options.subjectInfo->pid = getpid();
     options.subjectInfo->uid = -1;
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
     ErrCode ret = service_->AcquireAuthorization(
         TEST_PUBLIC_PRIVILEGE, options, callbackObj->AsObject(), requestObj->AsObject());
     EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
@@ -1348,12 +1276,226 @@ HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationTest_2000, T
     options.subjectInfo = SubjectInfo{};
     options.subjectInfo->pid = getpid();
     options.subjectInfo->uid = 999999;
-    auto callbackObj = new MockAuthorizationCallbackStub();
-    auto requestObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
     ErrCode ret = service_->AcquireAuthorization(
         TEST_PUBLIC_PRIVILEGE, options, callbackObj->AsObject(), requestObj->AsObject());
     EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
 }
 
+/**
+ * @tc.name: AcquireAuthorizationForPublicTest_0100
+ * @tc.desc: test AcquireAuthorizationForPublic with kernel permission denied.
+ * @tc.type: FUNC
+ * @tc.require: issueIXXXXX
+ */
+HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0100, TestSize.Level0)
+{
+    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0100");
+    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
+        .WillOnce(Return(ERR_OK))
+        .WillOnce(Return(ERR_ACCOUNT_COMMON_PERMISSION_DENIED));
+    g_getPrivilegeBriefDef = true;
+    g_kernelPermission = "test_kernel_perm";
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
+    std::vector<std::string> privileges = {TEST_PUBLIC_PRIVILEGE};
+    ErrCode ret = service_->AcquireAuthorizationForPublic(
+        privileges, true, callbackObj->AsObject(), requestObj->AsObject());
+    EXPECT_EQ(ret, ERR_OK);
+    ASSERT_EQ(callbackObj->batchResults_.size(), 1u);
+    EXPECT_EQ(callbackObj->batchResults_[0].resultCode, AuthorizationResultCode::AUTHORIZATION_DENIED);
+}
+
+/**
+ * @tc.name: AcquireAuthorizationForPublicTest_0200
+ * @tc.desc: test AcquireAuthorizationForPublic with kernel permission granted and cache reused.
+ * @tc.type: FUNC
+ * @tc.require: issueIXXXXX
+ */
+HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0200, TestSize.Level0)
+{
+    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0200");
+    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
+        .WillRepeatedly(Return(ERR_OK));
+    g_getPrivilegeBriefDef = true;
+    g_kernelPermission = "test_kernel_perm";
+    g_transferPrivilegeToCode = true;
+    g_checkPrivilegeResult = ERR_OK;
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
+    std::vector<std::string> privileges = {TEST_PUBLIC_PRIVILEGE};
+    ErrCode ret = service_->AcquireAuthorizationForPublic(
+        privileges, true, callbackObj->AsObject(), requestObj->AsObject());
+    EXPECT_EQ(ret, ERR_OK);
+    ASSERT_EQ(callbackObj->batchResults_.size(), 1u);
+    EXPECT_EQ(callbackObj->batchResults_[0].resultCode, AuthorizationResultCode::AUTHORIZATION_SUCCESS);
+    EXPECT_TRUE(callbackObj->batchResults_[0].isReused);
+    g_transferPrivilegeToCode = false;
+    g_checkPrivilegeResult = ERR_OK;
+}
+
+/**
+ * @tc.name: AcquireAuthorizationForPublicTest_0300
+ * @tc.desc: test AcquireAuthorizationForPublic with mixed kernel permission results.
+ * @tc.type: FUNC
+ * @tc.require: issueIXXXXX
+ */
+HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0300, TestSize.Level0)
+{
+    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0300");
+    const std::string usbPrivilege = "ohos.privilege.monitor_raw_usb_packets";
+    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
+        .WillOnce(Return(ERR_OK))
+        .WillOnce(Return(ERR_ACCOUNT_COMMON_PERMISSION_DENIED))
+        .WillOnce(Return(ERR_OK));
+    g_getPrivilegeBriefDef = true;
+    g_kernelPermission = "test_kernel_perm";
+    g_transferPrivilegeToCode = true;
+    g_checkPrivilegeResult = ERR_OK;
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
+    std::vector<std::string> privileges = {TEST_PUBLIC_PRIVILEGE, usbPrivilege};
+    ErrCode ret = service_->AcquireAuthorizationForPublic(
+        privileges, true, callbackObj->AsObject(), requestObj->AsObject());
+    EXPECT_EQ(ret, ERR_OK);
+    ASSERT_EQ(callbackObj->batchResults_.size(), 2u);
+    EXPECT_EQ(callbackObj->batchResults_[0].privilege, usbPrivilege);
+    EXPECT_EQ(callbackObj->batchResults_[0].resultCode, AuthorizationResultCode::AUTHORIZATION_SUCCESS);
+    EXPECT_TRUE(callbackObj->batchResults_[0].isReused);
+    EXPECT_EQ(callbackObj->batchResults_[1].privilege, TEST_PUBLIC_PRIVILEGE);
+    EXPECT_EQ(callbackObj->batchResults_[1].resultCode, AuthorizationResultCode::AUTHORIZATION_DENIED);
+    EXPECT_FALSE(callbackObj->batchResults_[1].isReused);
+    g_transferPrivilegeToCode = false;
+    g_checkPrivilegeResult = ERR_OK;
+}
+
+/**
+ * @tc.name: AcquireAuthorizationForPublicTest_0400
+ * @tc.desc: test AcquireAuthorizationForPublic with null callback.
+ * @tc.type: FUNC
+ * @tc.require: issueIXXXXX
+ */
+HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0400, TestSize.Level0)
+{
+    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0400");
+    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
+        .WillRepeatedly(Return(ERR_OK));
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
+    std::vector<std::string> privileges = {TEST_PUBLIC_PRIVILEGE};
+    ErrCode ret = service_->AcquireAuthorizationForPublic(
+        privileges, true, nullptr, requestObj->AsObject());
+    EXPECT_EQ(ret, ERR_AUTHORIZATION_GET_PROXY_ERROR);
+}
+
+/**
+ * @tc.name: AcquireAuthorizationForPublicTest_0500
+ * @tc.desc: test AcquireAuthorizationForPublic with empty privileges.
+ * @tc.type: FUNC
+ * @tc.require: issueIXXXXX
+ */
+HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0500, TestSize.Level0)
+{
+    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0500");
+    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
+        .WillRepeatedly(Return(ERR_OK));
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
+    std::vector<std::string> privileges;
+    ErrCode ret = service_->AcquireAuthorizationForPublic(
+        privileges, true, callbackObj->AsObject(), requestObj->AsObject());
+    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+}
+
+/**
+ * @tc.name: AcquireAuthorizationForPublicTest_0600
+ * @tc.desc: test AcquireAuthorizationForPublic with privileges exceeding max size (6).
+ * @tc.type: FUNC
+ * @tc.require: issueIXXXXX
+ */
+HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0600, TestSize.Level0)
+{
+    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0600");
+    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
+        .WillRepeatedly(Return(ERR_OK));
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
+    std::vector<std::string> privileges = {
+        TEST_PUBLIC_PRIVILEGE, TEST_PUBLIC_PRIVILEGE, TEST_PUBLIC_PRIVILEGE,
+        TEST_PUBLIC_PRIVILEGE, TEST_PUBLIC_PRIVILEGE, TEST_PUBLIC_PRIVILEGE
+    };
+    ErrCode ret = service_->AcquireAuthorizationForPublic(
+        privileges, true, callbackObj->AsObject(), requestObj->AsObject());
+    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+}
+
+/**
+ * @tc.name: AcquireAuthorizationForPublicTest_0700
+ * @tc.desc: test AcquireAuthorizationForPublic with all invalid privileges.
+ * @tc.type: FUNC
+ * @tc.require: issueIXXXXX
+ */
+HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0700, TestSize.Level0)
+{
+    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0700");
+    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
+        .WillRepeatedly(Return(ERR_OK));
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
+    std::vector<std::string> privileges = {TEST_PRIVILEGE};
+    ErrCode ret = service_->AcquireAuthorizationForPublic(
+        privileges, true, callbackObj->AsObject(), requestObj->AsObject());
+    EXPECT_EQ(ret, ERR_OK);
+    ASSERT_EQ(callbackObj->batchResults_.size(), 1u);
+    EXPECT_EQ(callbackObj->batchResults_[0].resultCode,
+        AuthorizationResultCode::AUTHORIZATION_PRIVILEGE_NOT_SUPPORTED);
+}
+
+/**
+ * @tc.name: AcquireAuthorizationForPublicTest_0800
+ * @tc.desc: test AcquireAuthorizationForPublic with duplicate privileges.
+ * @tc.type: FUNC
+ * @tc.require: issueIXXXXX
+ */
+HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0800, TestSize.Level0)
+{
+    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0800");
+    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
+        .WillRepeatedly(Return(ERR_OK));
+    g_getPrivilegeBriefDef = true;
+    g_kernelPermission = "test_kernel_perm";
+    g_transferPrivilegeToCode = true;
+    g_checkPrivilegeResult = ERR_OK;
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
+    std::vector<std::string> privileges = {TEST_PUBLIC_PRIVILEGE, TEST_PUBLIC_PRIVILEGE};
+    ErrCode ret = service_->AcquireAuthorizationForPublic(
+        privileges, true, callbackObj->AsObject(), requestObj->AsObject());
+    EXPECT_EQ(ret, ERR_OK);
+    ASSERT_EQ(callbackObj->batchResults_.size(), 1u);
+    EXPECT_EQ(callbackObj->batchResults_[0].privilege, TEST_PUBLIC_PRIVILEGE);
+    EXPECT_EQ(callbackObj->batchResults_[0].resultCode, AuthorizationResultCode::AUTHORIZATION_SUCCESS);
+    g_transferPrivilegeToCode = false;
+    g_checkPrivilegeResult = ERR_OK;
+}
+
+/**
+ * @tc.name: AcquireAuthorizationForPublicTest_0900
+ * @tc.desc: test AcquireAuthorizationForPublic with public permission denied.
+ * @tc.type: FUNC
+ * @tc.require: issueIXXXXX
+ */
+HWTEST_F(AuthorizationManagerServiceModuleTest, AcquireAuthorizationForPublicTest_0900, TestSize.Level0)
+{
+    ACCOUNT_LOGI("AcquireAuthorizationForPublicTest_0900");
+    EXPECT_CALL(MockAccountPermissionManager::GetInstance(), VerifyPermission(_))
+        .WillRepeatedly(Return(ERR_ACCOUNT_COMMON_PERMISSION_DENIED));
+    sptr<MockAuthorizationCallbackStub> callbackObj = new MockAuthorizationCallbackStub();
+    sptr<MockAuthorizationCallbackStub> requestObj = new MockAuthorizationCallbackStub();
+    std::vector<std::string> privileges = {TEST_PUBLIC_PRIVILEGE};
+    ErrCode ret = service_->AcquireAuthorizationForPublic(
+        privileges, true, callbackObj->AsObject(), requestObj->AsObject());
+    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_PERMISSION_DENIED);
+}
 } // namespace AccountSA
 } // namespace OHOS

@@ -35,6 +35,10 @@ constexpr size_t TOKEN_DATA_CIPHER_SIZE = 4;
 constexpr size_t TOKEN_DATA_TAG_SIZE = 16;
 constexpr size_t TOKEN_DATA_IV_SIZE = 12;
 constexpr size_t TOKEN_CRYPTO_SIGN_SIZE = 32;
+constexpr int32_t MAX_PERMISSIONS_NUM = 32;
+constexpr int32_t TEE_TA_VERSION_UNKNOWN = -1;
+constexpr int32_t TEE_TA_VERSION_V1 = 1;
+constexpr int32_t TEE_TA_VERSION_V2 = 2;
 
 typedef struct {
     uint8_t permission[PERMISSION_MAX_LEN + 1];
@@ -107,6 +111,34 @@ typedef struct ApplyUserTokenResult {
         (void)memset_s(&userToken, USER_TOKEN_LEN, 0, USER_TOKEN_LEN);
     }
 } __attribute__((__packed__)) ApplyUserTokenResult;
+
+typedef struct ApplyUserTokenParamV2 {
+    uint32_t pid = 0;
+    uint8_t permission[MAX_PERMISSIONS_NUM][PERMISSION_MAX_LEN + 1];
+    uint32_t permissionSizes[MAX_PERMISSIONS_NUM];
+    uint32_t permissionsNum = 0;
+    int32_t grantValidityPeriod = 0;
+    int32_t grantUserId = 0;
+    uint8_t authToken[AUTH_TOKEN_LEN];
+    uint32_t authTokenSize = 0;
+    uint8_t challenge[CHALLENGE_LEN];
+    ~ApplyUserTokenParamV2()
+    {
+        (void)memset_s(&authToken, AUTH_TOKEN_LEN * sizeof(uint8_t), 0, AUTH_TOKEN_LEN * sizeof(uint8_t));
+        (void)memset_s(&challenge, CHALLENGE_LEN * sizeof(uint8_t), 0, CHALLENGE_LEN * sizeof(uint8_t));
+    }
+} __attribute__((__packed__)) ApplyUserTokenParamV2;
+
+typedef struct ApplyUserTokenResultV2 {
+    uint8_t userToken[USER_TOKEN_LEN];
+    uint32_t userTokenSize;
+    uint32_t remainValidityTime;
+    uint32_t grantTime;
+    ~ApplyUserTokenResultV2()
+    {
+        (void)memset_s(&userToken, USER_TOKEN_LEN, 0, USER_TOKEN_LEN);
+    }
+} __attribute__((__packed__)) ApplyUserTokenResultV2;
 
 /**
  * @brief An adapter class for managing OS account operations with Trusted Application (TA) in TEE.
@@ -227,6 +259,34 @@ public:
      * @return ERR_OK on success, error code on failure (see account_error_no.h)
      */
     ErrCode TaAcquireAuthorization(const ApplyUserTokenParam &param, ApplyUserTokenResult &result);
+
+    /**
+     * @brief Acquires batch authorization from Trusted Application (TA) in TEE.
+     *
+     * This method communicates with the TA to obtain authorization tokens for
+     * multiple privileges in a single TEE call. The TA validates the request
+     * and returns per-privilege user tokens.
+     *
+     * @param param The parameters for the batch authorization request, including:
+     *             - pid: The process ID of the requesting application
+     *             - permissionCount: Number of privileges to authorize (≤ MAX_BATCH_PRIVILEGE_COUNT)
+     *             - permissions: Array of privilege strings to authorize
+     *             - permissionSizes: Size of each privilege string
+     *             - grantValidityPeriod: Validity period in seconds (shared)
+     *             - grantUserId: The user ID to grant privileges
+     *             - authToken: The IAM authentication token (shared)
+     *             - challenge: The session challenge (shared)
+     * @param result The output result containing:
+     *             - resultCount: Number of results returned by TA
+     *             - resultCodes: Per-privilege result codes (0 = success)
+     *             - userTokens: Array of granted user tokens from TA
+     *             - userTokenSizes: Size of each user token
+     *             - remainValidityTime: Remaining validity time in seconds (shared)
+     *             - grantTime: The timestamp when privileges were granted (shared)
+     * @return ERR_OK on success, error code on failure (see account_error_no.h)
+     */
+    ErrCode TaAcquireAuthorizationBatch(const ApplyUserTokenParamV2 &param,
+        ApplyUserTokenResultV2 &result);
 
 private:
     // pImpl pattern - hide all implementation details including TEE types
