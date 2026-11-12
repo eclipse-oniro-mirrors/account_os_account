@@ -39,7 +39,8 @@ const int DOMAIN_ACCOUNT_STATUS_LOGGED_IN = 1;
 const int CREDENTIAL_CHANGE_TYPE_ADD = 1;
 const int CREDENTIAL_CHANGE_TYPE_UPDATE = 2;
 const int CREDENTIAL_CHANGE_TYPE_DELETE = 3;
-static std::unordered_set<napi_env> g_registeredEnvs;
+static std::unordered_set<napi_env> g_envRegisteredForSubscribers;
+static std::unordered_set<napi_env> g_envRegisteredForConstraintSubs;
 static std::mutex g_envRegistrationLock;
 std::mutex g_lockForOsAccountSubscribers;
 std::mutex g_lockForConstraintChangeSubscribers;
@@ -1600,8 +1601,12 @@ static bool IsSubscribeInVec(napi_env env, SubscribeCBInfo *subscribeCBInfo)
 
 static void OnEnvCleanup(void* data)
 {
+    if (data == nullptr) {
+        ACCOUNT_LOGE("data is nullptr");
+        return;
+    }
     ACCOUNT_LOGI("OsAccount OnEnvCleanup start.");
-    napi_env cleanupEnv = static_cast<napi_env>(data);
+    napi_env cleanupEnv = *(reinterpret_cast<napi_env*>(data));
     {
         std::lock_guard<std::mutex> lock(g_lockForOsAccountSubscribers);
         auto it = g_osAccountSubscribers.begin();
@@ -1621,21 +1626,29 @@ static void OnEnvCleanup(void* data)
 
     {
         std::lock_guard<std::mutex> lock(g_envRegistrationLock);
-        g_registeredEnvs.erase(cleanupEnv);
+        g_envRegisteredForSubscribers.erase(cleanupEnv);
     }
+    delete reinterpret_cast<napi_env*>(data);
 }
 
 static bool RegisterEnvCleanupHook(napi_env env)
 {
     std::lock_guard<std::mutex> lock(g_envRegistrationLock);
-    if (g_registeredEnvs.find(env) != g_registeredEnvs.end()) {
+    if (g_envRegisteredForSubscribers.find(env) != g_envRegisteredForSubscribers.end()) {
         return true;
     }
-    napi_status status = napi_add_env_cleanup_hook(env, OnEnvCleanup, env);
+    napi_env* pEnv = new (std::nothrow) napi_env;
+    if (pEnv == nullptr) {
+        ACCOUNT_LOGE("Failed to allocate napi_env wrapper for cleanup hook");
+        return false;
+    }
+    *pEnv = env;
+    napi_status status = napi_add_env_cleanup_hook(env, OnEnvCleanup, reinterpret_cast<void*>(pEnv));
     if (status == napi_ok) {
-        g_registeredEnvs.insert(env);
+        g_envRegisteredForSubscribers.insert(env);
         return true;
     }
+    delete pEnv;
     return false;
 }
 
@@ -2086,8 +2099,12 @@ std::pair<bool, std::shared_ptr<ConstraintSubscriber>> FindAndGetSubscriber(
 
 static void OnConstraintSubEnvCleanup(void* data)
 {
+    if (data == nullptr) {
+        ACCOUNT_LOGE("data is nullptr");
+        return;
+    }
     ACCOUNT_LOGI("OnConstraintSubEnvCleanup start.");
-    napi_env cleanupEnv = static_cast<napi_env>(data);
+    napi_env cleanupEnv = *(reinterpret_cast<napi_env*>(data));
     {
         std::lock_guard<std::mutex> lock(g_lockForConstraintChangeSubscribers);
         auto it = g_osAccountConstraintChangeSubscribers.begin();
@@ -2104,21 +2121,29 @@ static void OnConstraintSubEnvCleanup(void* data)
 
     {
         std::lock_guard<std::mutex> lock(g_envRegistrationLock);
-        g_registeredEnvs.erase(cleanupEnv);
+        g_envRegisteredForConstraintSubs.erase(cleanupEnv);
     }
+    delete reinterpret_cast<napi_env*>(data);
 }
 
 static bool RegisterConstraintSubEnvCleanupHook(napi_env env)
 {
     std::lock_guard<std::mutex> lock(g_envRegistrationLock);
-    if (g_registeredEnvs.find(env) != g_registeredEnvs.end()) {
+    if (g_envRegisteredForConstraintSubs.find(env) != g_envRegisteredForConstraintSubs.end()) {
         return true;
     }
-    napi_status status = napi_add_env_cleanup_hook(env, OnConstraintSubEnvCleanup, env);
+    napi_env* pEnv = new (std::nothrow) napi_env;
+    if (pEnv == nullptr) {
+        ACCOUNT_LOGE("Failed to allocate napi_env wrapper for constraint cleanup hook");
+        return false;
+    }
+    *pEnv = env;
+    napi_status status = napi_add_env_cleanup_hook(env, OnConstraintSubEnvCleanup, reinterpret_cast<void*>(pEnv));
     if (status == napi_ok) {
-        g_registeredEnvs.insert(env);
+        g_envRegisteredForConstraintSubs.insert(env);
         return true;
     }
+    delete pEnv;
     return false;
 }
 

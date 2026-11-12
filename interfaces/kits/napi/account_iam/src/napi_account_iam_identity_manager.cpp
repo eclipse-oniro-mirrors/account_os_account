@@ -583,8 +583,12 @@ napi_value NapiAccountIAMIdentityManager::GetEnrolledId(napi_env env, napi_callb
 
 static void OnEnvCleanup(void* data)
 {
+    if (data == nullptr) {
+        ACCOUNT_LOGE("data is nullptr");
+        return;
+    }
     ACCOUNT_LOGI("AccountIam OnEnvCleanup start.");
-    napi_env cleanupEnv = static_cast<napi_env>(data);
+    napi_env cleanupEnv = *(reinterpret_cast<napi_env*>(data));
     {
         std::lock_guard<std::mutex> lock(g_lockForCredChangeSubscribers);
         auto it = g_credChangeSubscribers.begin();
@@ -598,8 +602,11 @@ static void OnEnvCleanup(void* data)
             }
         }
     }
-    std::lock_guard<std::mutex> lock(g_envRegistrationLock);
-    g_registeredEnvs.erase(cleanupEnv);
+    {
+        std::lock_guard<std::mutex> lock(g_envRegistrationLock);
+        g_registeredEnvs.erase(cleanupEnv);
+    }
+    delete reinterpret_cast<napi_env*>(data);
 }
 
 static bool RegisterEnvCleanupHook(napi_env env)
@@ -608,11 +615,18 @@ static bool RegisterEnvCleanupHook(napi_env env)
     if (g_registeredEnvs.find(env) != g_registeredEnvs.end()) {
         return true;
     }
-    napi_status status = napi_add_env_cleanup_hook(env, OnEnvCleanup, env);
+    napi_env* pEnv = new (std::nothrow) napi_env;
+    if (pEnv == nullptr) {
+        ACCOUNT_LOGE("Failed to allocate napi_env wrapper for cleanup hook");
+        return false;
+    }
+    *pEnv = env;
+    napi_status status = napi_add_env_cleanup_hook(env, OnEnvCleanup, reinterpret_cast<void*>(pEnv));
     if (status == napi_ok) {
         g_registeredEnvs.insert(env);
         return true;
     }
+    delete pEnv;
     return false;
 }
 

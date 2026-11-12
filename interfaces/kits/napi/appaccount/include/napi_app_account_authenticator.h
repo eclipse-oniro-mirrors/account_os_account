@@ -17,6 +17,7 @@
 #define OS_ACCOUNT_INTERFACES_KITS_NAPI_APPACCOUNT_INCLUDE_NAPI_APP_ACCOUNT_AUTHENTICATOR_H
 
 #include <mutex>
+#include <thread>
 #include <uv.h>
 
 #include "account_error_no.h"
@@ -100,11 +101,13 @@ private:
     static std::function<void()> IsAccountRemovableWork(const std::shared_ptr<JsAuthenticatorParam> &param);
     static std::function<void()> CreateAccountImplicitlyWork(const std::shared_ptr<JsAuthenticatorParam> &param);
     static std::function<void()> AuthWork(const std::shared_ptr<JsAuthenticatorParam> &param);
+    void ClearJsAuthenticatorRefs();
 
 private:
     napi_env env_ = nullptr;
     JsAuthenticator jsAuthenticator_;
     napi_value remoteObject_ = nullptr;
+    std::thread::id jsThreadId_;
 };
 }  // namespace AccountJsKit
 }  // namespace OHOS
