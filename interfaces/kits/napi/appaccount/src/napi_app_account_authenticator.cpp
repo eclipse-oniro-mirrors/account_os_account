@@ -34,6 +34,10 @@ namespace AccountJsKit {
 using namespace OHOS::AccountSA;
 
 namespace {
+struct AuthEnvCleanupEntry {
+    wptr<NapiAppAccountAuthenticator> owner;
+};
+
 void NotifyCallbackError(const sptr<IRemoteObject> &callback)
 {
     auto cbProxy = iface_cast<IAppAccountAuthenticatorCallback>(callback);
@@ -50,27 +54,44 @@ static void OnEnvCleanUp(void *data)
         ACCOUNT_LOGE("data is nullptr");
         return;
     }
-    auto authenticator = reinterpret_cast<NapiAppAccountAuthenticator *>(data);
-    authenticator->SetEnv(nullptr);
+    auto *entry = reinterpret_cast<AuthEnvCleanupEntry *>(data);
+    auto owner = entry->owner.promote();
+    if (owner != nullptr) {
+        owner->SetEnv(nullptr);
+    }
+    delete entry;
 }
 
 NapiAppAccountAuthenticator::NapiAppAccountAuthenticator(napi_env env, JsAuthenticator &jsAuthenticator)
-    : env_(env), jsAuthenticator_(jsAuthenticator)
+    : env_(env), jsAuthenticator_(jsAuthenticator), jsThreadId_(std::this_thread::get_id())
 {}
 
 NapiAppAccountAuthenticator::~NapiAppAccountAuthenticator()
 {
-    std::vector<napi_ref> napiRefVec = {
-        jsAuthenticator_.addAccountImplicitly,
-        jsAuthenticator_.authenticate,
-        jsAuthenticator_.verifyCredential,
-        jsAuthenticator_.checkAccountLabels,
-        jsAuthenticator_.setProperties,
-        jsAuthenticator_.isAccountRemovable,
-        jsAuthenticator_.createAccountImplicitly,
-        jsAuthenticator_.auth
-    };
-    ReleaseNapiRefArray(env_, napiRefVec);
+    if (env_ == nullptr) {
+        ClearJsAuthenticatorRefs();
+        return;
+    }
+    if (jsThreadId_ == std::this_thread::get_id()) {
+        std::vector<napi_ref> napiRefVec = {
+            jsAuthenticator_.addAccountImplicitly,
+            jsAuthenticator_.authenticate,
+            jsAuthenticator_.verifyCredential,
+            jsAuthenticator_.checkAccountLabels,
+            jsAuthenticator_.setProperties,
+            jsAuthenticator_.isAccountRemovable,
+            jsAuthenticator_.createAccountImplicitly,
+            jsAuthenticator_.auth
+        };
+        ReleaseNapiRefArray(env_, napiRefVec);
+    } else {
+        ACCOUNT_LOGW("Authenticator is destroyed in non-js thread, napi refs will be released with env");
+    }
+    ClearJsAuthenticatorRefs();
+}
+
+void NapiAppAccountAuthenticator::ClearJsAuthenticatorRefs()
+{
     jsAuthenticator_.addAccountImplicitly = nullptr;
     jsAuthenticator_.authenticate = nullptr;
     jsAuthenticator_.verifyCredential = nullptr;
@@ -79,7 +100,6 @@ NapiAppAccountAuthenticator::~NapiAppAccountAuthenticator()
     jsAuthenticator_.isAccountRemovable = nullptr;
     jsAuthenticator_.createAccountImplicitly = nullptr;
     jsAuthenticator_.auth = nullptr;
-    napi_remove_env_cleanup_hook(env_, OnEnvCleanUp, this);
 }
 
 bool NapiAppAccountAuthenticator::CheckObjectLegality() const
@@ -667,7 +687,13 @@ napi_value NapiAppAccountAuthenticator::JsConstructor(napi_env env, napi_callbac
     NAPI_ASSERT(env, func != nullptr, "create function getRemoteObject failed");
     status = napi_set_named_property(env, napiRemoteObj, "getRemoteObject", func);
     NAPI_ASSERT(env, status == napi_ok, "set property getRemoteObject failed");
-    status = napi_add_env_cleanup_hook(env, OnEnvCleanUp, authenticator.GetRefPtr());
+    auto *cleanupEntry = new (std::nothrow) AuthEnvCleanupEntry();
+    NAPI_ASSERT(env, cleanupEntry != nullptr, "create cleanup entry failed");
+    cleanupEntry->owner = authenticator;
+    status = napi_add_env_cleanup_hook(env, OnEnvCleanUp, cleanupEntry);
+    if (status != napi_ok) {
+        delete cleanupEntry;
+    }
     NAPI_ASSERT(env, status == napi_ok, "add cleanup hook failed");
     return napiRemoteObj;
 }
