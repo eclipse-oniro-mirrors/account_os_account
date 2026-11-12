@@ -339,9 +339,11 @@ ErrCode SessionAbilityConnection::UnRegisterAuthAppRemoteObject(int32_t callingP
 {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     if (authAppPid_ != callingPid) {
-        ACCOUNT_LOGE("CallingPid not equal callingPid=%{public}d, authpid=%{public}d.", callingPid, authAppPid_);
-        REPORT_OS_ACCOUNT_FAIL(localId_, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_AUTHORIZATION_NOT_SUPPORT,
-            "CallingPid not equal");
+        if (abilityConnectionStub_ != nullptr) {
+            ACCOUNT_LOGE("CallingPid not equal callingPid=%{public}d, authpid=%{public}d.", callingPid, authAppPid_);
+            REPORT_OS_ACCOUNT_FAIL(localId_, PRIVILEGE_OPT_ACQUIRE_AUTH, ERR_AUTHORIZATION_NOT_SUPPORT,
+                "CallingPid not equal");
+        }
         return ERR_AUTHORIZATION_NOT_SUPPORT;
     }
     CallbackOnResult(errCode_, hasAuthCallback_ ? authResult_.resultCode :
