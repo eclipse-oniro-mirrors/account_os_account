@@ -38,6 +38,7 @@ namespace {
     constexpr uint32_t TOKEN_MAGIC = 0x544F534F;
     constexpr uint32_t TOKEN_VERSION = 1;
     constexpr int64_t MILLIS_PER_SECOND = 1000;
+    constexpr size_t MAX_BATCH_PRIVILEGE_COUNT = 5;
 }
 
 // Simplified checksum calculation (simple cumulative checksum for data corruption detection)
@@ -230,6 +231,50 @@ public:
         return ERR_OK;
     }
 
+    ErrCode TaAcquireAuthorizationBatch(const ApplyUserTokenParamV2& param, ApplyUserTokenResultV2& result)
+    {
+        if (param.permissionsNum == 0 || param.permissionsNum > static_cast<uint32_t>(MAX_BATCH_PRIVILEGE_COUNT)) {
+            ACCOUNT_LOGE("Invalid permissionsNum: %{public}u", param.permissionsNum);
+            return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+        }
+        if (param.permissionsNum > 1) {
+            ACCOUNT_LOGE("TEE V1 does not support batch authorization, permissionsNum:%{public}u",
+                param.permissionsNum);
+            return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+        }
+        int32_t accountType = -1;
+        ErrCode ret = GetOsAccountType(param.grantUserId, accountType);
+        if (ret != ERR_OK) {
+            ACCOUNT_LOGE("Failed to get account type for userId=%{public}d, ret=%{public}d",
+                         param.grantUserId, ret);
+            return ret;
+        }
+        if (accountType != OsAccountType::ADMIN) {
+            ACCOUNT_LOGE("UserId=%{public}d is not admin (accountType=%{public}d)",
+                param.grantUserId, accountType);
+            return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+        }
+        ApplyUserTokenParam singleParam;
+        singleParam.pid = param.pid;
+        singleParam.grantValidityPeriod = param.grantValidityPeriod;
+        singleParam.grantUserId = param.grantUserId;
+        singleParam.authTokenSize = static_cast<size_t>(param.authTokenSize);
+        (void)memcpy_s(singleParam.authToken, AUTH_TOKEN_LEN, param.authToken, AUTH_TOKEN_LEN);
+        (void)memcpy_s(singleParam.challenge, CHALLENGE_LEN, param.challenge, CHALLENGE_LEN);
+        singleParam.permissionSize = static_cast<size_t>(param.permissionSizes[0]);
+        (void)memcpy_s(singleParam.permission, PERMISSION_MAX_LEN + 1,
+            param.permission[0], param.permissionSizes[0]);
+        ApplyUserTokenResult singleResult;
+        ret = GenerateSoftwareToken(singleParam, singleResult);
+        if (ret == ERR_OK) {
+            result.userTokenSize = static_cast<uint32_t>(singleResult.userTokenSize);
+            result.remainValidityTime = singleResult.remainValidityTime;
+            result.grantTime = singleResult.grantTime;
+            (void)memcpy_s(result.userToken, USER_TOKEN_LEN, singleResult.userToken, USER_TOKEN_LEN);
+        }
+        return ret;
+    }
+
 private:
     ErrCode PrepareTokenPlainData(const ApplyUserTokenParam& param, UserTokenPlain& tokenPlain)
     {
@@ -357,7 +402,7 @@ private:
         result.remainValidityTime = param.grantValidityPeriod;
         result.grantTime = tokenPlain.userTokenDataPlain.grantTime;
 
-        ACCOUNT_LOGI("Success, userId=%{public}d, grantTime=%{public}u, validity=%{public}d sec, tokenSize=%{public}zu",
+        ACCOUNT_LOGI("Success, userId=%{public}d, grantTime=%{public}u, validity=%{public}u sec, tokenSize=%{public}zu",
                      param.grantUserId, result.grantTime, result.remainValidityTime, result.userTokenSize);
         return ERR_OK;
     }
@@ -445,6 +490,12 @@ ErrCode OsAccountTeeAdapter::CheckTimestampExpired(const uint32_t grantTime, con
 ErrCode OsAccountTeeAdapter::TaAcquireAuthorization(const ApplyUserTokenParam& param, ApplyUserTokenResult& result)
 {
     return impl_->TaAcquireAuthorization(param, result);
+}
+
+ErrCode OsAccountTeeAdapter::TaAcquireAuthorizationBatch(const ApplyUserTokenParamV2& param,
+    ApplyUserTokenResultV2& result)
+{
+    return impl_->TaAcquireAuthorizationBatch(param, result);
 }
 
 } // namespace AccountSA

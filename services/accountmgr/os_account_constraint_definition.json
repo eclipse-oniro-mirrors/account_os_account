@@ -78,6 +78,8 @@
         "constraint.multiWindow",
         "constraint.distributed.transmission",
         "constraint.freeWindow",
-        "constraint.remote_share"
+        "constraint.remote_share",
+        "constraint.screen.shot",
+        "constraint.screen.record"
     ]
 }

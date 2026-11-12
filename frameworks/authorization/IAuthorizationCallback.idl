@@ -20,4 +20,5 @@ sequenceable OHOS.IRemoteObject;
 interface OHOS.AccountSA.IAuthorizationCallback {
    [oneway]void OnResult([in] int resultCode, [in] AuthorizationResult authorizationResult);
    [oneway]void OnConnectAbility([in] ConnectAbilityInfo info, [in] IRemoteObject connectCallback);
+   [oneway]void OnBatchResult([in] int resultCode, [in] AuthorizationResult[] results);
 }

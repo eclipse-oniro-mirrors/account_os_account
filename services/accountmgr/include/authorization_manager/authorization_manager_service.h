@@ -16,6 +16,7 @@
 #ifndef OS_ACCOUNT_SERVICES_AUTHORIZATION_INCLUDE_OSACCOUNT_AUTHORIZATION_MANAGER_SERVICE_H
 #define OS_ACCOUNT_SERVICES_AUTHORIZATION_INCLUDE_OSACCOUNT_AUTHORIZATION_MANAGER_SERVICE_H
 
+#include <map>
 #include <memory>
 #include <stdint.h>
 #include <sys/types.h>
@@ -133,7 +134,7 @@ public:
     ErrCode AcquireAdminAuthorization(const std::string &adminName, const std::vector<uint8_t> &challenge,
         const sptr<IRemoteObject> &callback, const std::string &privilege) override;
 
-    ErrCode AcquireAuthorizationForPublic(const std::string &privilege, bool isContextValid,
+    ErrCode AcquireAuthorizationForPublic(const std::vector<std::string> &privileges, bool isContextValid,
         const sptr<IRemoteObject> &authorizationResultCallback,
         const sptr<IRemoteObject> &requestRemoteObj) override;
 
@@ -150,18 +151,16 @@ private:
     ErrCode ValidateChallengeAndContext(const AcquireAuthorizationOptions &options, int32_t localId);
     ErrCode CheckCallbackAndConnections(const sptr<IAuthorizationCallback> &callback,
         const AcquireAuthorizationOptions &options, int32_t localId, AuthorizationResult &authorizationResult);
-    ErrCode GetPrivilegeDefinition(AuthorizationResult &authorizationResult, PrivilegeBriefDef &def, int32_t localId);
-    ErrCode HandleWhenReuse(AuthorizationResult &authorizationResult, const AcquireAuthorizationOptions &options,
-        const sptr<IAuthorizationCallback> &callback, int32_t localId);
 
     bool VerifyWidget(const std::string &bundleName);
 
     ErrCode CheckPublicPermission(int32_t localId);
-    bool CheckPrivilegeEnumValid(const std::string &privilege, AuthorizationResult &authorizationResult,
-        const sptr<IAuthorizationCallback> &callback);
     bool CheckKernelPermission(const PrivilegeBriefDef &def, const std::string &privilege,
-        int32_t localId, AuthorizationResult &authorizationResult,
-        const sptr<IAuthorizationCallback> &callback);
+         AuthorizationResult &authorizationResult);
+    ErrCode PrecheckBatchPrivileges(const std::vector<std::string> &privileges, int32_t localId,
+        std::vector<std::string> &privilegesToAuthorize, std::map<std::string, AuthorizationResult> &results);
+    ErrCode CheckBatchCacheReuse(std::vector<std::string> &privilegesToAuthorize,
+        std::map<std::string, AuthorizationResult> &results);
 
     /// OS account configuration
     OsAccountConfig config_;

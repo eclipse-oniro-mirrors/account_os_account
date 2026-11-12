@@ -16,11 +16,14 @@
 #ifndef MOCK_AUTHORIZATION_TEE_ADAPTER_H
 #define MOCK_AUTHORIZATION_TEE_ADAPTER_H
 
+#include <securec.h>
+
 namespace OHOS {
 namespace AccountSA {
 constexpr int32_t USER_TOKEN_LEN = 2048;
 constexpr int32_t AUTH_TOKEN_LEN = 1024;
 constexpr int32_t PERMISSION_MAX_LEN = 1024;
+constexpr int32_t MAX_PERMISSIONS_NUM = 32;
 constexpr size_t MAX_TOKEN_SIZE = 1024;
 constexpr size_t CHALLENGE_LEN = 32;
 constexpr size_t TOKEN_DATA_CIPHER_SIZE = 4;
@@ -87,6 +90,51 @@ typedef struct {
     int32_t remainValidityTime;
     uint32_t grantTime;
 } __attribute__((__packed__)) ApplyUserTokenResult;
+
+typedef struct {
+    uint32_t pid;
+    uint32_t privileges[MAX_PERMISSIONS_NUM];
+    uint32_t privilegesNum;
+    uint32_t grantTime;
+    int32_t grantValidityPeriod;
+    uint8_t challenge[CHALLENGE_LEN];
+    uint8_t authToken[AUTH_TOKEN_LEN];
+    size_t authTokenSize;
+} __attribute__((__packed__)) UserTokenDataPlainV2;
+
+typedef struct {
+    UserTokenDataPlainV2 userTokenDataPlain;
+    UserTokenDataToEncrypt userTokenDataToEncrypt;
+} UserTokenPlainV2;
+
+typedef struct ApplyUserTokenResultV2 {
+    uint8_t userToken[USER_TOKEN_LEN];
+    uint32_t userTokenSize;
+    uint32_t remainValidityTime;
+    uint32_t grantTime;
+    ~ApplyUserTokenResultV2()
+    {
+        (void)memset_s(&userToken, USER_TOKEN_LEN, 0, USER_TOKEN_LEN);
+    }
+} __attribute__((__packed__)) ApplyUserTokenResultV2;
+
+typedef struct ApplyUserTokenParamV2 {
+    uint32_t pid = 0;
+    uint8_t permission[MAX_PERMISSIONS_NUM][PERMISSION_MAX_LEN + 1];
+    uint32_t permissionSizes[MAX_PERMISSIONS_NUM];
+    uint32_t permissionsNum = 0;
+    int32_t grantValidityPeriod = 0;
+    int32_t grantUserId = 0;
+    uint8_t authToken[AUTH_TOKEN_LEN];
+    uint32_t authTokenSize = 0;
+    uint8_t challenge[CHALLENGE_LEN];
+    ~ApplyUserTokenParamV2()
+    {
+        (void)memset_s(&authToken, AUTH_TOKEN_LEN * sizeof(uint8_t), 0, AUTH_TOKEN_LEN * sizeof(uint8_t));
+        (void)memset_s(&challenge, CHALLENGE_LEN * sizeof(uint8_t), 0, CHALLENGE_LEN * sizeof(uint8_t));
+    }
+} __attribute__((__packed__)) ApplyUserTokenParamV2;
+
 /**
  * @brief An adapter class for managing OS account operations with Trusted Application (TA) in TEE.
  *
@@ -99,6 +147,8 @@ public:
     ~OsAccountTeeAdapter() = default;
 
     ErrCode TaAcquireAuthorization(const ApplyUserTokenParam &param, ApplyUserTokenResult &result);
+    ErrCode TaAcquireAuthorizationBatch(const ApplyUserTokenParamV2 &param,
+        ApplyUserTokenResultV2 &result);
     ErrCode VerifyToken(const std::vector<uint8_t>& token,
         const std::string &privilege, std::vector<uint8_t>& tokenResult);
 };

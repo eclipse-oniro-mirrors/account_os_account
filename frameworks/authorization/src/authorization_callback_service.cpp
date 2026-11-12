@@ -64,6 +64,27 @@ ErrCode AuthorizationCallbackService::OnResult(int32_t resultCode, const Account
     return ret;
 }
 
+ErrCode AuthorizationCallbackService::OnBatchResult(int32_t resultCode,
+    const std::vector<AccountSA::AuthorizationResult>& results)
+{
+    ACCOUNT_LOGI("OnBatchResult resultCode:%{public}d, size:%{public}zu", resultCode, results.size());
+    if (innerCallback_ == nullptr) {
+        ACCOUNT_LOGE("Inner callback is nullptr");
+        if (afterOnResult_ != nullptr) {
+            afterOnResult_();
+        }
+        return ERR_OK;
+    }
+    ErrCode ret = innerCallback_->OnBatchResult(resultCode, results);
+    if (ret != ERR_OK) {
+        ACCOUNT_LOGE("Inner callback OnBatchResult failed, errCode:%{public}d", ret);
+    }
+    if (afterOnResult_ != nullptr) {
+        afterOnResult_();
+    }
+    return ret;
+}
+
 /**
  * @brief Handle connect ability callback for UI extension.
  * @param info The connection ability information

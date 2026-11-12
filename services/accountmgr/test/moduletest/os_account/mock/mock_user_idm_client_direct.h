@@ -66,8 +66,6 @@ public:
     {
         return 0;
     }
-    void ClearRedundancyCredential(const std::shared_ptr<UserIdmClientCallback> &callback) override
-    {}
     void DeleteSubProfile(int32_t userId, int32_t subProfileId,
         const std::shared_ptr<UserIdmClientCallback> &callback) override
     {
@@ -87,11 +85,6 @@ public:
     }
     int32_t GetCredentialInfoSync(int32_t userId, AuthType authType,
         std::vector<CredentialInfo> &credentialInfoList) override
-    {
-        return 0;
-    }
-    int32_t GetLatestEnrollmentTime(int32_t userId, AuthType authType,
-        uint64_t &latestEnrollmentTime) override
     {
         return 0;
     }

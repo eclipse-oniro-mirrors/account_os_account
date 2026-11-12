@@ -44,6 +44,14 @@ public:
      */
     virtual ErrCode OnResult(int32_t resultCode, const AccountSA::AuthorizationResult& result) = 0;
 
+    virtual ErrCode OnBatchResult(int32_t resultCode, const std::vector<AccountSA::AuthorizationResult>& results)
+    {
+        for (const auto &result : results) {
+            OnResult(resultCode, result);
+        }
+        return ERR_OK;
+    }
+
     /**
      * @brief Called when UI extension connection is needed.
      *

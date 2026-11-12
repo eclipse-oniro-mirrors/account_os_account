@@ -31,6 +31,7 @@ namespace AccountJsKit {
 static thread_local napi_ref g_authorizationPublicRef = nullptr;
 static napi_property_descriptor g_properties[] = {
     DECLARE_NAPI_FUNCTION("requestAuthorization", &NapiAuthorizationPublicManager::AcquireAuthorization),
+    DECLARE_NAPI_FUNCTION("requestBatchAuthorization", &NapiAuthorizationPublicManager::AcquireBatchAuthorization),
     DECLARE_NAPI_FUNCTION("hasAuthorization", &NapiAuthorizationPublicManager::HasAuthorization),
 };
 
@@ -71,6 +72,37 @@ static bool ParsePrivilegeString(napi_env env, napi_value value, std::string &pr
     NAPI_CALL_BASE(env, napi_get_value_string_utf8(env, value, nullptr, 0, &len), false);
     privilege.resize(len);
     NAPI_CALL_BASE(env, napi_get_value_string_utf8(env, value, privilege.data(), len + 1, &len), false);
+    return true;
+}
+
+static bool ParsePrivilegeArray(napi_env env, napi_value value, std::vector<std::string> &privileges, bool throwErr)
+{
+    bool isArray = false;
+    NAPI_CALL_BASE(env, napi_is_array(env, value, &isArray), false);
+    if (!isArray) {
+        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, "The type of \"privileges\" must be Array", throwErr);
+        return false;
+    }
+    uint32_t length = 0;
+    NAPI_CALL_BASE(env, napi_get_array_length(env, value, &length), false);
+    if (length == 0) {
+        AccountNapiThrow(env, ERR_JS_INVALID_PARAMETER, "The privileges array is empty", throwErr);
+        return false;
+    }
+    if (length > MAX_BATCH_PRIVILEGE_COUNT) {
+        AccountNapiThrow(env, ERR_JS_INVALID_PARAMETER, "The privileges array exceeds the maximum batch size of 5",
+            throwErr);
+        return false;
+    }
+    for (uint32_t i = 0; i < length; ++i) {
+        napi_value element = nullptr;
+        NAPI_CALL_BASE(env, napi_get_element(env, value, i, &element), false);
+        std::string privilege;
+        if (!ParsePrivilegeString(env, element, privilege, throwErr)) {
+            return false;
+        }
+        privileges.push_back(privilege);
+    }
     return true;
 }
 
@@ -138,7 +170,7 @@ static void AcquireAuthorizationPublicExecuteCB(napi_env env, void *data)
             BuildResultJs(env, result, resultJs);
         }, true);
     asyncContext->errCode = AccountSA::AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
-        asyncContext->privilege, asyncContext->options.isContextValid, callback);
+        {asyncContext->privilege}, asyncContext->options.isContextValid, callback);
     if (asyncContext->errCode != ERR_OK) {
         AccountSA::AuthorizationResult result;
         result.privilege = asyncContext->privilege;
@@ -269,6 +301,71 @@ napi_value NapiAuthorizationPublicManager::AcquireAuthorization(napi_env env, na
     NAPI_CALL(env, napi_create_string_utf8(env, "AcquireAuthorizationForPublic", NAPI_AUTO_LENGTH, &resource));
     NAPI_CALL(env, napi_create_async_work(env, nullptr, resource, AcquireAuthorizationPublicExecuteCB,
         AcquireAuthorizationPublicCompletedCB, reinterpret_cast<void *>(context.get()), &(context->work)));
+    NAPI_CALL(env, napi_queue_async_work_with_qos(env, context->work, napi_qos_user_initiated));
+    context.release();
+    return result;
+}
+
+static bool ParseContextForAcquireBatchAuthorization(napi_env env, napi_callback_info cbInfo,
+    AcquireAuthorizationContext *asyncContext)
+{
+    size_t argc = ARG_SIZE_TWO;
+    napi_value argv[ARG_SIZE_TWO] = {nullptr};
+    asyncContext->env = env;
+    if (napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr) != napi_ok) {
+        ACCOUNT_LOGE("Napi_get_cb_info failed");
+        return false;
+    }
+    if (argc < ARG_SIZE_TWO) {
+        ACCOUNT_LOGE("Need input two parameters, but got %{public}zu", argc);
+        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, "Parameter error. The number of parameters should be 2",
+            asyncContext->throwErr);
+        return false;
+    }
+    if (!ParsePrivilegeArray(env, argv[PARAM_ZERO], asyncContext->privileges, asyncContext->throwErr)) {
+        return false;
+    }
+    if (!ValidateContext(env, argv[PARAM_ONE], asyncContext)) {
+        return false;
+    }
+    return true;
+}
+
+static void AcquireBatchAuthorizationExecuteCB(napi_env env, void *data)
+{
+    AcquireAuthorizationContext *asyncContext = reinterpret_cast<AcquireAuthorizationContext *>(data);
+    if (asyncContext == nullptr) {
+        ACCOUNT_LOGE("AsyncContext is nullptr.");
+        return;
+    }
+    auto callback = std::make_shared<NapiBatchAuthorizationResultCallback>(asyncContext);
+    asyncContext->errCode = AccountSA::AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
+        asyncContext->privileges, asyncContext->options.isContextValid, callback);
+    if (asyncContext->errCode != ERR_OK) {
+        std::vector<AccountSA::AuthorizationResult> emptyResults;
+        callback->OnBatchResult(asyncContext->errCode, emptyResults);
+    }
+}
+
+static void AcquireBatchAuthorizationCompletedCB(napi_env env, napi_status status, void *data)
+{
+    delete reinterpret_cast<AcquireAuthorizationContext *>(data);
+}
+
+napi_value NapiAuthorizationPublicManager::AcquireBatchAuthorization(napi_env env, napi_callback_info cbInfo)
+{
+    auto context = std::make_unique<AcquireAuthorizationContext>(env, true);
+    context->isPublicApi = true;
+    if (!ParseContextForAcquireBatchAuthorization(env, cbInfo, context.get())) {
+        ACCOUNT_LOGE("Failed to parse parameter for AcquireBatchAuthorization");
+        return nullptr;
+    }
+    napi_value result = nullptr;
+    NAPI_CALL(env, napi_create_promise(env, &context->deferred, &result));
+    napi_value resource = nullptr;
+    NAPI_CALL(env, napi_create_string_utf8(env, "AcquireAuthorizationForPublic", NAPI_AUTO_LENGTH, &resource));
+    NAPI_CALL(env, napi_create_async_work(env, nullptr, resource, AcquireBatchAuthorizationExecuteCB,
+        AcquireBatchAuthorizationCompletedCB, reinterpret_cast<void *>(context.get()), &(context->work)));
     NAPI_CALL(env, napi_queue_async_work_with_qos(env, context->work, napi_qos_user_initiated));
     context.release();
     return result;

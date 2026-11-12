@@ -1510,10 +1510,9 @@ static AcquireAuthorizationResult BuildAuthorizationResult(
     if (result.resultCode == AccountSA::AuthorizationResultCode::AUTHORIZATION_SUCCESS) {
         out.isReused = taihe::optional<bool>(std::in_place_t{}, result.isReused);
         out.validityPeriod = optional<int32_t>(std::in_place_t{}, result.validityPeriod);
-        if (result.token.size() > 0) {
-            out.token = optional<array<uint8_t>>(std::in_place_t{}, taihe::copy_data_t{},
-                                                  result.token.data(), result.token.size());
-        }
+        const uint8_t *tokenData = result.token.empty() ? nullptr : result.token.data();
+        out.token = optional<array<uint8_t>>(std::in_place_t{}, taihe::copy_data_t{},
+                                             tokenData, result.token.size());
     }
     return out;
 }

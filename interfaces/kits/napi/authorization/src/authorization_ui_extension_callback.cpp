@@ -124,8 +124,8 @@ AAFwk::Want UIExtensionCallbackBase::BuildWantFromConnectInfo(const ConnectAbili
     want.SetParam(AuthorizationConstants::EXTENSION_TYPE_KEY, AuthorizationConstants::UI_EXTENSION_TYPE);
 
     want.SetParam("challenge", info.sessionId);
-    want.SetParam("privilege", info.privilege);
-    want.SetParam("description", info.description);
+    want.SetParam("privileges", info.privileges);
+    want.SetParam("descriptions", info.descriptions);
 
     return want;
 }

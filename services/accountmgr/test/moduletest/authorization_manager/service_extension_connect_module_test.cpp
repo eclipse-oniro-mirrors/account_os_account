@@ -66,6 +66,12 @@ public:
     MockAuthorizationCallbackStub() = default;
     ~MockAuthorizationCallbackStub() = default;
     ErrCode OnResult(int32_t resultCode, const AccountSA::AuthorizationResult& result) override { return 0; }
+    ErrCode OnBatchResult(int32_t resultCode,
+        const std::vector<AccountSA::AuthorizationResult>& results) override
+    {
+        batchResults_ = results;
+        return 0;
+    }
     ErrCode OnConnectAbility(const AccountSA::ConnectAbilityInfo& info, const sptr<IRemoteObject>& callback) override
     {
         return 0;
@@ -81,6 +87,7 @@ public:
     int32_t sendRequestTime = 0;
     int32_t sendRequestResult_ = 0;
     bool addDeathRecipientResult_ = true;
+    std::vector<AccountSA::AuthorizationResult> batchResults_;
 
 private:
 };
@@ -193,8 +200,8 @@ HWTEST_F(ServiceExtensionConnectModuleTest, ServiceExtensionConnectTest_HasServi
     info.bundleName = "test";
     info.abilityName = TEST_ABILITY_NAME;
     info.callingUid = TEST_CALLING_PID;
-    info.privilege = TEST_PRIVILEGE;
-    info.description = TEST_DESCRIPTION;
+    info.privileges = {TEST_PRIVILEGE};
+    info.descriptions = {TEST_DESCRIPTION};
 
     sptr<MockAuthorizationCallbackStub> mockCallback = new (std::nothrow) MockAuthorizationCallbackStub();
     ASSERT_NE(mockCallback, nullptr);
@@ -226,8 +233,8 @@ HWTEST_F(ServiceExtensionConnectModuleTest, ServiceExtensionConnectTest_SessionC
     info.bundleName = TEST_BUNDLE_NAME;
     info.abilityName = TEST_ABILITY_NAME;
     info.callingUid = TEST_CALLING_PID;
-    info.privilege = TEST_PRIVILEGE;
-    info.description = TEST_DESCRIPTION;
+    info.privileges = {TEST_PRIVILEGE};
+    info.descriptions = {TEST_DESCRIPTION};
 
     sptr<MockAuthorizationCallbackStub> mockCallback = new (std::nothrow) MockAuthorizationCallbackStub();
     ASSERT_NE(mockCallback, nullptr);
@@ -275,8 +282,8 @@ HWTEST_F(ServiceExtensionConnectModuleTest, ServiceExtensionConnectTest_SessionC
     info.bundleName = TEST_BUNDLE_NAME;
     info.abilityName = TEST_ABILITY_NAME;
     info.callingUid = TEST_CALLING_PID;
-    info.privilege = TEST_PRIVILEGE;
-    info.description = TEST_DESCRIPTION;
+    info.privileges = {TEST_PRIVILEGE};
+    info.descriptions = {TEST_DESCRIPTION};
 
     sptr<MockAuthorizationCallbackStub> mockCallback = new (std::nothrow) MockAuthorizationCallbackStub();
     ASSERT_NE(mockCallback, nullptr);
@@ -311,8 +318,8 @@ HWTEST_F(ServiceExtensionConnectModuleTest, ServiceExtensionConnectTest_SessionC
     info.bundleName = TEST_BUNDLE_NAME;
     info.abilityName = TEST_ABILITY_NAME;
     info.callingUid = TEST_CALLING_PID;
-    info.privilege = TEST_PRIVILEGE;
-    info.description = TEST_DESCRIPTION;
+    info.privileges = {TEST_PRIVILEGE};
+    info.descriptions = {TEST_DESCRIPTION};
 
     sptr<MockAuthorizationCallbackStub> mockCallback = new (std::nothrow) MockAuthorizationCallbackStub();
     ASSERT_NE(mockCallback, nullptr);
@@ -327,8 +334,8 @@ HWTEST_F(ServiceExtensionConnectModuleTest, ServiceExtensionConnectTest_SessionC
     info2.bundleName = TEST_BUNDLE_NAME + "_2";
     info2.abilityName = TEST_ABILITY_NAME + "_2";
     info2.callingUid = TEST_CALLING_PID;
-    info2.privilege = TEST_PRIVILEGE;
-    info2.description = TEST_DESCRIPTION;
+    info2.privileges = {TEST_PRIVILEGE};
+    info2.descriptions = {TEST_DESCRIPTION};
 
     AuthorizationResult result2;
     connection_.SessionConnectExtension(info2, callback, result2);
@@ -351,8 +358,8 @@ HWTEST_F(ServiceExtensionConnectModuleTest, ServiceExtensionConnectTest_Validate
     info.bundleName = TEST_BUNDLE_NAME;
     info.abilityName = TEST_ABILITY_NAME;
     info.callingUid = TEST_CALLING_PID;
-    info.privilege = TEST_PRIVILEGE;
-    info.description = TEST_DESCRIPTION;
+    info.privileges = {TEST_PRIVILEGE};
+    info.descriptions = {TEST_DESCRIPTION};
 
     sptr<MockAuthorizationCallbackStub> mockCallback = new (std::nothrow) MockAuthorizationCallbackStub();
     ASSERT_NE(mockCallback, nullptr);
@@ -382,8 +389,8 @@ HWTEST_F(ServiceExtensionConnectModuleTest, ServiceExtensionConnectTest_SendConn
     info.bundleName = TEST_BUNDLE_NAME;
     info.abilityName = TEST_ABILITY_NAME;
     info.callingUid = TEST_CALLING_PID;
-    info.privilege = TEST_PRIVILEGE;
-    info.description = TEST_DESCRIPTION;
+    info.privileges = {TEST_PRIVILEGE};
+    info.descriptions = {TEST_DESCRIPTION};
 
     sptr<MockAuthorizationCallbackStub> mockCallback = new (std::nothrow) MockAuthorizationCallbackStub();
     ASSERT_NE(mockCallback, nullptr);
@@ -454,8 +461,8 @@ HWTEST_F(ServiceExtensionConnectModuleTest,
     info.bundleName = TEST_BUNDLE_NAME;
     info.abilityName = TEST_ABILITY_NAME;
     info.callingUid = TEST_CALLING_PID;
-    info.privilege = TEST_PRIVILEGE;
-    info.description = TEST_DESCRIPTION;
+    info.privileges = {TEST_PRIVILEGE};
+    info.descriptions = {TEST_DESCRIPTION};
 
     sptr<MockAuthorizationCallbackStub> mockCallback = new (std::nothrow) MockAuthorizationCallbackStub();
     ASSERT_NE(mockCallback, nullptr);
@@ -490,8 +497,8 @@ HWTEST_F(ServiceExtensionConnectModuleTest,
     info.bundleName = TEST_BUNDLE_NAME;
     info.abilityName = TEST_ABILITY_NAME;
     info.callingUid = TEST_CALLING_PID;
-    info.privilege = TEST_PRIVILEGE;
-    info.description = TEST_DESCRIPTION;
+    info.privileges = {TEST_PRIVILEGE};
+    info.descriptions = {TEST_DESCRIPTION};
 
     sptr<MockAuthorizationCallbackStub> mockCallback = new (std::nothrow) MockAuthorizationCallbackStub();
     ASSERT_NE(mockCallback, nullptr);
@@ -545,8 +552,8 @@ HWTEST_F(ServiceExtensionConnectModuleTest,
     info.bundleName = TEST_BUNDLE_NAME;
     info.abilityName = TEST_ABILITY_NAME;
     info.callingUid = TEST_CALLING_PID;
-    info.privilege = TEST_PRIVILEGE;
-    info.description = TEST_DESCRIPTION;
+    info.privileges = {TEST_PRIVILEGE};
+    info.descriptions = {TEST_DESCRIPTION};
 
     sptr<MockAuthorizationCallbackStub> mockCallback = new (std::nothrow) MockAuthorizationCallbackStub();
     ASSERT_NE(mockCallback, nullptr);
@@ -573,8 +580,8 @@ HWTEST_F(ServiceExtensionConnectModuleTest, GenerateParametersTest_0300, TestSiz
     info.bundleName = TEST_BUNDLE_NAME;
     info.abilityName = TEST_ABILITY_NAME;
     info.callingUid = TEST_CALLING_PID;
-    info.privilege = TEST_PRIVILEGE;
-    info.description = TEST_DESCRIPTION;
+    info.privileges = {TEST_PRIVILEGE};
+    info.descriptions = {TEST_DESCRIPTION};
     info.callingBundleName = TEST_BUNDLE_NAME;
     info.challenge = {1, 2, 3};
 

@@ -182,6 +182,101 @@ ErrCode NapiAuthorizationResultCallback::OnConnectAbility(const ConnectAbilityIn
     return ERR_OK;
 }
 
+ErrCode NapiBatchAuthorizationResultCallback::OnConnectAbility(const ConnectAbilityInfo &info,
+    const sptr<IRemoteObject> &callback)
+{
+    ACCOUNT_LOGI("NapiBatchAuthorizationResultCallback OnConnectAbility");
+    if (context_ == nullptr) {
+        ACCOUNT_LOGI("CreateUIExtension has not context.");
+        return ERR_AUTHORIZATION_CREATE_UI_EXTENSION_ERROR;
+    }
+    if (!context_->hasOptions || !context_->options.hasContext) {
+        ACCOUNT_LOGI("CreateUIExtension has not context.");
+        return ERR_AUTHORIZATION_CREATE_UI_EXTENSION_ERROR;
+    }
+    auto task = OnConnectAbilityTask(context_, info, callback);
+    if (napi_ok != napi_send_event(env_, task, napi_eprio_vip, "BatchAuthorizationCallback OnConnectAbility")) {
+        ACCOUNT_LOGE("Post batchAuthorizationCallback OnConnectAbility failed.");
+        return ERR_AUTHORIZATION_CREATE_UI_EXTENSION_ERROR;
+    }
+    ACCOUNT_LOGI("Post batchAuthorizationCallback OnConnectAbility finish.");
+    return ERR_OK;
+}
+
+ErrCode NapiBatchAuthorizationResultCallback::OnResult(int32_t resultCode, const AuthorizationResult& result)
+{
+    return OnBatchResult(resultCode, {result});
+}
+
+ErrCode NapiBatchAuthorizationResultCallback::OnBatchResult(int32_t resultCode,
+    const std::vector<AuthorizationResult>& results)
+{
+    bool expected = false;
+    if (!resolved_.compare_exchange_strong(expected, true)) {
+        return ERR_OK;
+    }
+    auto env = env_;
+    auto deferred = deferred_;
+    auto task = [env, deferred, resultCode, results] {
+        napi_handle_scope scope = nullptr;
+        napi_open_handle_scope(env, &scope);
+        if (resultCode != ERR_OK) {
+            napi_value errObj = GenerateAuthorizationPublicBusinessError(env, resultCode);
+            napi_reject_deferred(env, deferred, errObj);
+        } else {
+            bool allServiceBusy = !results.empty();
+            bool allInteractionNotAllowed = !results.empty();
+            for (const auto &r : results) {
+                if (r.resultCode != AccountSA::AuthorizationResultCode::AUTHORIZATION_SERVICE_BUSY) {
+                    allServiceBusy = false;
+                }
+                if (r.resultCode !=
+                    AccountSA::AuthorizationResultCode::AUTHORIZATION_INTERACTION_NOT_ALLOWED) {
+                    allInteractionNotAllowed = false;
+                }
+            }
+            if (allServiceBusy) {
+                napi_value errObj = GenerateAuthorizationPublicBusinessError(env,
+                    ERR_JS_AUTHORIZATION_SERVICE_BUSY);
+                napi_reject_deferred(env, deferred, errObj);
+            } else if (allInteractionNotAllowed) {
+                napi_value errObj = GenerateAuthorizationPublicBusinessError(env,
+                    ERR_JS_AUTHORIZATION_INTERACTION_NOT_ALLOWED);
+                napi_reject_deferred(env, deferred, errObj);
+            } else {
+                napi_value global = nullptr;
+                napi_get_global(env, &global);
+                napi_value mapConstructor = nullptr;
+                napi_get_named_property(env, global, "Map", &mapConstructor);
+                napi_value resultMap = nullptr;
+                napi_new_instance(env, mapConstructor, 0, nullptr, &resultMap);
+                napi_value setFunc = nullptr;
+                napi_get_named_property(env, resultMap, "set", &setFunc);
+                for (size_t i = 0; i < results.size(); ++i) {
+                    napi_value resultObj = nullptr;
+                    napi_create_object(env, &resultObj);
+                    napi_value resultCodeVal = nullptr;
+                    napi_create_int32(env, static_cast<int32_t>(results[i].resultCode), &resultCodeVal);
+                    napi_set_named_property(env, resultObj, "resultCode", resultCodeVal);
+                    napi_value privilegeVal = nullptr;
+                    napi_create_string_utf8(env, results[i].privilege.c_str(), results[i].privilege.length(),
+                        &privilegeVal);
+                    napi_set_named_property(env, resultObj, "privilege", privilegeVal);
+                    napi_value args[] = {privilegeVal, resultObj};
+                    napi_call_function(env, resultMap, setFunc, 2, args, nullptr);
+                }
+                napi_resolve_deferred(env, deferred, resultMap);
+            }
+        }
+        napi_close_handle_scope(env, scope);
+    };
+    if (napi_ok != napi_send_event(env_, task, napi_eprio_vip, "BatchAuthorizationCallback OnBatchResult")) {
+        ACCOUNT_LOGE("Post batchAuthorizationCallback OnBatchResult failed.");
+    }
+    deferred_ = nullptr;
+    return ERR_OK;
+}
+
 std::function<void()> OnAuthorizationResultTask(
     const std::shared_ptr<AcquireAuthorizationContext> &asyncContextPtr,
     const NapiAuthorizationResultCallback::ResultToJsFunc &resultToJsFunc, bool isPublicApi)
@@ -210,6 +305,10 @@ std::function<void()> OnAuthorizationResultTask(
 
 ErrCode NapiAuthorizationResultCallback::OnResult(int32_t errCode, const AuthorizationResult& result)
 {
+    bool expected = false;
+    if (!resolved_.compare_exchange_strong(expected, true)) {
+        return ERR_OK;
+    }
     auto asyncContextPtr = std::make_shared<AcquireAuthorizationContext>(env_, true);
     asyncContextPtr->errCode = errCode;
     asyncContextPtr->deferred = deferred_;

@@ -34,6 +34,8 @@
 | Callback not oneway | P13 | CE13 | callback IDL files / [oneway] / OnResult / OnAccountsChanged |
 | Unbounded wait on binder thread | P14 | CE14 | condition_variable::wait / wait_for / cv.wait |
 | Noisy log / HiSysEvent flood on hot path | P15 | CE15 | ACCOUNT_LOG* / HiSysEventWrite on frequently-called / data-query hot paths |
+| Taihe/NAPI implementation divergence | P16 | CE16 | frameworks/ets/taihe/**/src/*.impl.cpp vs interfaces/kits/napi/**/src/napi_*.cpp |
+| Admin-role change without PC-emulator verification | P17 | CE17 | OsAccountType::ADMIN / ADMIN_LOCAL_NAME / tee_auth_adapter_soft |
 
 ### Non-greppable information (unique value of AGENTS.md)
 The following information **cannot be obtained via code grep** and must be sourced from this file:
@@ -63,6 +65,7 @@ to applications and **internal C++ inner APIs** to other system abilities.
 - `frameworks/<type>/native/` — per-account-type framework implementation (also `frameworks/authorization/` for authorization client + IDL, `frameworks/os_account_subspace/` for SubProfile framework)
 - `interfaces/innerkits/<type>/native/include/` — internal C++ API (inter-SA, compatibility-sensitive); also `interfaces/innerkits/authorization/` and `interfaces/innerkits/os_account_subspace/`
 - `interfaces/kits/{napi,capi,cj}/` — public external API (do-not-break); NAPI authorization public at `interfaces/kits/napi/authorization_public/`
+- `frameworks/ets/taihe/` — Taihe (ANI/ArkTS FFI) bindings parallel to NAPI; per-module `src/ohos.account.<X>.impl.cpp` + `idl/<X>.taihe`; MUST stay consistent with NAPI (see Pitfall 16)
 - `os_account.gni` (feature flags) / `dfx/` (HiDumper·HiSysEvent·HiTrace) / `sa_profile/accountmgr.json` (SA profile) / `tools/acm/` (CLI) / `.refdocs/` (architecture/dev guide/FAQ)
 
 ### 1.3 Nested AGENTS.md (read these first when working in the module)
@@ -87,7 +90,8 @@ editing that module.**
 
 | Path / Task type | Primary location | Read first (also-read) |
 |------------------|------------------|------------------------|
-| Public API (NAPI) | `interfaces/kits/napi/` + matching `d.ts` | §3.1 Do-not; error-code docs |
+| Public API (NAPI) | `interfaces/kits/napi/` + matching `d.ts` | §3.1 Do-not; error-code docs; Pitfall 16 (Taihe twin must be updated in the same change) |
+| Public API (Taihe/ANI) | `frameworks/ets/taihe/<module>/` + `idl/*.taihe` | Pitfall 16 — must mirror the NAPI implementation 1:1 |
 | Public C API | `interfaces/kits/capi/` | §3.1 Do-not |
 | Internal C++ API | `interfaces/innerkits/<type>/native/include/` | Nested AGENTS.md (contract may affect callers) |
 | Service logic — osaccount | `services/accountmgr/src/osaccount/` | [osaccount/AGENTS.md](services/accountmgr/src/osaccount/AGENTS.md) |
@@ -188,6 +192,7 @@ indicated source before editing:
 | SA 200 / accountmgr | System Ability ID 200, the account service process | §1.1; `account_mgr_service.cpp` |
 | Inner API / innerkits | C++ APIs shared between system abilities (not public) | `interfaces/innerkits/` headers |
 | NAPI / CAPI / CJ | Public external API bindings (applications depend on these) | `interfaces/kits/`; §3.1 Do-not |
+| Taihe / ANI | ArkTS-native FFI bindings generated from `.taihe` IDL; a parallel implementation of the same public API alongside NAPI | `frameworks/ets/taihe/`; Pitfall 16 |
 | OsAccount constraints | Per-account capability restrictions (e.g. `constraint.wifi.set`) | [osaccount/AGENTS.md](services/accountmgr/src/osaccount/AGENTS.md) §"Constraints & Restrictions" |
 | DVID | Distributed Virtual Device ID = `PBKDF2_HMAC-SHA256(raw_uid, bundleName)` | [distributed_account/AGENTS.md](services/accountmgr/src/distributed_account/AGENTS.md) §"DVID Generation" |
 | Authenticator | App extension providing authentication (OAuth) | [appaccount/AGENTS.md](services/accountmgr/src/appaccount/AGENTS.md) §"Authenticator Architecture" |
@@ -226,6 +231,21 @@ These changes carry high risk and must not be made autonomously:
   or alter error-code values/semantics. Applications and the SDK depend on these.
 - **Public API error codes** (`account_error_no.h` public section): do not change
   existing numeric values or meanings; only append new codes.
+- **Taihe/NAPI dual-implementation consistency (MANDATORY, 致命)**: the Taihe
+  binding (`frameworks/ets/taihe/<module>/src/ohos.account.<X>.impl.cpp` +
+  `idl/<X>.taihe`) and the NAPI binding
+  (`interfaces/kits/napi/<module>/src/napi_<X>.cpp`) implement the **same**
+  public API surface. Do not change one without the other — API set, parameter
+  validation, permission checks, error-code mapping, and async/promise
+  semantics must stay in sync in the same commit. Any divergence is a
+  CRITICAL (致命) defect (see Pitfall 16).
+- **Admin-role changes (MANDATORY PC-emulator verification, 致命)**: any change
+  to admin-role functionality — account create/activate/switch/query or any
+  branch on `OsAccountType::ADMIN` (full anchor list in Pitfall 17, incl. the
+  `os_account_enable_default_admin_name` / `os_account_support_admin_access_control`
+  flags) — must be verified on the **PC emulator (PC 模拟器)** before
+  submission: emulator boot + admin account lifecycle. Skipping PC-emulator
+  verification (device-only or compile-only) is a CRITICAL (致命) defect.
 - **Permission checks** in `*ManagerService` classes: do not remove or weaken
   `AccountPermissionManager` / `AccessTokenKit` verification calls.
 - **On-disk data schema**: do not change the JSON field names, structure, or
@@ -553,6 +573,132 @@ correct fix, not a loss of diagnostics.
 
 ⚠ **Common omissions**: ① judging a single log line in isolation ("it's just one warning") without checking the enclosing function's call frequency ② only checking error-code logs but missing `ACCOUNT_LOGI` / `ACCOUNT_LOGD` / `ACCOUNT_LOGW` on the success branch ③ adding a HiSysEvent big-data report per query without considering event-pipeline throughput ④ treating removal of a noisy hot-path log as a loss of diagnostics rather than a P15 fix ⑤ not distinguishing high-frequency query paths from low-frequency lifecycle paths before adding a log.
 
+**Pitfall 16 — Taihe and NAPI implementations MUST stay consistent; divergence is a CRITICAL (致命) issue.**
+The same public API is implemented twice in this repo:
+
+| Binding | Implementation files | Registration / definition |
+|---------|----------------------|---------------------------|
+| NAPI | `interfaces/kits/napi/<module>/src/napi_<module>*.cpp` | `napi_init.cpp` module export (`__attribute__((constructor))`/`napi_module_register`) |
+| Taihe | `frameworks/ets/taihe/<module>/src/ohos.account.<X>*.impl.cpp` (+ `ani_constructor.cpp`, `taihe_*.cpp` helpers) | `frameworks/ets/taihe/<module>/idl/<X>.taihe` IDL (`@rename` functions, `@promise` methods) |
+
+Both bind the SAME public ArkTS API (declared in the interface_sdk-js
+`@ohos.account.<X>.d.ts`) down to the SAME innerkits
+(`os_account_innerkits` / `app_account_innerkits` / `libaccountkits` /
+`account_iam_innerkits` / `authorization_innerkits`). They are two
+serializations of one contract: applications on NAPI-capable runtimes load the
+napi module; applications on the ANI runtime load the taihe `.abc` +
+`*_taihe_native.z.so`. An application must observe **identical behavior**
+regardless of which binding serves it. A change that lands in only one
+binding (new API missing in the other, different error code, different
+permission gate, different parameter validation, promise vs callback
+divergence) silently splits the platform: one runtime exposes the new
+behavior, the other does not. Such divergence is therefore classified as
+**致命 (CRITICAL)** — the same severity as breaking a public API — not as a
+style or completeness issue. Note the taihe binding also REUSES some napi cpp
+sources (e.g. `napi_app_account_transfer.cpp`,
+`napi_account_iam_onsetdata.cpp`, `authorization_ui_extension_callback.cpp`
+are compiled into `*_taihe_native` via `frameworks/ets/taihe/BUILD.gn`
+sources) — a "napi-only" edit can still break the taihe build and vice
+versa; treat the two as one change unit. Taihe also carries feature-flag
+macros (e.g. `ENABLE_MULTIPLE_OS_ACCOUNT_SUBSPACE` in
+`frameworks/ets/taihe/BUILD.gn`) that must mirror the napi-side flags.
+
+**Code-level evidence checklist (CE16):**
+- For every public-API-affecting change (add/modify/delete an API, parameter,
+  error code, permission, or async semantics), grep BOTH sides in the same
+  review: `interfaces/kits/napi/<module>/src/` AND
+  `frameworks/ets/taihe/<module>/src/` — confirm both were updated in the
+  same commit; a PR touching only one side must be rejected as 致命.
+- Enumerate the API surface 1:1: compare the functions registered in
+  `napi_init.cpp` (napi `DECLARE_NAPI_FUNCTION`/property list) against the
+  `@rename` entries in the matching `idl/*.taihe` file — every exported API
+  name must appear on both sides (modulo the documented naming convention).
+- Error-code mapping: for each API, confirm the same innerkits `ErrCode` maps
+  to the same JS error code (same `ConvertToJSErrCode` chain /
+  `BusinessError` code) in both bindings; a `d.ts` `@throws` entry must have
+  matching behavior in both implementations.
+- Permission checks: confirm the same permission names
+  (`VerifyAccessToken` / `CheckPermission` in taihe_common / napi common) are
+  enforced at the same entry points in both bindings.
+- Parameter validation: confirm boundary checks (id ranges, string lengths,
+  enum values) are equivalent — including helpers shared via
+  `frameworks/ets/taihe/*/src/taihe_common.cpp` vs
+  `interfaces/kits/napi/common/src/napi_*_common.cpp`.
+- Async semantics: `@promise` in the `.taihe` IDL must correspond to the
+  promise/callback (or sync) form exported by napi; callback IPCs follow
+  Pitfall 13 ([oneway]) on both sides.
+- New API: update `d.ts`, the napi implementation, the taihe `.idl` +
+  `*.impl.cpp`, and any shared transfer/ctor helpers **in one change**;
+  confirm `frameworks/ets/taihe/BUILD.gn` sources and feature-flag macros
+  stay aligned with the napi-side build.
+- Build both sides on rk3568 before submission (§5.1):
+  `./build.sh --product-name rk3568 --build-target accountmgr` plus the
+  taihe group `frameworks/ets/taihe:account_taihe` and
+  `interfaces/kits/napi:napi_packages` — a link/config error on either side
+  is a build break, not a warning.
+
+⚠ **Common omissions**: ① checking only the API signature but not
+error-code/permission/validation parity ② assuming the taihe build "reuses
+napi sources anyway" and skipping the mirror-check (only *some* napi files
+are reused; impl files are separate) ③ updating the `.taihe` IDL but not the
+`*.impl.cpp` (or vice versa) ④ forgetting feature-flag macros in
+`frameworks/ets/taihe/BUILD.gn` must mirror the napi-side flags ⑤ reviewing
+a PR that changes only `interfaces/kits/napi/` (or only
+`frameworks/ets/taihe/`) without demanding the twin change.
+
+**Pitfall 17 — Admin-role changes MUST be verified on the PC emulator; skipping it is a CRITICAL (致命) issue.**
+Admin-role functionality means any code path that creates / activates /
+switches / queries the admin OS account or branches on `OsAccountType::ADMIN`:
+the boot account construction in `CreateBaseStandardAccount`
+(`Constants::ADMIN_LOCAL_ID` / `ADMIN_LOCAL_NAME`, `inner_os_account_manager.cpp`),
+admin-type cache refresh, admin base-constraints loading
+(`GetConstraintsByType(OsAccountType::ADMIN, ...)` in
+`os_account_control_file_manager.cpp`, feeding `base_os_account_constraints.json`),
+the admin branch of the soft TEE adapter (`tee_auth_adapter_soft.cpp`), and the
+`os_account_enable_default_admin_name` / `os_account_support_admin_access_control`
+(C++ `SUPPORT_ADMIN_ACCESS_CONTROL`) flags. Why the PC emulator is mandatory:
+(1) a freshly-constructed `OsAccountInfo` defaults to `OsAccountType::ADMIN`
+(`os_account_info.h`), so admin-type logic is entangled with the boot /
+first-account path — regressions can brick boot, and the PC emulator is the
+fastest full-boot verification loop; (2) the PC emulator has no TEE hardware,
+so admin-type code runs through `tee_auth_adapter_soft.cpp` (software
+fallback) — a path real TEE devices never execute, so only emulator
+verification covers it (cf. Pitfall 10's emulator no-TEE hazard); (3) admin
+type bugs are persistence bugs (Pitfall 11/12: `RESTRICTED_ADMIN` -1 leaked
+to disk and broke OTA) — a clean emulator image boots the full
+load-normalize-persist cycle that catches them. Rule: before submitting any
+admin-role change, verify on the PC emulator — boot to launcher, first
+account comes up with the correct admin type/name, admin account create /
+activate / switch / query works, admin base constraints load. Device-only
+(RK3568) or compile-only verification does not substitute; skipping the PC
+emulator is classified 致命.
+  Policy origin: team submission gate (2026-11) — admin-role changes must
+  show PC-emulator verification evidence in the PR; missing evidence is
+  rejected as 致命.
+
+**Code-level evidence checklist (CE17):**
+- Classify the change: grep the diff (case-insensitive `admin`) — any hit in
+  `services/accountmgr/src/osaccount/`, `frameworks/osaccount/`,
+  `os_account_constants.h`, or the `os_account_enable_default_admin_name` /
+  `os_account_support_admin_access_control` flags puts the change in
+  admin-role scope.
+- Trace boot-path impact: if the change touches `CreateBaseStandardAccount` /
+  `ActivateDefaultOsAccount` / `Constants::ADMIN_LOCAL_ID` / `ADMIN_LOCAL_NAME`
+  call sites, PC-emulator boot verification is mandatory before commit
+  (also Pitfall 5).
+- Confirm the soft-TEE path (`tee_auth_adapter_soft.cpp` admin branch) was
+  actually exercised: verification must run on the no-TEE PC-emulator image,
+  not only a TEE device.
+- Confirm emulator verification covered: boot to launcher; first account admin
+  type/name correct; `acm dump -a` / `GetOsAccountType` returns ADMIN; admin
+  account create / activate / switch / query; admin base constraints
+  (`base_os_account_constraints.json`) load without error.
+- Confirm no temporary / internal type value was introduced (Pitfall 11/12):
+  emulator re-boot after the change shows the persisted type still normalizes
+  to ADMIN on read (`os_account_control_file_manager.cpp`).
+
+⚠ **Common omissions**: ① treating an admin-type change as "just an enum tweak" and doing compile-only verification ② verifying only on a TEE device (RK3568) so the `tee_auth_adapter_soft.cpp` admin branch stays untested ③ booting the emulator but not exercising the admin account lifecycle (create/activate/switch/query) ④ changing admin flags (`os_account_enable_default_admin_name` / `os_account_support_admin_access_control`) without full emulator rebuild + boot ⑤ forgetting `OsAccountInfo::type_` defaults to `ADMIN` (`os_account_info.h`), so an unconfigured account silently reads as admin and a diff can be misjudged as "not admin-related".
+
 ---
 
 ## 4. Data Storage & Configuration
@@ -613,12 +759,15 @@ Common products: `rk3568`, `hi3516`, `ohos-sdk`.
 | If you changed… | Also run / check |
 |----------------|-----------------|
 | `interfaces/kits/` (public API) | API-diff / compatibility check; confirm no signature or error-code change leaked into the SDK. **Escalate to user if any public surface changed.** |
+| `interfaces/kits/napi/` (NAPI binding) | Mirror-check the equivalent Taihe binding (Pitfall 16): same API set / validation / permission / error codes in `frameworks/ets/taihe/`; build both in one change |
+| `frameworks/ets/taihe/` (Taihe binding) | Mirror-check the equivalent NAPI binding (Pitfall 16); build `frameworks/ets/taihe:account_taihe`; confirm the `.taihe` IDL and the napi `d.ts` stay aligned |
 | `interfaces/innerkits/` (inner API) | Build all callers in the subsystem; grep for the changed signature across `services/` and `frameworks/`; **a new interface must be accompanied by matching unit/module test cases (`*_test.cpp` / `*_moduletest.cpp`), or interface coverage drops** |
 | `services/accountmgr/src/*` (service logic) | Run the matching module test suite (see §5.3) |
 | `os_account.gni` (feature flag) | Full build with the flag both on and off |
 | `dfx/` (HiSysEvent) | Confirm event names/params unchanged; run `hidumper -s AccountMgrService` |
 | Anything in SA startup path | **Do not commit without user approval** (Pitfall 5) |
 | Locking / concurrency | Review lock hierarchy in nested AGENTS.md; check for new cross-lock calls |
+| Admin-role functionality (`OsAccountType::ADMIN` paths, admin flags) | **PC-emulator verification mandatory (Pitfall 17)**: no-TEE emulator boot + admin account create/activate/switch/query; device-only or compile-only verification is 致命 |
 
 **Before adding any test case** (`*_test.cpp` / `*_moduletest.cpp`): first
 confirm whether the branch / scenario the new case intends to cover is already

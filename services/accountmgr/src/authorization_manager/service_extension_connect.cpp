@@ -136,12 +136,12 @@ bool SessionAbilityConnection::SessionAbilityConnectionStub::GenerateParameters(
         ACCOUNT_LOGE("Fail to add sysDialogZOrder to json");
         return false;
     }
-    if (!AddStringToJson(json, "privilege", info_.privilege)) {
-        ACCOUNT_LOGE("Fail to add privilege to json");
+    if (!AddVectorStringToJson(json, "privileges", info_.privileges)) {
+        ACCOUNT_LOGE("Fail to add privileges to json");
         return false;
     }
-    if (!AddStringToJson(json, "description", info_.description)) {
-        ACCOUNT_LOGE("Fail to add description to json");
+    if (!AddVectorStringToJson(json, "descriptions", info_.descriptions)) {
+        ACCOUNT_LOGE("Fail to add descriptions to json");
         return false;
     }
     if (!AddStringToJson(json, "callingBundleName", info_.callingBundleName)) {
@@ -192,10 +192,21 @@ ErrCode SessionAbilityConnection::SessionConnectExtension(const ConnectAbilityIn
         REPORT_OS_ACCOUNT_FAIL(localId_, PRIVILEGE_OPT_ACQUIRE_AUTH,
             ERR_AUTHORIZATION_ALREADY_HAS_ERROR, "Session ability extension is already connected");
         authorizationResult.resultCode = AuthorizationResultCode::AUTHORIZATION_SERVICE_BUSY;
-        callback->OnResult(ERR_OK, authorizationResult);
+        std::vector<AuthorizationResult> results;
+        if (info.privileges.empty()) {
+            results.push_back(authorizationResult);
+        } else {
+            for (const auto &privilege : info.privileges) {
+                AuthorizationResult r = authorizationResult;
+                r.privilege = privilege;
+                results.push_back(std::move(r));
+            }
+        }
+        callback->OnBatchResult(ERR_OK, results);
         return ERR_OK;
     }
 
+    info_ = info;
     ErrCode errCode = CreateCallbackDeathRecipient(callback);
     if (errCode != ERR_OK) {
         return errCode;
@@ -214,10 +225,20 @@ ErrCode SessionAbilityConnection::CallbackOnResult(int32_t errCode, Authorizatio
         return ERR_AUTHORIZATION_GET_STUB_ERROR;
     }
     authResult_.resultCode = resultCode;
-    ErrCode err = callback_->OnResult(errCode, authResult_);
+    std::vector<AuthorizationResult> results;
+    if (info_.privileges.empty()) {
+        results.push_back(authResult_);
+    } else {
+        for (const auto &privilege : info_.privileges) {
+            AuthorizationResult r = authResult_;
+            r.privilege = privilege;
+            results.push_back(r);
+        }
+    }
+    ErrCode err = callback_->OnBatchResult(errCode, results);
     if (err != ERR_OK) {
-        ACCOUNT_LOGE("Callback onResult error=%{public}d.", err);
-        REPORT_OS_ACCOUNT_FAIL(localId_, PRIVILEGE_OPT_ACQUIRE_AUTH, err, "Callback onResult error");
+        ACCOUNT_LOGE("Callback onBatchResult error=%{public}d.", err);
+        REPORT_OS_ACCOUNT_FAIL(localId_, PRIVILEGE_OPT_ACQUIRE_AUTH, err, "Callback onBatchResult error");
     }
     SessionDisconnectExtension();
     return err;
@@ -445,7 +466,6 @@ ErrCode SessionAbilityConnection::CreateStubAndConnect(const ConnectAbilityInfo 
         return ERR_AUTHORIZATION_GET_STUB_ERROR;
     }
 
-    info_ = info;
     callback_ = callback;
     authResult_ = authorizationResult;
     SmartPidFd fdPtr = nullptr;

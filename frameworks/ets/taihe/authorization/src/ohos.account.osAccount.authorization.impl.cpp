@@ -17,6 +17,7 @@
 #include "account_error_no.h"
 #include "authorization_client.h"
 #include "authorization_callback.h"
+#include "authorization_common.h"
 #include "authorization_privilege.h"
 #include "napi_account_error.h"
 #include "ohos.account.osAccount.authorization.impl.hpp"
@@ -67,6 +68,11 @@ static ohos::account::osAccount::authorization::AuthorizationResult InitializeAu
 using TaiheAuthPublicCallback = OHOS::AccountSA::TaiheAuthorizationCallback<
     ohos::account::osAccount::authorization::AuthorizationResult>;
 
+using TaiheBatchAuthPublicCallback = OHOS::AccountSA::TaiheAuthorizationCallback<
+    taihe::map<Privilege, ohos::account::osAccount::authorization::AuthorizationResult>>;
+
+using BatchAuthResultMap = taihe::map<Privilege, ohos::account::osAccount::authorization::AuthorizationResult>;
+
 static ohos::account::osAccount::authorization::AuthorizationResult BuildPublicAuthorizationResult(
     const OHOS::AccountSA::AuthorizationResult &result, const std::string &privilege)
 {
@@ -74,6 +80,20 @@ static ohos::account::osAccount::authorization::AuthorizationResult BuildPublicA
         .resultCode = AuthorizationResultCode(ConvertToAuthorizationResultCodeKey(result.resultCode)),
         .privilege = Privilege::from_value(privilege)
     };
+}
+
+static BatchAuthResultMap BuildBatchAuthorizationResult(
+    const std::vector<OHOS::AccountSA::AuthorizationResult> &results)
+{
+    taihe::map<Privilege, ohos::account::osAccount::authorization::AuthorizationResult> resultMap;
+    for (const auto &result : results) {
+        auto taiheResult = ohos::account::osAccount::authorization::AuthorizationResult{
+            .resultCode = AuthorizationResultCode(ConvertToAuthorizationResultCodeKey(result.resultCode)),
+            .privilege = Privilege::from_value(result.privilege)
+        };
+        resultMap.emplace(Privilege::from_value(result.privilege), taiheResult);
+    }
+    return resultMap;
 }
 
 static ohos::account::osAccount::authorization::AuthorizationResult WaitForAuthorizationResult(
@@ -88,6 +108,22 @@ static ohos::account::osAccount::authorization::AuthorizationResult WaitForAutho
         std::string errMsg = OHOS::ConvertToJsErrMsg(jsErrCode);
         taihe::set_business_error(jsErrCode, errMsg.c_str());
         return InitializeAuthorizationResult();
+    }
+    return std::move(*callback->taiheResult_);
+}
+
+static BatchAuthResultMap WaitForBatchAuthorizationResult(
+    const std::shared_ptr<TaiheBatchAuthPublicCallback>& callback)
+{
+    std::unique_lock<std::mutex> lock(callback->mutex_);
+    callback->cv_.wait(lock, [callback] { return callback->onResultCalled_; });
+
+    if (callback->errCode_ != ERR_OK) {
+        ACCOUNT_LOGE("AcquireBatchAuthorization failed with errCode: %{public}d", callback->errCode_);
+        int32_t jsErrCode = OHOS::AuthorizationPublicConvertToJsErrCode(callback->errCode_);
+        std::string errMsg = OHOS::ConvertToJsErrMsg(jsErrCode);
+        taihe::set_business_error(jsErrCode, errMsg.c_str());
+        return BatchAuthResultMap();
     }
     return std::move(*callback->taiheResult_);
 }
@@ -124,12 +160,60 @@ public:
         auto callback = std::make_shared<TaiheAuthPublicCallback>(authContext, privilegeStr,
             BuildPublicAuthorizationResult);
         ErrCode errCode = OHOS::AccountSA::AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
-            privilegeStr, isContextValid, callback);
+            {privilegeStr}, isContextValid, callback);
         if (errCode != ERR_OK) {
             SetAuthorizationBusinessError(errCode);
             return taiheResult;
         }
         return WaitForAuthorizationResult(callback);
+    }
+
+    BatchAuthResultMap AcquireBatchAuthorizationPromise(
+        taihe::array_view<Privilege> privileges, uintptr_t context)
+    {
+        ani_env *env = get_env();
+        std::vector<std::string> privilegeStrs;
+        for (size_t i = 0; i < privileges.size(); ++i) {
+            privilegeStrs.push_back(privileges[i].get_value());
+        }
+        if (privilegeStrs.empty()) {
+            std::string errMsg = ConvertToJsErrMsg(ERR_JS_INVALID_PARAMETER);
+            taihe::set_business_error(ERR_JS_INVALID_PARAMETER, errMsg.c_str());
+            return BatchAuthResultMap();
+        }
+        if (privilegeStrs.size() > OHOS::AccountSA::MAX_BATCH_PRIVILEGE_COUNT) {
+            std::string errMsg = ConvertToJsErrMsg(ERR_JS_INVALID_PARAMETER);
+            taihe::set_business_error(ERR_JS_INVALID_PARAMETER, errMsg.c_str());
+            return BatchAuthResultMap();
+        }
+
+        auto authContext = std::make_shared<OHOS::AccountSA::TaiheAcquireAuthorizationContext>(env);
+        authContext->hasOptions = true;
+        authContext->options.hasContext = true;
+        authContext->isPublicApi = true;
+
+        bool isContextValid = false;
+        ani_object aniContext = reinterpret_cast<ani_object>(context);
+        if (authContext->FillInfoFromContext(aniContext)) {
+            if (authContext->IsUIAbilityContext()) {
+                isContextValid = true;
+            } else {
+                ACCOUNT_LOGE("Context is not UIAbilityContext, not supported in public API");
+                std::string errMsg = ConvertToJsErrMsg(ERR_JS_PARAMETER_ERROR);
+                taihe::set_business_error(ERR_JS_PARAMETER_ERROR, errMsg.c_str());
+                return BatchAuthResultMap();
+            }
+        }
+
+        auto callback = std::make_shared<TaiheBatchAuthPublicCallback>(authContext,
+            BuildBatchAuthorizationResult);
+        ErrCode errCode = OHOS::AccountSA::AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
+            privilegeStrs, isContextValid, callback);
+        if (errCode != ERR_OK) {
+            SetAuthorizationBusinessError(errCode);
+            return BatchAuthResultMap();
+        }
+        return WaitForBatchAuthorizationResult(callback);
     }
 
     bool HasAuthorizationPromise(Privilege privilege)
