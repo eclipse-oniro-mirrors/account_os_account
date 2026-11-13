@@ -782,6 +782,43 @@ HWTEST_F(OsAccountInnerAccmgrMockTest, RemoveOsAccount002, TestSize.Level1)
 }
 
 /*
+ * @tc.name: RemoveOsAccount003
+ * @tc.desc: When BundleManager RemoveUser fails, RemoveOsAccount must surface the real error
+ *           code (instead of masking it with ERR_OK) and must NOT continue the remove-submit
+ *           flow. The mocked SendToBMSAccountDelete returns
+ *           ERR_OSACCOUNT_SERVICE_INTERFACE_TO_BM_ACCOUNT_DELETE_ERROR when the bound domain
+ *           equals "fail", simulating a BMS RemoveUser failure.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, RemoveOsAccount003, TestSize.Level1)
+{
+    OsAccountInfo createInfo;
+    EXPECT_EQ(ERR_OK, innerMgrService_->CreateOsAccount("RemoveOsAccount003", NORMAL, createInfo));
+    EXPECT_TRUE(createInfo.GetLocalId() > START_USER_ID);
+
+    // Bind a domain whose name is "fail" so the mocked SendToBMSAccountDelete simulates a
+    // BundleManager RemoveUser failure. accountName_ is left empty to skip the domain
+    // logout-notify path and isolate the BMS-delete failure branch.
+    DomainAccountInfo domainInfo;
+    domainInfo.SetDomain(FAIL_STR);
+    createInfo.SetDomainInfo(domainInfo);
+    EXPECT_EQ(ERR_OK, innerMgrService_->osAccountControl_->UpdateOsAccount(createInfo));
+
+    // RemoveOsAccount must propagate the BMS failure (non-ERR_OK) instead of masking it.
+    ErrCode errCode = innerMgrService_->RemoveOsAccount(createInfo.GetLocalId());
+    EXPECT_EQ(errCode, ERR_OSACCOUNT_SERVICE_INTERFACE_TO_BM_ACCOUNT_DELETE_ERROR);
+
+    // The remove-submit flow must have stopped on the failure path: the account info is still
+    // present (SendToStorageAccountRemove / DelOsAccount were skipped after BMS delete failed).
+    OsAccountInfo remaining;
+    EXPECT_EQ(ERR_OK, innerMgrService_->GetOsAccountInfoById(createInfo.GetLocalId(), remaining));
+
+    // Cleanup: remove the persisted account info directly so it does not leak to other cases.
+    EXPECT_EQ(ERR_OK, innerMgrService_->osAccountControl_->DelOsAccount(createInfo.GetLocalId()));
+}
+
+/*
  * @tc.name: AccountStatusTest001
  * @tc.desc: Get os account status and info successfully
  * @tc.type: FUNC
