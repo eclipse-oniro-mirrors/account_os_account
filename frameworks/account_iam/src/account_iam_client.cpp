@@ -366,10 +366,6 @@ bool AccountIAMClient::CheckAuthOptions(AuthOptions &authOptions)
         (!GetCurrentUserId(authOptions.accountId))) {
         return false;
     }
-    if (authOptions.hasAdditionalInfo && authOptions.additionalInfo.size() > ADDITIONAL_INFO_MAX_SIZE) {
-        ACCOUNT_LOGE("AdditionalInfoSize is too large!");
-        return false;
-    }
     return true;
 }
 
