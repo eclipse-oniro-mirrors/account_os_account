@@ -16,6 +16,7 @@
 #ifndef OS_ACCOUNT_FRAMEWORKS_COMMON_LOG_INCLUDE_ACCOUNT_LOG_WRAPPER_H
 #define OS_ACCOUNT_FRAMEWORKS_COMMON_LOG_INCLUDE_ACCOUNT_LOG_WRAPPER_H
 
+#include <atomic>
 #include <string>
 #include "hilog/log.h"
 
@@ -26,22 +27,20 @@ constexpr OHOS::HiviewDFX::HiLogLabel ACCOUNT_LABEL = {LOG_CORE, LOG_DOMAIN, ACC
 
 class AccountLogWrapper {
 public:
-    static bool JudgeLevel(const AccountLogLevel &level);
-
     static void SetLogLevel(const AccountLogLevel &level)
     {
         level_ = level;
     }
 
-    static const AccountLogLevel &GetLogLevel()
+    static AccountLogLevel GetLogLevel()
     {
-        return level_;
+        return level_.load();
     }
 
     static std::string GetBriefFileName(const std::string &file);
 
 private:
-    static AccountLogLevel level_;
+    static std::atomic<AccountLogLevel> level_;
 };
 
 #define ARGS(fmt, ...) fmt, ##__VA_ARGS__

@@ -18,12 +18,7 @@
 namespace OHOS {
 namespace AccountSA {
 // initial static member object
-AccountLogLevel AccountLogWrapper::level_ = AccountLogLevel::INFO;
-
-bool AccountLogWrapper::JudgeLevel(const AccountLogLevel& level)
-{
-    return (level >= AccountLogWrapper::GetLogLevel());
-}
+std::atomic<AccountLogLevel> AccountLogWrapper::level_ = AccountLogLevel::INFO;
 
 std::string AccountLogWrapper::GetBriefFileName(const std::string &file)
 {
