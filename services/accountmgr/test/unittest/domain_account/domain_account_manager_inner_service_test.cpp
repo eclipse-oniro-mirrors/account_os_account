@@ -14,6 +14,9 @@
  */
 
 #include <gtest/gtest.h>
+#include <atomic>
+#include <chrono>
+#include <future>
 #include <thread>
 #include "account_error_no.h"
 #include "account_log_wrapper.h"
@@ -28,6 +31,7 @@
 #undef protected
 #undef private
 #include "os_account_manager.h"
+#include "status_listener_manager.h"
 #include "mock_domain_account_callback_stub.h"
 #include "mock_domain_plugin.h"
 #include "mock_inner_os_account_manager.h"
@@ -960,6 +964,130 @@ HWTEST_F(DomainAccountManagerInnerServiceTest, RegisterPlugin_AsObjectNull_0100,
     ErrCode ret = InnerDomainAccountManager::GetInstance().RegisterPlugin(plugin);
     EXPECT_EQ(ret, ERR_OK);
     InnerDomainAccountManager::GetInstance().plugin_ = nullptr;
+}
+
+/**
+ * @tc.name: CheckUserToken_WithPlugin_001
+ * @tc.desc: Test CheckUserToken with plugin_ != nullptr. This exercises the
+ *           snapshot pattern: plugin_ is copied under mutex_, lock released,
+ *           then plugin->IsAccountTokenValid() IPC called outside the lock.
+ *           Before fix: plugin IPC held mutex_ → deadlock risk (Pitfall 6).
+ *           After fix: snapshot + release lock → safe.
+ *           Mock plugin writes bool(accountName_ != "false") to parcel;
+ *           accountName_ = TEST_DOMAIN_ACCOUNT_NAME → isValid = true.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DomainAccountManagerInnerServiceTest, CheckUserToken_WithPlugin_001, TestSize.Level1)
+{
+    DomainAccountInfo info;
+    info.accountName_ = TEST_DOMAIN_ACCOUNT_NAME;
+    info.domain_ = TEST_DOMAIN;
+    info.accountId_ = TEST_ACCOUNT_ID;
+    sptr<DomainAccountPluginService> pluginService = new (std::nothrow) DomainAccountPluginService(g_plugin);
+    ASSERT_NE(pluginService, nullptr);
+    InnerDomainAccountManager::GetInstance().plugin_ = pluginService;
+
+    bool isValid = false;
+    ErrCode ret = InnerDomainAccountManager::GetInstance().CheckUserToken(TEST_TOKEN, isValid, info);
+    EXPECT_EQ(ret, ERR_OK);
+    EXPECT_TRUE(isValid);
+
+    InnerDomainAccountManager::GetInstance().plugin_ = nullptr;
+}
+
+/**
+ * @tc.name: StatusListenerManager_NotifyEventAsync_BasicNotify_001
+ * @tc.desc: Register a listener and call NotifyEventAsync. Verify the listener
+ *           receives OnResult. This exercises the snapshot pattern: listenerAll_
+ *           is copied under mutex_, lock released, then OnResult dispatched
+ *           outside the lock.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DomainAccountManagerInnerServiceTest, StatusListenerManager_NotifyEventAsync_BasicNotify_001,
+    TestSize.Level1)
+{
+    class CountingCallbackStub final : public DomainAccountCallbackStub {
+    public:
+        std::atomic<int> callCount{0};
+        ErrCode OnResult(int32_t errCode, const DomainAccountParcel &parcel) override
+        {
+            callCount.fetch_add(1);
+            return ERR_OK;
+        }
+        ErrCode OnAcquireInfo(int32_t module, uint32_t acquireInfo,
+            const DomainAccountUnlockExtraInfoIdl &extraInfo) override
+        {
+            return ERR_OK;
+        }
+    };
+
+    auto listener = sptr<CountingCallbackStub>(new (std::nothrow) CountingCallbackStub());
+    ASSERT_NE(listener, nullptr);
+    ASSERT_EQ(StatusListenerManager::GetInstance().InsertListenerToRecords(listener), ERR_OK);
+
+    DomainAccountEventData report;
+    report.userId = 100;
+    report.event = DomainAccountEvent::LOG_IN;
+    report.status = DomainAccountStatus::LOGIN;
+    StatusListenerManager::GetInstance().NotifyEventAsync(report);
+
+    EXPECT_EQ(listener->callCount.load(), 1);
+
+    StatusListenerManager::GetInstance().RemoveListenerByListener(listener);
+}
+
+/**
+ * @tc.name: StatusListenerManager_NotifyEventAsync_ReentrantNoDeadlock_001
+ * @tc.desc: Listener's OnResult re-enters RemoveListenerByListener (acquires
+ *           mutex_) during NotifyEventAsync dispatch.
+ *           Before fix: NotifyEventAsync held mutex_ during listener loop,
+ *           RemoveListenerByListener re-acquires non-recursive mutex → deadlock.
+ *           After fix: snapshot taken under lock, lock released, OnResult called
+ *           in the loop outside the lock → re-entry is safe.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(DomainAccountManagerInnerServiceTest, StatusListenerManager_NotifyEventAsync_ReentrantNoDeadlock_001,
+    TestSize.Level1)
+{
+    class ReentrantCallbackStub final : public DomainAccountCallbackStub {
+    public:
+        sptr<IRemoteObject> self_;
+        std::shared_ptr<std::promise<void>> promise_;
+
+        ErrCode OnResult(int32_t errCode, const DomainAccountParcel &parcel) override
+        {
+            StatusListenerManager::GetInstance().RemoveListenerByListener(self_);
+            promise_->set_value();
+            return ERR_OK;
+        }
+        ErrCode OnAcquireInfo(int32_t module, uint32_t acquireInfo,
+            const DomainAccountUnlockExtraInfoIdl &extraInfo) override
+        {
+            return ERR_OK;
+        }
+    };
+
+    auto promise = std::make_shared<std::promise<void>>();
+    auto future = promise->get_future();
+    auto listener = sptr<ReentrantCallbackStub>(new (std::nothrow) ReentrantCallbackStub());
+    ASSERT_NE(listener, nullptr);
+    listener->self_ = listener;
+    listener->promise_ = promise;
+    ASSERT_EQ(StatusListenerManager::GetInstance().InsertListenerToRecords(listener), ERR_OK);
+
+    DomainAccountEventData report;
+    report.userId = 100;
+    report.event = DomainAccountEvent::LOG_IN;
+    report.status = DomainAccountStatus::LOGIN;
+    StatusListenerManager::GetInstance().NotifyEventAsync(report);
+
+    auto status = future.wait_for(std::chrono::seconds(3));
+    EXPECT_EQ(status, std::future_status::ready);
+
+    StatusListenerManager::GetInstance().RemoveListenerByListener(listener);
 }
 }  // namespace AccountSA
 }  // namespace OHOS

@@ -1865,20 +1865,22 @@ ErrCode InnerDomainAccountManager::CheckUserToken(
     }
 
     ErrCode errCode = ERR_OK;
+    sptr<IDomainAccountPlugin> plugin;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (plugin_ == nullptr) {
-            Parcel emptyParcel;
-            int32_t isTokenValid = -1;
-            ErrCode err = PluginIsAccountTokenValid(info, token, isTokenValid);
-            if (err == ERR_OK) {
-                isValid = (isTokenValid == 1);
-            }
-            return err;
-        }
-        errCode = plugin_->IsAccountTokenValid(info, token, callbackService);
-        errCode = ConvertToAccountErrCode(errCode);
+        plugin = plugin_;
     }
+    if (plugin == nullptr) {
+        Parcel emptyParcel;
+        int32_t isTokenValid = -1;
+        ErrCode err = PluginIsAccountTokenValid(info, token, isTokenValid);
+        if (err == ERR_OK) {
+            isValid = (isTokenValid == 1);
+        }
+        return err;
+    }
+    errCode = plugin->IsAccountTokenValid(info, token, callbackService);
+    errCode = ConvertToAccountErrCode(errCode);
     callback->WaitForCallbackResult();
     isValid = callback->GetValidity();
     return errCode;
@@ -1945,13 +1947,14 @@ ErrCode InnerDomainAccountManager::GetAuthStatusInfo(
             "Create DomainAccountCallbackService failed", Constants::DOMAIN_OPT_GET_INFO, -1, info);
         return ERR_ACCOUNT_COMMON_NULL_PTR_ERROR;
     }
+    sptr<IDomainAccountPlugin> plugin;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (plugin_ != nullptr) {
-            auto errCode = plugin_->GetAuthStatusInfo(info, callbackService);
-            errCode = ConvertToAccountErrCode(errCode);
-            return errCode;
-        }
+        plugin = plugin_;
+    }
+    if (plugin != nullptr) {
+        auto errCode = plugin->GetAuthStatusInfo(info, callbackService);
+        return ConvertToAccountErrCode(errCode);
     }
     Parcel emptyParcel;
     AuthStatusInfo authInfo;

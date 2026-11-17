@@ -143,16 +143,8 @@ public:
         const sptr<IRemoteObject> &callback) override
     {
         ACCOUNT_LOGI("TaiheAuthorizationCallback OnConnectAbility");
-        if (context_ == nullptr) {
-            std::unique_lock<std::mutex> lock(mutex_);
-            errCode_ = ERR_JS_SYSTEM_SERVICE_EXCEPTION;
-            cv_.notify_one();
-            return ERR_AUTHORIZATION_CREATE_UI_EXTENSION_ERROR;
-        }
-        if (!context_->hasOptions || !context_->options.hasContext) {
-            std::unique_lock<std::mutex> lock(mutex_);
-            errCode_ = ERR_JS_SYSTEM_SERVICE_EXCEPTION;
-            cv_.notify_one();
+        if (context_ == nullptr || !context_->hasOptions || !context_->options.hasContext) {
+            SetErrorIfNotFinalized(ERR_JS_SYSTEM_SERVICE_EXCEPTION);
             return ERR_AUTHORIZATION_CREATE_UI_EXTENSION_ERROR;
         }
         ErrCode errCode = CreateUIExtension(context_, info, callback);
@@ -161,9 +153,7 @@ public:
         }
         auto connectCallback = iface_cast<IConnectAbilityCallback>(callback);
         if (connectCallback == nullptr) {
-            std::unique_lock<std::mutex> lock(mutex_);
-            errCode_ = ERR_JS_SYSTEM_SERVICE_EXCEPTION;
-            cv_.notify_one();
+            SetErrorIfNotFinalized(ERR_JS_SYSTEM_SERVICE_EXCEPTION);
             return ERR_OK;
         }
         std::vector<uint8_t> iamToken;
@@ -180,6 +170,18 @@ public:
     std::optional<ResultType> taiheResult_;
 
 private:
+    void SetErrorIfNotFinalized(int32_t errCode)
+    {
+        std::unique_lock<std::mutex> lock(mutex_);
+        if (onResultCalled_) {
+            ACCOUNT_LOGI("OnResult already called, skip error errCode=%{public}d", errCode);
+            return;
+        }
+        errCode_ = errCode;
+        onResultCalled_ = true;
+        cv_.notify_one();
+    }
+
     BuildResultFunc buildResultFunc_;
     BuildBatchResultFunc buildBatchResultFunc_;
 };

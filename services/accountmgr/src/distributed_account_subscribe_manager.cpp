@@ -28,7 +28,7 @@ namespace OHOS {
 namespace AccountSA {
 namespace {
 #ifndef FUZZ_TEST
-const char THREAD_DISTRIBUTED_ACCOUNT_EVENT[] = "distributedAccountEvent";
+const char THREAD_DISTRIBUTED_ACCOUNT_EVENT[] = "distSevEvent";
 #endif
 }
 

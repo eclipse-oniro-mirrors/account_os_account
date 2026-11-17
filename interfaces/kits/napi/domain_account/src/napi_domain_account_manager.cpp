@@ -350,6 +350,11 @@ static std::function<void()> GetDomainAccountInfoWork(JsDomainPluginParam *param
         napi_open_handle_scope(param->env, &scope);
         if (scope == nullptr) {
             ACCOUNT_LOGE("Fail to open scope");
+            {
+                std::unique_lock<std::mutex> lock(param->lockInfo->mutex);
+                param->lockInfo->count--;
+                param->lockInfo->condition.notify_all();
+            }
             delete param;
             return;
         }
@@ -396,6 +401,11 @@ static std::function<void()> OnAccountBoundWork(JsDomainPluginParam *param)
         napi_open_handle_scope(param->env, &scope);
         if (scope == nullptr) {
             ACCOUNT_LOGE("Fail to open scope");
+            {
+                std::unique_lock<std::mutex> lock(param->lockInfo->mutex);
+                param->lockInfo->count--;
+                param->lockInfo->condition.notify_all();
+            }
             delete param;
             return;
         }
@@ -420,6 +430,11 @@ static std::function<void()> OnAccountUnBoundWork(JsDomainPluginParam *param)
         napi_open_handle_scope(param->env, &scope);
         if (scope == nullptr) {
             ACCOUNT_LOGE("Fail to open scope");
+            {
+                std::unique_lock<std::mutex> lock(param->lockInfo->mutex);
+                param->lockInfo->count--;
+                param->lockInfo->condition.notify_all();
+            }
             delete param;
             return;
         }
@@ -520,6 +535,11 @@ static std::function<void()> GetAccessTokenWork(JsDomainPluginParam *param)
         napi_open_handle_scope(param->env, &scope);
         if (scope == nullptr) {
             ACCOUNT_LOGE("Fail to open scope");
+            {
+                std::unique_lock<std::mutex> lock(param->lockInfo->mutex);
+                param->lockInfo->count--;
+                param->lockInfo->condition.notify_all();
+            }
             delete param;
             return;
         }
@@ -542,6 +562,11 @@ static std::function<void()> IsUserTokenValidWork(JsDomainPluginParam *param)
         napi_open_handle_scope(param->env, &scope);
         if (scope == nullptr) {
             ACCOUNT_LOGE("Fail to open scope");
+            {
+                std::unique_lock<std::mutex> lock(param->lockInfo->mutex);
+                param->lockInfo->count--;
+                param->lockInfo->condition.notify_all();
+            }
             delete param;
             return;
         }
@@ -565,6 +590,11 @@ static std::function<void()> GetAuthStatusInfoWork(JsDomainPluginParam *param)
         napi_open_handle_scope(param->env, &scope);
         if (scope == nullptr) {
             ACCOUNT_LOGE("Fail to open scope");
+            {
+                std::unique_lock<std::mutex> lock(param->lockInfo->mutex);
+                param->lockInfo->count--;
+                param->lockInfo->condition.notify_all();
+            }
             delete param;
             return;
         }
@@ -619,6 +649,11 @@ static std::function<void()> AuthCommonWork(JsDomainPluginParam *param)
         napi_open_handle_scope(param->env, &scope);
         if (scope == nullptr) {
             ACCOUNT_LOGE("Fail to open scope");
+            {
+                std::unique_lock<std::mutex> lock(param->lockInfo->mutex);
+                param->lockInfo->count--;
+                param->lockInfo->condition.notify_all();
+            }
             delete param;
             return;
         }

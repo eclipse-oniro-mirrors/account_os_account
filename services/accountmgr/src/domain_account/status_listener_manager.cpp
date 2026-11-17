@@ -114,8 +114,12 @@ void StatusListenerManager::NotifyEventAsync(const DomainAccountEventData &repor
 #else  // HAS_CES_PART
     ACCOUNT_LOGI("No common event part! Publish nothing!");
 #endif // HAS_CES_PART
-    std::lock_guard<std::mutex> lock(mutex_);
-    for (auto record : listenerAll_) {
+    std::vector<sptr<IRemoteObject>> listeners;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        listeners.assign(listenerAll_.begin(), listenerAll_.end());
+    }
+    for (auto &record : listeners) {
         auto callback = iface_cast<IDomainAccountCallback>(record);
         if (callback == nullptr) {
             ACCOUNT_LOGE("callback is nullptr!");
