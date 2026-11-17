@@ -80,6 +80,7 @@
         "constraint.freeWindow",
         "constraint.collaboration.remoteShare",
         "constraint.screen.shot",
-        "constraint.screen.record"
+        "constraint.screen.record",
+        "constraint.systemShare"
     ]
 }
