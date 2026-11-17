@@ -135,6 +135,7 @@ void PerfStat::SetInstanceInitTime(int64_t time)
 /* Account state machine process statistic */
 void PerfStat::SetAccountStateChangeTime(const std::string &stateStr, int64_t time)
 {
+    std::lock_guard<std::mutex> lock(mutex_);
     accountStateChangeRecords_[stateStr] = time;
 }
 
@@ -169,7 +170,10 @@ void PerfStat::Reset()
     serviceOnStop_ = 0;
     serviceInit_ = 0;
 
-    accountStateChangeRecords_.clear();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        accountStateChangeRecords_.clear();
+    }
 
     enableStat_ = true;
 }
@@ -221,8 +225,18 @@ void PerfStat::Dump(std::string& result) const
             .append("\n");
     }
 
-    auto iter = accountStateChangeRecords_.begin();
-    for (; iter != accountStateChangeRecords_.end(); iter++) {
+    DumpAccountStateChangeRecords(result);
+}
+
+void PerfStat::DumpAccountStateChangeRecords(std::string &result) const
+{
+    std::map<std::string, int64_t> stateChangeRecords;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        stateChangeRecords = accountStateChangeRecords_;
+    }
+    auto iter = stateChangeRecords.begin();
+    for (; iter != stateChangeRecords.end(); iter++) {
         result.append(iter->first.c_str())
             .append(": ")
             .append(std::to_string(iter->second))
