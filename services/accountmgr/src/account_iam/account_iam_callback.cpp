@@ -358,6 +358,7 @@ void AuthCallback::OnResult(int32_t result, const Attributes &extraInfo)
         if (result == UserIam::UserAuth::ResultCode::FAIL) {
             return AccountInfoReport::ReportSecurityInfo("", authedAccountId, ReportEvent::EVENT_LOGIN, result);
         }
+        return;
     }
     // private pin auth
     if ((authType_ == AuthType::PRIVATE_PIN) || (authIntent_ == AuthIntent::QUESTION_AUTH)) {
