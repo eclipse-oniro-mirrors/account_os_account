@@ -60,8 +60,8 @@ public:
 
     TaiheAuthorizationCallback(
         std::shared_ptr<TaiheAcquireAuthorizationContext> &context,
-        std::string privilege, BuildResultFunc buildResultFunc)
-        : buildResultFunc_(std::move(buildResultFunc))
+        std::string privilege, BuildResultFunc buildResultFunc, ResultType defaultResult)
+        : buildResultFunc_(std::move(buildResultFunc)), defaultResult_(std::move(defaultResult))
     {
         context_ = context;
         privilege_ = std::move(privilege);
@@ -69,8 +69,8 @@ public:
 
     TaiheAuthorizationCallback(
         std::shared_ptr<TaiheAcquireAuthorizationContext> &context,
-        BuildBatchResultFunc buildBatchResultFunc)
-        : buildBatchResultFunc_(std::move(buildBatchResultFunc))
+        BuildBatchResultFunc buildBatchResultFunc, ResultType defaultResult)
+        : buildBatchResultFunc_(std::move(buildBatchResultFunc)), defaultResult_(std::move(defaultResult))
     {
         context_ = context;
     }
@@ -98,9 +98,8 @@ public:
                 errCode_ = ERR_JS_AUTHORIZATION_SERVICE_BUSY;
             }
         }
-        if (errCode_ == ERR_OK && buildResultFunc_ != nullptr) {
-            const std::string &privilege = result.privilege.empty() ? privilege_ : result.privilege;
-            taiheResult_ = buildResultFunc_(result, privilege);
+        if (errCode_ == ERR_OK) {
+            rawResult_ = result;
         }
         onResultCalled_ = true;
         cv_.notify_one();
@@ -128,11 +127,8 @@ public:
                 errCode_ = ERR_JS_AUTHORIZATION_INTERACTION_NOT_ALLOWED;
             }
         }
-        if (errCode_ == ERR_OK && buildBatchResultFunc_ != nullptr) {
-            taiheResult_ = buildBatchResultFunc_(results);
-        } else if (errCode_ == ERR_OK && buildResultFunc_ != nullptr && !results.empty()) {
-            const std::string &privilege = results[0].privilege.empty() ? privilege_ : results[0].privilege;
-            taiheResult_ = buildResultFunc_(results[0], privilege);
+        if (errCode_ == ERR_OK) {
+            rawResults_ = results;
         }
         onResultCalled_ = true;
         cv_.notify_one();
@@ -168,7 +164,38 @@ public:
         }
         std::vector<uint8_t> iamToken;
         NotifyAuthorizationResultWithRetry(callback, errCode, iamToken, -1, 0);
+        {
+            std::unique_lock<std::mutex> lock(mutex_);
+            errCode_ = errCode;
+            cv_.notify_one();
+        }
         return ERR_OK;
+    }
+
+    /**
+     * @brief Build taihe result on main thread after cv.wait wakes up.
+     * @note Must be called while holding mutex_ (caller is responsible for locking).
+     * @return Constructed ResultType, or defaultResult_ on error or empty result.
+     */
+    ResultType BuildTaiheResult() const
+    {
+        if (errCode_ != ERR_OK) {
+            return defaultResult_;
+        }
+        if (buildBatchResultFunc_ != nullptr) {
+            return buildBatchResultFunc_(rawResults_);
+        }
+        if (buildResultFunc_ != nullptr) {
+            if (!rawResults_.empty()) {
+                const std::string &privilege = rawResults_[0].privilege.empty() ? privilege_ : rawResults_[0].privilege;
+                return buildResultFunc_(rawResults_[0], privilege);
+            }
+            if (rawResult_.has_value()) {
+                const std::string &privilege = rawResult_->privilege.empty() ? privilege_ : rawResult_->privilege;
+                return buildResultFunc_(*rawResult_, privilege);
+            }
+        }
+        return defaultResult_;
     }
 
     int32_t errCode_ = -1;
@@ -177,21 +204,14 @@ public:
     bool onResultCalled_ = false;
     std::shared_ptr<TaiheAcquireAuthorizationContext> context_;
     std::string privilege_;
-    std::optional<ResultType> taiheResult_;
+    ResultType defaultResult_;
+    std::optional<AccountSA::AuthorizationResult> rawResult_;
+    std::vector<AccountSA::AuthorizationResult> rawResults_;
 
 private:
     BuildResultFunc buildResultFunc_;
     BuildBatchResultFunc buildBatchResultFunc_;
 };
-
-template <typename ResultType>
-static inline ResultType TaiheWaitForAuthorizationResult(
-    const std::shared_ptr<TaiheAuthorizationCallback<ResultType>> &callback)
-{
-    std::unique_lock<std::mutex> lock(callback->mutex_);
-    callback->cv_.wait(lock, [callback] { return callback->onResultCalled_; });
-    return std::move(*callback->taiheResult_);
-}
 
 } // namespace AccountSA
 } // namespace OHOS

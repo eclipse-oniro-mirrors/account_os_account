@@ -1651,7 +1651,7 @@ static AcquireAuthorizationResult WaitForAuthorizationResult(
             .privilege = taihe::string("")
         };
     }
-    return std::move(*callback->taiheResult_);
+    return callback->BuildTaiheResult();
 }
 
 class AuthorizationManagerImpl {
@@ -1689,7 +1689,8 @@ public:
             return taiheResult;
         }
         // Create callback and acquire authorization
-        auto callback = std::make_shared<TaiheAuthCallback>(context, privilegeStr, BuildAuthorizationResult);
+        auto callback = std::make_shared<TaiheAuthCallback>(context, privilegeStr,
+            BuildAuthorizationResult, InitializeAuthorizationResult(privilegeStr));
         ErrCode errCode = AccountSA::AuthorizationClient::GetInstance().AcquireAuthorization(
             privilegeStr, context->options, callback);
         if (errCode != ERR_OK) {
