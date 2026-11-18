@@ -16,6 +16,7 @@
 #ifndef OS_ACCOUNT_SERVICES_ACCOUNTMGR_INCLUDE_APPACCOUNT_APP_ACCOUNT_AUTHENTICATOR_SESSION_H
 #define OS_ACCOUNT_SERVICES_ACCOUNTMGR_INCLUDE_APPACCOUNT_APP_ACCOUNT_AUTHENTICATOR_SESSION_H
 
+#include <atomic>
 #include <string>
 #include "ability_connect_callback_stub.h"
 #include "app_account_authenticator_session_manager.h"
@@ -98,7 +99,7 @@ private:
         AAFwk::Want &errResult);
 
 private:
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
     sptr<SessionConnection> conn_ = nullptr;
     sptr<SessionClientDeathRecipient> clientDeathRecipient_ = nullptr;
     sptr<SessionServerDeathRecipient> serverDeathRecipient_ = nullptr;
@@ -109,7 +110,8 @@ private:
     int32_t userId_;
     pid_t ownerUid_;
     bool isInitialized_ = false;
-    bool isConnected_ = false;
+    std::atomic<bool> isConnected_ = {false};
+    mutable std::atomic<bool> resultSent_ = {false};
 };
 }  // namespace AccountSA
 }  // namespace OHOS

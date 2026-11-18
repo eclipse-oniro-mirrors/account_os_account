@@ -361,13 +361,13 @@ HWTEST_F(AppAccountSessionManagerModuleTest, AppAccountSessionManagerModuleTest_
     auto sessionPtr = appAccountAuthenticatorSessionManagerPtr_->GetSession(sessionId);
     ASSERT_EQ(sessionPtr, nullptr);
     appAccountAuthenticatorSessionManagerPtr_->OnSessionAbilityDisconnectDone(sessionId, element, resultCode);
-    ASSERT_EQ(session->isConnected_, true);
+    ASSERT_EQ(session->isConnected_.load(), true);
 
     appAccountAuthenticatorSessionManagerPtr_->sessionMap_[sessionId] = session;
     sessionPtr = appAccountAuthenticatorSessionManagerPtr_->GetSession(sessionId);
     ASSERT_EQ(sessionPtr, session);
     appAccountAuthenticatorSessionManagerPtr_->OnSessionAbilityDisconnectDone(sessionId, element, resultCode);
-    ASSERT_EQ(session->isConnected_, false);
+    ASSERT_EQ(session->isConnected_.load(), false);
 }
 
 /**
@@ -411,7 +411,7 @@ HWTEST_F(AppAccountSessionManagerModuleTest, AppAccountSessionManagerModuleTest_
     EXPECT_CALL(*testCallBack, OnResult(_, _)).Times(Exactly(1));
     appAccountAuthenticatorSessionManagerPtr_->OnSessionResult(sessionId, resultCode, result);
 
-    EXPECT_CALL(*testCallBack, OnResult(_, _)).Times(Exactly(1));
+    EXPECT_CALL(*testCallBack, OnResult(_, _)).Times(Exactly(0));
     appAccountAuthenticatorSessionManagerPtr_->OnSessionRequestRedirected(sessionId, result);
 
     AppExecFwk::ElementName element = result.GetElement();
