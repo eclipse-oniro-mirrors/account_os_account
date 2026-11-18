@@ -262,7 +262,7 @@ ErrCode BundleManagerAdapter::RemoveUser(int32_t userId)
     if (result != ERR_OK) {
         ReportOsAccountOperationFail(userId, "remove", result, "BundleManager failed to remove user");
     }
-    return ERR_OK;
+    return result;
 }
 
 #ifdef ENABLE_MULTIPLE_OS_ACCOUNT_SUBSPACE
