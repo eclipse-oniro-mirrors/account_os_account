@@ -118,7 +118,7 @@ napi_value NapiOsAccountSubProfileManager::CreateOsAccountSubProfile(napi_env en
     napi_value argv[ARGS_SIZE_ONE] = {nullptr};
     NAPI_CALL(env, napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr));
     if (argc != ARGS_SIZE_ONE) {
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, "Parameter error. 1 parameter required.", true);
+        ThrowParamCountError(env, ARGS_SIZE_ONE, argc, true);
         return nullptr;
     }
 
@@ -132,7 +132,7 @@ napi_value NapiOsAccountSubProfileManager::CreateOsAccountSubProfile(napi_env en
     ctx->throwErr = true;
 
     if (!GetIntProperty(env, argv[PARAMZERO], ctx->osAccountId)) {
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, "Parameter error. osAccountId must be number.", true);
+        ThrowParamTypeError(env, PARAMZERO, argv[PARAMZERO], "number", true);
         return nullptr;
     }
 
@@ -153,7 +153,7 @@ napi_value NapiOsAccountSubProfileManager::DeleteOsAccountSubProfile(napi_env en
     napi_value argv[ARGS_SIZE_TWO] = {nullptr};
     NAPI_CALL(env, napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr));
     if (argc != ARGS_SIZE_TWO) {
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, "Parameter error. 2 parameters required.", true);
+        ThrowParamCountError(env, ARGS_SIZE_TWO, argc, true);
         return nullptr;
     }
 
@@ -167,13 +167,11 @@ napi_value NapiOsAccountSubProfileManager::DeleteOsAccountSubProfile(napi_env en
     ctx->throwErr = true;
 
     if (!GetIntProperty(env, argv[PARAMZERO], ctx->osAccountId)) {
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR,
-            "Parameter error. The type of \"osAccountId\" must be number.", true);
+        ThrowParamTypeError(env, PARAMZERO, argv[PARAMZERO], "number", true);
         return nullptr;
     }
     if (!GetIntProperty(env, argv[PARAMONE], ctx->subProfileId)) {
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR,
-            "Parameter error. The type of \"subProfileId\" must be number.", true);
+        ThrowParamTypeError(env, PARAMONE, argv[PARAMONE], "number", true);
         return nullptr;
     }
 
@@ -206,7 +204,7 @@ napi_value NapiOsAccountSubProfileManager::SwitchOsAccountSubProfile(napi_env en
     napi_value argv[ARGS_SIZE_TWO] = {nullptr};
     NAPI_CALL(env, napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr));
     if (argc != ARGS_SIZE_TWO) {
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, "Parameter error. 2 parameters required.", true);
+        ThrowParamCountError(env, ARGS_SIZE_TWO, argc, true);
         return nullptr;
     }
 
@@ -220,13 +218,11 @@ napi_value NapiOsAccountSubProfileManager::SwitchOsAccountSubProfile(napi_env en
     ctx->throwErr = true;
 
     if (!GetIntProperty(env, argv[PARAMZERO], ctx->osAccountId)) {
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR,
-            "Parameter error. The type of \"osAccountId\" must be number.", true);
+        ThrowParamTypeError(env, PARAMZERO, argv[PARAMZERO], "number", true);
         return nullptr;
     }
     if (!GetIntProperty(env, argv[PARAMONE], ctx->subProfileId)) {
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR,
-            "Parameter error. The type of \"subProfileId\" must be number.", true);
+        ThrowParamTypeError(env, PARAMONE, argv[PARAMONE], "number", true);
         return nullptr;
     }
 
@@ -397,9 +393,7 @@ static bool ParseSubspaceEventArray(napi_env env, napi_value array,
     bool isArray = false;
     NAPI_CALL_BASE(env, napi_is_array(env, array, &isArray), false);
     if (!isArray) {
-        ACCOUNT_LOGE("argv[0] is not array");
-        std::string errMsg = "Parameter error. The type of \"events\" must be array";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAMZERO, array, "array", true);
         return false;
     }
     uint32_t arrayLen = 0;
@@ -416,8 +410,8 @@ static bool ParseSubspaceEventArray(napi_env env, napi_value array,
         int32_t eventValue = 0;
         if (!GetIntProperty(env, element, eventValue)) {
             ACCOUNT_LOGE("Get event value failed at index %{public}u", i);
-            std::string errMsg = "Parameter error. The type of element at index " + std::to_string(i) +
-                " in \"events\" must be number";
+            std::string errMsg = "Parameter error. Param[0] array element type mismatch. Expected: number, Actual: " +
+                GetNapiValueTypeName(env, element) + ".";
             AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
             return false;
         }
@@ -441,9 +435,7 @@ static bool ParseParaOnOsAccountSubspaceEvent(napi_env env, napi_callback_info c
     napi_value argv[ARGS_SIZE_TWO] = {nullptr};
     NAPI_CALL_BASE(env, napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr), false);
     if (argc < ARGS_SIZE_TWO) {
-        ACCOUNT_LOGE("argc is invalid");
-        std::string errMsg = "Parameter error. The number of parameters should be 2";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamCountError(env, ARGS_SIZE_TWO, argc, true);
         return false;
     }
     if (!ParseSubspaceEventArray(env, argv[PARAMZERO], types)) {
@@ -454,9 +446,7 @@ static bool ParseParaOnOsAccountSubspaceEvent(napi_env env, napi_callback_info c
             napi_delete_reference(env, tempRef);
             tempRef = nullptr;
         }
-        ACCOUNT_LOGE("Get callbackRef failed");
-        std::string errMsg = "Parameter error. The type of \"callback\" must be function";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAMONE, argv[PARAMONE], "function", true);
         return false;
     }
     return true;
@@ -525,9 +515,7 @@ static bool ParseParaOffOsAccountSubspaceEvent(napi_env env, napi_callback_info 
             napi_delete_reference(env, tempRef);
             tempRef = nullptr;
         }
-        ACCOUNT_LOGE("Get callback property failed");
-        std::string errMsg = "Parameter error. The type of \"callback\" must be function";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAMZERO, argv[PARAMZERO], "function", true);
         return false;
     }
     return true;
@@ -591,9 +579,7 @@ static bool ParseParaGetForegroundSubProfileId(napi_env env, napi_callback_info 
         return true;
     }
     if (!GetIntProperty(env, argv[PARAMZERO], asyncContext->localId)) {
-        ACCOUNT_LOGE("Get osAccountId failed");
-        std::string errMsg = "Parameter error. The type of \"osAccountId\" must be number";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+        ThrowParamTypeError(env, PARAMZERO, argv[PARAMZERO], "number", asyncContext->throwErr);
         return false;
     }
     asyncContext->hasLocalId = true;
@@ -669,9 +655,7 @@ static bool ParseParaGetSubProfileIds(napi_env env, napi_callback_info cbInfo,
         return true;
     }
     if (!GetIntProperty(env, argv[PARAMZERO], asyncContext->localId)) {
-        ACCOUNT_LOGE("Get osAccountId failed");
-        std::string errMsg = "Parameter error. The type of \"osAccountId\" must be number";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+        ThrowParamTypeError(env, PARAMZERO, argv[PARAMZERO], "number", asyncContext->throwErr);
         return false;
     }
     asyncContext->hasLocalId = true;
@@ -750,15 +734,11 @@ static bool ParseParaGetLocalIdForSubProfile(napi_env env, napi_callback_info cb
     napi_value argv[ARGS_SIZE_ONE] = {0};
     NAPI_CALL_BASE(env, napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr), false);
     if (argc == ARGS_SIZE_ZERO) {
-        ACCOUNT_LOGE("The number of parameters should be at least 1");
-        std::string errMsg = "Parameter error. The number of parameters should be at least 1";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamAtLeastCountError(env, ARGS_SIZE_ONE, argc, true);
         return false;
     }
     if (!GetIntProperty(env, argv[PARAMZERO], asyncContext->subProfileId)) {
-        ACCOUNT_LOGE("Get subProfileId failed");
-        std::string errMsg = "Parameter error. The type of \"subProfileId\" must be number";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+        ThrowParamTypeError(env, PARAMZERO, argv[PARAMZERO], "number", asyncContext->throwErr);
         return false;
     }
     return true;
@@ -824,31 +804,23 @@ static bool ParseParaGetSubProfile(napi_env env, napi_callback_info cbInfo,
     napi_value argv[ARGS_SIZE_TWO] = {0};
     NAPI_CALL_BASE(env, napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr), false);
     if (argc == ARGS_SIZE_ZERO) {
-        ACCOUNT_LOGE("The number of parameters should be at least 1");
-        std::string errMsg = "Parameter error. The number of parameters should be at least 1";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamAtLeastCountError(env, ARGS_SIZE_ONE, argc, true);
         return false;
     }
 
     if (argc == ARGS_SIZE_TWO) {
         if (!GetIntProperty(env, argv[PARAMZERO], asyncContext->localId)) {
-            ACCOUNT_LOGE("Get localId failed");
-            std::string errMsg = "Parameter error. The type of \"osAccountId\" must be number";
-            AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+            ThrowParamTypeError(env, PARAMZERO, argv[PARAMZERO], "number", asyncContext->throwErr);
             return false;
         }
         if (!GetIntProperty(env, argv[PARAMONE], asyncContext->subProfileId)) {
-            ACCOUNT_LOGE("Get subProfileId failed");
-            std::string errMsg = "Parameter error. The type of \"subProfileId\" must be number";
-            AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+            ThrowParamTypeError(env, PARAMONE, argv[PARAMONE], "number", asyncContext->throwErr);
             return false;
         }
         asyncContext->hasLocalId = true;
     } else {
         if (!GetIntProperty(env, argv[PARAMZERO], asyncContext->subProfileId)) {
-            ACCOUNT_LOGE("Get subProfileId failed");
-            std::string errMsg = "Parameter error. The type of \"subProfileId\" must be number";
-            AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+            ThrowParamTypeError(env, PARAMZERO, argv[PARAMZERO], "number", asyncContext->throwErr);
             return false;
         }
         asyncContext->hasLocalId = false;

@@ -30,6 +30,8 @@ using namespace OHOS::AccountSA;
 namespace {
 const size_t ARG_SIZE_ONE = 1;
 const size_t ARG_SIZE_TWO = 2;
+const size_t PARAM_ZERO = 0;
+const size_t PARAM_ONE = 1;
 }
 
 napi_value NapiDomainServerConfigManager::Init(napi_env env, napi_value exports)
@@ -69,11 +71,11 @@ static bool ParseContextFoAddServerConfig(
     napi_value argv[ARG_SIZE_ONE] = {0};
     napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
     if (argc < ARG_SIZE_ONE) {
-        ACCOUNT_LOGE("The parameter of number should be at least one.");
+        ThrowParamCountError(env, ARG_SIZE_ONE, argc, true);
         return false;
     }
     if (!JsObjectToNativeString(env, argv[0], context->parameters)) {
-        ACCOUNT_LOGE("Get parameters failed.");
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "Record<string, Object>", true);
         return false;
     }
     return true;
@@ -128,8 +130,6 @@ napi_value NapiDomainServerConfigManager::AddServerConfig(napi_env env, napi_cal
     auto context = std::make_unique<AddServerConfigAsyncContext>(env);
 
     if (!ParseContextFoAddServerConfig(env, info, context.get())) {
-        std::string errMsg = "The type of parameter is error.";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
         return nullptr;
     }
     napi_value result = nullptr;
@@ -150,11 +150,11 @@ static bool ParseContextFoRemoveServerConfig(
     napi_value argv[ARG_SIZE_ONE] = {0};
     napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
     if (argc < ARG_SIZE_ONE) {
-        ACCOUNT_LOGE("The parameter of number should be at least one.");
+        ThrowParamCountError(env, ARG_SIZE_ONE, argc, true);
         return false;
     }
     if (!GetStringProperty(env, argv[0], context->configId)) {
-        ACCOUNT_LOGE("Get removeServerconfig's configId failed");
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "string", true);
         return false;
     }
     return true;
@@ -193,8 +193,6 @@ napi_value NapiDomainServerConfigManager::RemoveServerConfig(napi_env env, napi_
 {
     auto context = std::make_unique<RemoveServerConfigAsyncContext>(env);
     if (!ParseContextFoRemoveServerConfig(env, info, context.get())) {
-        std::string errMsg = "The type of parameter is error.";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
         return nullptr;
     }
     napi_value result = nullptr;
@@ -215,11 +213,11 @@ static bool ParseContextFoGetAccountServerConfig(
     napi_value argv[ARG_SIZE_ONE] = {0};
     napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
     if (argc < ARG_SIZE_ONE) {
-        ACCOUNT_LOGE("The parameter of number should be at least one.");
+        ThrowParamCountError(env, ARG_SIZE_ONE, argc, true);
         return false;
     }
     if (!ParseDomainAccountInfo(env, argv[0], context->domainAccountInfo)) {
-        ACCOUNT_LOGE("Get domainInfo failed");
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "DomainAccountInfo", true);
         return false;
     }
     return true;
@@ -261,8 +259,6 @@ napi_value NapiDomainServerConfigManager::GetAccountServerConfig(napi_env env, n
 {
     auto context = std::make_unique<GetAccountServerConfigAsyncContext>(env);
     if (!ParseContextFoGetAccountServerConfig(env, info, context.get())) {
-        std::string errMsg = "The type of parameter is error.";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
         return nullptr;
     }
     napi_value result = nullptr;
@@ -283,21 +279,15 @@ static bool ParseContextForUpdateServerConfig(
     napi_value argv[ARG_SIZE_TWO] = {0};
     NAPI_CALL_BASE(env, napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr), false);
     if (argc < ARG_SIZE_TWO) {
-        ACCOUNT_LOGE("The parameter of number should be at least two.");
-        std::string errMsg = "The number of parameters should be at least two.";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamAtLeastCountError(env, ARG_SIZE_TWO, argc, true);
         return false;
     }
     if (!GetStringProperty(env, argv[0], context->configId)) {
-        ACCOUNT_LOGE("Get updateServerconfig's configId failed");
-        std::string errMsg = "The type of configId is error.";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "string", true);
         return false;
     }
     if (!JsObjectToNativeString(env, argv[1], context->parameters)) {
-        ACCOUNT_LOGE("Get parameters failed.");
-        std::string errMsg = "The type of parameter is error.";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ONE, argv[PARAM_ONE], "Record<string, Object>", true);
         return false;
     }
     return true;
@@ -358,15 +348,11 @@ static bool ParseContextForGetServerConfig(napi_env env, napi_callback_info info
     napi_value argv[ARG_SIZE_ONE] = {0};
     NAPI_CALL_BASE(env, napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr), false);
     if (argc < ARG_SIZE_ONE) {
-        ACCOUNT_LOGE("The parameter of number should be at least one.");
-        std::string errMsg = "The number of parameters should be at least one.";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamCountError(env, ARG_SIZE_ONE, argc, true);
         return false;
     }
     if (!GetStringProperty(env, argv[0], context->configId)) {
-        ACCOUNT_LOGE("Get getServerConfig's configId failed");
-        std::string errMsg = "The type of configId is error.";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "string", true);
         return false;
     }
     return true;

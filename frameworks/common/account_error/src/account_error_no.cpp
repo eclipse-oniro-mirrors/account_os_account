@@ -18,7 +18,10 @@
 
 namespace OHOS {
 static const std::unordered_map<uint32_t, std::string> g_errorStringMap = {
-    {ERR_JS_PARAMETER_ERROR, "Parameter invalid, please input the correct parameter"},
+    {ERR_JS_PARAMETER_ERROR, "Parameter error. Possible causes: "
+        "1. Mandatory parameters are left unspecified; "
+        "2. Incorrect parameter types; "
+        "3. Parameter verification failed."},
     {ERR_JS_ACCOUNT_NOT_FOUND, "Account not found, please check whether the account exists"},
     {ERR_JS_IS_NOT_SYSTEM_APP, "This api is system api, Please use the system application to call this api"},
     {ERR_JS_ACCOUNT_ALREADY_EXIST, "Account already exists, please cancel or try other account"},

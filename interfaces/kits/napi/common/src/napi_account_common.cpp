@@ -708,8 +708,6 @@ bool JsObjectToNativeString(napi_env env, napi_value jsData, std::string &native
 
     if (!GetStringProperty(env, transValue, nativeData)) {
         ACCOUNT_LOGE("Get native data failed");
-        std::string errMsg = "The type of arg 2 must be string";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, false);
         return false;
     }
     return true;
@@ -766,4 +764,4 @@ bool GetSelfTargetVersion(uint32_t &targetVersion)
     return true;
 }
 } // namespace AccountJsKit
-} // namespace OHOS
+} // namespace OHOS

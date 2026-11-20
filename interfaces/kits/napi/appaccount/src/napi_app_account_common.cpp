@@ -19,6 +19,7 @@
 #include "app_account_constants.h"
 #include "app_account_manager.h"
 #include "napi_common.h"
+#include "napi_account_error.h"
 
 namespace OHOS {
 namespace AccountJsKit {
@@ -26,23 +27,21 @@ using namespace OHOS::AccountSA;
 static const std::int32_t SUBSCRIBE_MAX_PARA = 3;
 static const std::int32_t UNSUBSCRIBE_MAX_PARA = 2;
 
-static const std::string ErrMsgList[] = {
-    "Parameter error. The type of \"name\" must be string",           // index equals to PropertyType::NAME value
-    "Parameter error. The type of \"owner\" must be string",          // index equals to PropertyType::OWNER value
-    "Parameter error. The type of \"authType\" must be string",       // index equals to PropertyType::AUTH_TYPE value
-    "Parameter error. The type of \"bundleName\" must be string",     // index equals to PropertyType::BUNDLE_NAME value
-    "Parameter error. The type of \"sessionId\" must be string",      // index equals to PropertyType::SESSION_ID value
-    "Parameter error. The type of \"isVisible\" must be bool",        // index equals to PropertyType::IS_VISIBLE value
-    "Parameter error. The type of \"token\" must be string",          // index equals to PropertyType::TOKEN value
-    "Parameter error. The type of \"extraInfo\" must be string",      // index equals to PropertyType::EXTRA_INFO value
-    "Parameter error. The type of \"credentialType\" must be string", // index equals to PropertyType::CREDENTIAL_TYPE
-                                                                      // value
-    "Parameter error. The type of \"credential\" must be string",     // index equals to PropertyType::CREDENTIAL value
-    "Parameter error. The type of \"key\" must be string",            // index equals to PropertyType::KEY value
-    "Parameter error. The type of \"value\" must be string",          // index equals to PropertyType::VALUE value
-    "Parameter error. The type of \"isAccessible\" must be bool",     // index equals to PropertyType::IS_ACCESSIBLE
-                                                                      // value
-    "Parameter error. The type of \"isEnable\" must be bool",         // index equals to PropertyType::IS_ENABLE value
+static const std::string PropertyExpectedTypeList[] = {
+    "string",  // index equals to PropertyType::NAME value
+    "string",  // index equals to PropertyType::OWNER value
+    "string",  // index equals to PropertyType::AUTH_TYPE value
+    "string",  // index equals to PropertyType::BUNDLE_NAME value
+    "string",  // index equals to PropertyType::SESSION_ID value
+    "boolean", // index equals to PropertyType::IS_VISIBLE value
+    "string",  // index equals to PropertyType::TOKEN value
+    "string",  // index equals to PropertyType::EXTRA_INFO value
+    "string",  // index equals to PropertyType::CREDENTIAL_TYPE value
+    "string",  // index equals to PropertyType::CREDENTIAL value
+    "string",  // index equals to PropertyType::KEY value
+    "string",  // index equals to PropertyType::VALUE value
+    "boolean", // index equals to PropertyType::IS_ACCESSIBLE value
+    "boolean", // index equals to PropertyType::IS_ENABLE value
 };
 
 SubscriberPtr::SubscriberPtr(const AppAccountSubscribeInfo &subscribeInfo) : AppAccountSubscriber(subscribeInfo)
@@ -525,12 +524,12 @@ void ParseContextWithExInfo(napi_env env, napi_callback_info cbInfo, AppAccountA
     napi_valuetype valueType = napi_undefined;
     napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr);
     if (argc < ARGS_SIZE_ONE) {
-        asyncContext->errMsg = "the number of parameters should be at least 1";
+        asyncContext->errMsg = BuildParamAtLeastCountError(ARGS_SIZE_ONE, argc);
         return;
     }
     if (!GetStringProperty(env, argv[0], asyncContext->name)) {
         ACCOUNT_LOGE("the name is not a string");
-        asyncContext->errMsg = "the name is not a string";
+        asyncContext->errMsg = BuildParamTypeError(env, PARAMZERO, argv[PARAMZERO], "string");
     }
     if (argc > PARAMTWO) {
         if (!GetCallbackProperty(env, argv[PARAMTWO], asyncContext->callbackRef, 1)) {
@@ -541,7 +540,7 @@ void ParseContextWithExInfo(napi_env env, napi_callback_info cbInfo, AppAccountA
         napi_typeof(env, argv[1], &valueType);
         if (valueType == napi_string) {
             if (!GetStringProperty(env, argv[1], asyncContext->extraInfo)) {
-                asyncContext->errMsg = "the extraInfo is not a string";
+                asyncContext->errMsg = BuildParamTypeError(env, PARAMONE, argv[PARAMONE], "string");
             }
         } else if (valueType == napi_function) {
             if (!GetCallbackProperty(env, argv[1], asyncContext->callbackRef, 1)) {
@@ -549,7 +548,7 @@ void ParseContextWithExInfo(napi_env env, napi_callback_info cbInfo, AppAccountA
             }
         } else {
             ACCOUNT_LOGE("Type matching failed");
-            asyncContext->errMsg = "the type of param 2 is incorrect";
+            asyncContext->errMsg = BuildParamTypeError(env, PARAMONE, argv[PARAMONE], "string or function");
         }
     }
     return;
@@ -574,19 +573,19 @@ bool ParseContextForAuth(napi_env env, napi_callback_info cbInfo, OAuthAsyncCont
     napi_value argv[ARGS_SIZE_FIVE] = {0};
     napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr);
     if (argc < ARGS_SIZE_FOUR) {
-        context->errMsg = "the number of parameters should be at least 4";
+        context->errMsg = BuildParamAtLeastCountError(ARGS_SIZE_FOUR, argc);
         return false;
     }
     if (!GetStringProperty(env, argv[0], context->name)) {
-        context->errMsg = "Parameter error. The type of \"name\" must be string";
+        context->errMsg = BuildParamTypeError(env, PARAMZERO, argv[PARAMZERO], "string");
         return false;
     }
     if (!GetStringProperty(env, argv[1], context->owner)) {
-        context->errMsg = "Parameter error. The type of \"owner\" must be string";
+        context->errMsg = BuildParamTypeError(env, PARAMONE, argv[PARAMONE], "string");
         return false;
     }
     if (!GetStringProperty(env, argv[PARAMTWO], context->authType)) {
-        context->errMsg = "Parameter error. The type of \"authType\" must be string";
+        context->errMsg = BuildParamTypeError(env, PARAMTWO, argv[PARAMTWO], "string");
         return false;
     }
     AAFwk::WantParams params;
@@ -598,7 +597,7 @@ bool ParseContextForAuth(napi_env env, napi_callback_info cbInfo, OAuthAsyncCont
         } else {
             if (!AppExecFwk::UnwrapWantParams(env, argv[PARAMTHREE], params)) {
                 ACCOUNT_LOGE("UnwrapWantParams failed");
-                context->errMsg = "Parameter error. The type of \"options\" must be Record";
+                context->errMsg = BuildParamTypeError(env, PARAMTHREE, argv[PARAMTHREE], "Record<string, Object>");
                 return false;
             }
         }
@@ -606,7 +605,7 @@ bool ParseContextForAuth(napi_env env, napi_callback_info cbInfo, OAuthAsyncCont
     context->options.SetParams(params);
     JSAuthCallback callback;
     if (!ParseJSAuthCallback(env, argv[argc - 1], callback)) {
-        context->errMsg = "Parameter error. The type of \"callback\" must be AuthCallback";
+        context->errMsg = BuildParamTypeError(env, static_cast<int>(argc - 1), argv[argc - 1], "AuthCallback");
         return false;
     }
     context->appAccountMgrCb = new (std::nothrow) AppAccountManagerCallback(env, callback);
@@ -639,7 +638,8 @@ void ParseContextForAuthenticate(napi_env env, napi_callback_info cbInfo, OAuthA
     asyncContext->appAccountMgrCb = new (std::nothrow) AppAccountManagerCallback(env, callback);
 }
 
-bool ParseContextOAuthProperty(napi_env env, napi_value &argv, PropertyType type, OAuthAsyncContext *asyncContext)
+bool ParseContextOAuthProperty(napi_env env, napi_value &argv, PropertyType type, int paramIndex,
+    OAuthAsyncContext *asyncContext)
 {
     bool result = false;
     switch (type) {
@@ -664,12 +664,12 @@ bool ParseContextOAuthProperty(napi_env env, napi_value &argv, PropertyType type
         case PropertyType::TOKEN :
             result = GetStringProperty(env, argv, asyncContext->token);
             break;
-        // when new PropertyType is added, new error message need to be added in ErrMsgList.
+        // when new PropertyType is added, new expected type need to be added in PropertyExpectedTypeList.
         default:
             break;
     }
     if (!result) {
-        asyncContext->errMsg = ErrMsgList[type];
+        asyncContext->errMsg = BuildParamTypeError(env, paramIndex, argv, PropertyExpectedTypeList[type]);
     }
     return result;
 }
@@ -683,15 +683,15 @@ static bool ParseContextForOAuthInner(napi_env env, napi_callback_info cbInfo,
     napi_value argv[ARGS_SIZE_MAX] = {0};
     napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr);
     if (argc < argcSize - 1) {
-        asyncContext->errMsg = "the number of parameter should be at least " + std::to_string(argcSize - 1);
+        asyncContext->errMsg = BuildParamAtLeastCountError(argcSize - 1, argc);
         return false;
     }
     if ((argc == argcSize) && (!GetCallbackProperty(env, argv[argcSize - 1], asyncContext->callbackRef, 1))) {
-        asyncContext->errMsg = "Parameter error. The type of \"callback\" must be AuthCallback";
+        asyncContext->errMsg = BuildParamTypeError(env, static_cast<int>(argcSize - 1), argv[argcSize - 1], "function");
         return false;
     }
     for (uint32_t i = 0; i < propertyList.size(); i++) {
-        if (!ParseContextOAuthProperty(env, argv[i], propertyList[i], asyncContext)) {
+        if (!ParseContextOAuthProperty(env, argv[i], propertyList[i], static_cast<int>(i), asyncContext)) {
             return false;
         }
     }
@@ -759,16 +759,17 @@ static bool ParseContextForAppAccountInner(napi_env env, napi_callback_info cbIn
     napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr);
     if (argc < (argcSize - 1)) {
         context->errMsg =
-            "Parameter error. The number of parameter should be at least " + std::to_string(argcSize - 1);
+            BuildParamAtLeastCountError(argcSize - 1, argc);
         return false;
     }
     if ((argc == argcSize) && (!GetCallbackProperty(env, argv[argcSize - 1], context->callbackRef, 1))) {
-        context->errMsg = "Parameter error. The type of \"callback\" must be function";
+        context->errMsg = BuildParamTypeError(env, static_cast<int>(argcSize - 1), argv[argcSize - 1], "function");
         return false;
     }
     for (size_t i = 0; i < propertyList.size(); i++) {
         if (!ParseAppAccountProperty(env, argv[i], propertyList[i], context)) {
-            context->errMsg = ErrMsgList[propertyList[i]];
+            context->errMsg = BuildParamTypeError(env, static_cast<int>(i), argv[i],
+                PropertyExpectedTypeList[propertyList[i]]);
             return false;
         }
     }
@@ -793,7 +794,7 @@ bool ParseContextCBArray(napi_env env, napi_callback_info cbInfo, GetAccountsAsy
     napi_value argv[ARGS_SIZE_ONE] = {0};
     napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr);
     if ((argc == ARGS_SIZE_ONE) && (!GetCallbackProperty(env, argv[0], asyncContext->callbackRef, 1))) {
-        asyncContext->errMsg = "Parameter error. The type of \"callback\" must be function";
+        asyncContext->errMsg = BuildParamTypeError(env, PARAMZERO, argv[PARAMZERO], "function");
         return false;
     }
     return true;
@@ -805,15 +806,15 @@ bool ParseContextWithStrCBArray(napi_env env, napi_callback_info cbInfo, GetAcco
     napi_value argv[ARGS_SIZE_TWO] = {0};
     napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr);
     if (argc < ARGS_SIZE_ONE) {
-        asyncContext->errMsg = "Parameter error. The number of parameter should be at least 2";
+        asyncContext->errMsg = BuildParamAtLeastCountError(ARGS_SIZE_ONE, argc);
         return false;
     }
     if ((argc == ARGS_SIZE_TWO) && (!GetCallbackProperty(env, argv[1], asyncContext->callbackRef, 1))) {
-        asyncContext->errMsg = "Parameter error. The type of \"callback\" must be function";
+        asyncContext->errMsg = BuildParamTypeError(env, PARAMONE, argv[PARAMONE], "function");
         return false;
     }
     if (!GetStringProperty(env, argv[0], asyncContext->owner)) {
-        asyncContext->errMsg = "Parameter error. The type of \"owner\" must be string";
+        asyncContext->errMsg = BuildParamTypeError(env, PARAMZERO, argv[PARAMZERO], "string");
         return false;
     }
     return true;
@@ -824,7 +825,7 @@ bool GetArrayProperty(const napi_env &env, napi_value *argv, AsyncContextForSubs
     bool isArray = false;
     napi_is_array(env, argv[1], &isArray);
     if (!isArray) {
-        context->errMsg = "Parameter error. The type of \"owners\" must be string array";
+        context->errMsg = BuildParamTypeError(env, PARAMONE, argv[PARAMONE], "Array<string>");
         return false;
     }
     uint32_t length = 0;
@@ -839,7 +840,7 @@ bool GetArrayProperty(const napi_env &env, napi_value *argv, AsyncContextForSubs
         napi_get_element(env, argv[1], i, &ownerStr);
         std::string owner;
         if (!GetStringProperty(env, ownerStr, owner)) {
-            context->errMsg = "Parameter error. The type of \"owners\" must be string array";
+            context->errMsg = BuildParamTypeError(env, PARAMONE, argv[PARAMONE], "Array<string>");
             return false;
         }
         context->owners.emplace_back(owner);
@@ -855,11 +856,11 @@ bool ParseParametersBySubscribe(const napi_env &env, napi_callback_info cbInfo, 
     napi_get_cb_info(env, cbInfo, &argc, argv, &thisVar, nullptr);
     context->errCode = ERR_JS_PARAMETER_ERROR;
     if (argc != SUBSCRIBE_MAX_PARA) {
-        context->errMsg = "Parameter error. The number of parameters should be 3";
+        context->errMsg = BuildParamCountError(ARGS_SIZE_THREE, argc);
         return false;
     }
     if (!GetStringProperty(env, argv[0], context->type)) {
-        context->errMsg = "Parameter error. The type of \"type\" must be string";
+        context->errMsg = BuildParamTypeError(env, PARAMZERO, argv[PARAMZERO], "string");
         return false;
     }
     if ((context->type != "change") && (context->type != "accountChange")) {
@@ -868,11 +869,10 @@ bool ParseParametersBySubscribe(const napi_env &env, napi_callback_info cbInfo, 
         return false;
     }
     if (!GetArrayProperty(env, argv, context)) {
-        context->errMsg = "Parameter error. The type of \"owners\" must be array";
         return false;
     }
     if (!GetCallbackProperty(env, argv[PARAMTWO], context->callbackRef, 1)) {
-        context->errMsg = "Parameter error. The type of \"callback\" must be function";
+        context->errMsg = BuildParamTypeError(env, PARAMTWO, argv[PARAMTWO], "function");
         return false;
     }
     napi_unwrap(env, thisVar, reinterpret_cast<void **>(&context->appAccountManager));
@@ -917,12 +917,12 @@ bool ParseParametersByUnsubscribe(
     napi_value thisVar = nullptr;
     NAPI_CALL_BASE(env, napi_get_cb_info(env, cbInfo, &argc, argv, &thisVar, NULL), false);
     if (argc < 1) {
-        context->errMsg = "Parameter error. The number of parameters should be at least 1";
+        context->errMsg = BuildParamAtLeastCountError(ARGS_SIZE_ONE, argc);
         context->errCode = ERR_JS_PARAMETER_ERROR;
         return false;
     }
     if (!GetStringProperty(env, argv[0], context->type)) {
-        context->errMsg = "Parameter error. The type of \"type\" must be string";
+        context->errMsg = BuildParamTypeError(env, PARAMZERO, argv[PARAMZERO], "string");
         context->errCode = ERR_JS_PARAMETER_ERROR;
         return false;
     }
@@ -932,7 +932,7 @@ bool ParseParametersByUnsubscribe(
         return false;
     }
     if ((argc == UNSUBSCRIBE_MAX_PARA) && (!GetCallbackProperty(env, argv[1], context->callbackRef, 1))) {
-        context->errMsg = "Parameter error. The type of \"callback\" must be function";
+        context->errMsg = BuildParamTypeError(env, PARAMONE, argv[PARAMONE], "function");
         context->errCode = ERR_JS_PARAMETER_ERROR;
         return false;
     }
@@ -1172,24 +1172,24 @@ bool ParseContextForVerifyCredential(napi_env env, napi_callback_info info, Veri
     napi_value argv[ARGS_SIZE_FOUR] = {0};
     napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
     if (argc < ARGS_SIZE_THREE) {
-        context->errMsg = "the number of parameter shoulde be at least 3";
+        context->errMsg = BuildParamAtLeastCountError(ARGS_SIZE_THREE, argc);
         return false;
     }
     int32_t index = 0;
     if (!GetStringProperty(env, argv[index++], context->name)) {
-        context->errMsg = "Parameter error. The type of \"name\" must be string";
+        context->errMsg = BuildParamTypeError(env, PARAMZERO, argv[PARAMZERO], "string");
         return false;
     }
     if (!GetStringProperty(env, argv[index++], context->owner)) {
-        context->errMsg = "Parameter error. The type of \"owner\" must be string";
+        context->errMsg = BuildParamTypeError(env, PARAMONE, argv[PARAMONE], "string");
         return false;
     }
     if ((argc == ARGS_SIZE_FOUR) && (!ParseVerifyCredentialOptions(env, argv[index++], context->options))) {
-        context->errMsg = "Parameter error. The type of \"options\" must be VerifyCredentialOptions";
+        context->errMsg = BuildParamTypeError(env, PARAMTWO, argv[PARAMTWO], "VerifyCredentialOptions");
         return false;
     }
     if (!ParseJSAuthCallback(env, argv[index], context->callback)) {
-        context->errMsg = "Parameter error. The type of \"callback\" must be AuthCallback";
+        context->errMsg = BuildParamTypeError(env, index, argv[index], "AuthCallback");
         return false;
     }
     return true;
@@ -1201,22 +1201,22 @@ bool ParseContextForSetProperties(napi_env env, napi_callback_info info, SetProp
     napi_value argv[ARGS_SIZE_THREE] = {0};
     napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
     if (argc < ARGS_SIZE_TWO) {
-        context->errMsg = "Parameter error. The number of parameters should be 2";
+        context->errMsg = BuildParamAtLeastCountError(ARGS_SIZE_TWO, argc);
         return false;
     }
     int32_t index = 0;
     if (!GetStringProperty(env, argv[index++], context->owner)) {
-        context->errMsg = "Parameter error. The type of \"owner\" must be string";
+        context->errMsg = BuildParamTypeError(env, PARAMZERO, argv[PARAMZERO], "string");
         return false;
     }
     if (argc == ARGS_SIZE_THREE) {
         if (!ParseSetPropertiesOptions(env, argv[index++], context->options)) {
-            context->errMsg = "Parameter error. The type of \"options\" must be SetPropertiesOptions";
+            context->errMsg = BuildParamTypeError(env, PARAMONE, argv[PARAMONE], "SetPropertiesOptions");
             return false;
         }
     }
     if (!ParseJSAuthCallback(env, argv[index], context->callback)) {
-        context->errMsg = "Parameter error. The type of \"callback\" must be AuthCallback";
+        context->errMsg = BuildParamTypeError(env, index, argv[index], "AuthCallback");
         return false;
     }
     return true;
@@ -1228,19 +1228,19 @@ bool ParseContextForSelectAccount(napi_env env, napi_callback_info info, SelectA
     napi_value argv[ARGS_SIZE_TWO] = {0};
     napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
     if (argc < ARGS_SIZE_ONE) {
-        context->errMsg = "Parameter error. The number of parameters should be 1";
+        context->errMsg = BuildParamAtLeastCountError(ARGS_SIZE_ONE, argc);
         return false;
     }
     napi_ref callbackRef = nullptr;
     if ((argc == ARGS_SIZE_TWO) && (!GetCallbackProperty(env, argv[PARAMONE], callbackRef, 1))) {
-        context->errMsg = "Parameter error. The type of \"callback\" must be AuthCallback";
+        context->errMsg = BuildParamTypeError(env, PARAMONE, argv[PARAMONE], "function");
         return false;
     }
     if (callbackRef != nullptr) {
         context->callbackRef = std::make_shared<NapiCallbackRef>(env, callbackRef);
     }
     if (!ParseSelectAccountsOptions(env, argv[0], context->options)) {
-        context->errMsg = "Parameter error. The type of \"options\" must be SelectAccountsOptions";
+        context->errMsg = BuildParamTypeError(env, PARAMZERO, argv[PARAMZERO], "SelectAccountsOptions");
         return false;
     }
     return true;
@@ -1309,27 +1309,27 @@ bool ParseContextForCheckAccountLabels(napi_env env, napi_callback_info info, Ch
     napi_value argv[ARGS_SIZE_FOUR] = {0};
     napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
     if (argc < ARGS_SIZE_THREE) {
-        context->errMsg = "Parameter error. The number of parameters should be 3";
+        context->errMsg = BuildParamAtLeastCountError(ARGS_SIZE_THREE, argc);
         return false;
     }
     napi_ref callbackRef = nullptr;
     if ((argc == ARGS_SIZE_FOUR) && (!GetCallbackProperty(env, argv[PARAMTHREE], callbackRef, 1))) {
-        context->errMsg = "Parameter error. The type of \"callback\" must be AuthCallback";
+        context->errMsg = BuildParamTypeError(env, PARAMTHREE, argv[PARAMTHREE], "function");
         return false;
     }
     if (callbackRef != nullptr) {
         context->callbackRef = std::make_shared<NapiCallbackRef>(env, callbackRef);
     }
     if (!GetStringProperty(env, argv[0], context->name)) {
-        context->errMsg = "Parameter error. The type of \"name\" must be string";
+        context->errMsg = BuildParamTypeError(env, PARAMZERO, argv[PARAMZERO], "string");
         return false;
     }
     if (!GetStringProperty(env, argv[PARAMONE], context->owner)) {
-        context->errMsg = "Parameter error. The type of \"owner\" must be string";
+        context->errMsg = BuildParamTypeError(env, PARAMONE, argv[PARAMONE], "string");
         return false;
     }
     if (!ParseStringVector(env, argv[PARAMTWO], context->labels)) {
-        context->errMsg = "Parameter error. The type of \"labels\" must be string vector";
+        context->errMsg = BuildParamTypeError(env, PARAMTWO, argv[PARAMTWO], "Array<string>");
         return false;
     }
     return true;
@@ -1458,12 +1458,12 @@ bool ParseContextForCreateAccount(napi_env env, napi_callback_info cbInfo, Creat
     napi_valuetype valueType = napi_undefined;
     napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr);
     if (argc < ARGS_SIZE_ONE) {
-        context->errMsg = "Parameter error. The number of parameters should be at least 1";
+        context->errMsg = BuildParamAtLeastCountError(ARGS_SIZE_ONE, argc);
         return false;
     }
     if (!GetStringProperty(env, argv[0], context->name)) {
         ACCOUNT_LOGE("the name is not a string");
-        context->errMsg = "Parameter error. The type of \"name\" must be string";
+        context->errMsg = BuildParamTypeError(env, PARAMZERO, argv[PARAMZERO], "string");
         return false;
     }
     if (argc > PARAMTWO) {
@@ -1477,13 +1477,13 @@ bool ParseContextForCreateAccount(napi_env env, napi_callback_info cbInfo, Creat
         if (valueType == napi_object) {
             if (!ParseCreateAccountOptions(env, argv[1], context->options)) {
                 ACCOUNT_LOGE("the type of param 1 is incorrect");
-                context->errMsg = "Parameter error. The type of \"options\" must be CreateAccountOptions";
+                context->errMsg = BuildParamTypeError(env, PARAMONE, argv[PARAMONE], "CreateAccountOptions");
                 return false;
             }
         } else if (valueType == napi_function) {
             if (!GetCallbackProperty(env, argv[1], context->callbackRef, 1)) {
                 ACCOUNT_LOGE("Get callbackRef failed");
-                context->errMsg = "Parameter error. The type of \"callback\" must be napi_function";
+                context->errMsg = BuildParamTypeError(env, PARAMONE, argv[PARAMONE], "function");
                 return false;
             }
             return true;
@@ -1492,7 +1492,7 @@ bool ParseContextForCreateAccount(napi_env env, napi_callback_info cbInfo, Creat
             return true;
         } else {
             ACCOUNT_LOGE("Type matching failed");
-            context->errMsg = "Parameter error. The type of param 2 is incorrect";
+            context->errMsg = BuildParamTypeError(env, PARAMONE, argv[PARAMONE], "object or function");
             return false;
         }
     }
@@ -1506,11 +1506,11 @@ bool ParseContextForCreateAccountImplicitly(
     napi_value argv[ARGS_SIZE_THREE] = {0};
     napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr);
     if (argc < ARGS_SIZE_TWO) {
-        context->errMsg = "Parameter error. The number of parameters should be at least 2";
+        context->errMsg = BuildParamAtLeastCountError(ARGS_SIZE_TWO, argc);
         return false;
     }
     if (!GetStringProperty(env, argv[0], context->owner)) {
-        context->errMsg = "Parameter error. The type of \"owner\" must be string";
+        context->errMsg = BuildParamTypeError(env, PARAMZERO, argv[PARAMZERO], "string");
         return false;
     }
     if (argc == ARGS_SIZE_THREE) {
@@ -1520,13 +1520,13 @@ bool ParseContextForCreateAccountImplicitly(
             ACCOUNT_LOGI("the authType is undefined or null");
         } else {
             if (!ParseCreateAccountImplicitlyOptions(env, argv[1], context->options)) {
-                context->errMsg = "Parameter error. The type of \"options\" must be CreateAccountImplicitlyOptions";
+                context->errMsg = BuildParamTypeError(env, PARAMONE, argv[PARAMONE], "CreateAccountImplicitlyOptions");
                 return false;
             }
         }
     }
     if (!ParseJSAuthCallback(env, argv[argc - 1], context->callback)) {
-        context->errMsg = "Parameter error. The type of \"callback\" must be AuthCallback";
+        context->errMsg = BuildParamTypeError(env, static_cast<int>(argc - 1), argv[argc - 1], "AuthCallback");
         return false;
     }
     return true;

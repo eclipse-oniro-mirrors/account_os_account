@@ -92,9 +92,7 @@ static bool GetContext(
     napi_value contextValue = nullptr;
     if (!GetInteractionContextObject(env, object, contextValue, asyncContext->options.hasContext)) {
         // When interaction is required, throw parameter error exception
-        ACCOUNT_LOGE("Failed to get interactionContext object when interaction is required");
-        std::string errMsg = "Parameter error. The type of \"interactionContext\" must be Context object";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowPropertyTypeError(env, PARAM_ONE, "interactionContext", contextValue, "object");
         return false;
     }
 
@@ -140,28 +138,22 @@ static bool ParseContextForAcquireAuthorizationOptions(napi_env env, napi_value 
         return true;
     }
     if (valueType != napi_object) {
-        ACCOUNT_LOGE("Obj is not an object");
-        std::string errMsg = "Parameter error. The type of \"acquireAuthorizationOptions\" must be object";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ONE, value, "object", true);
         return false;
     }
     asyncContext->hasOptions = true;
     if (!GetOptionBoolProperty(env, value, "isInteractionAllowed", asyncContext->options.isInteractionAllowed)) {
-        ACCOUNT_LOGE("Get options's isInteractionAllowed failed");
-        std::string errMsg = "Parameter error. The type of \"isInteractionAllowed\" must be bool";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowPropertyTypeError(env, PARAM_ONE, "isInteractionAllowed",
+            GetPropertyValue(env, value, "isInteractionAllowed"), "boolean");
         return false;
     }
     if (!GetOptionalUint8TypedArrayToVector(env, value, "challenge", asyncContext->options.challenge)) {
-        ACCOUNT_LOGE("Get options's challenge failed");
-        std::string errMsg = "Parameter error. The type of \"challenge\" must be Uint8Array";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowPropertyTypeError(env, PARAM_ONE, "challenge", GetPropertyValue(env, value, "challenge"), "Uint8Array");
         return false;
     }
     if (!GetOptionBoolProperty(env, value, "isReuseNeeded", asyncContext->options.isReuseNeeded)) {
-        ACCOUNT_LOGE("Get options's isReuseNeeded failed");
-        std::string errMsg = "Parameter error. The type of \"isReuseNeeded\" must be bool";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowPropertyTypeError(env, PARAM_ONE, "isReuseNeeded", GetPropertyValue(env, value, "isReuseNeeded"),
+            "boolean");
         return false;
     }
 
@@ -187,16 +179,16 @@ static bool ParseContextForAcquireAuthorization(napi_env env, napi_callback_info
         ACCOUNT_LOGE("Napi_get_cb_info failed");
         return false;
     }
-    if (argc < ARG_SIZE_ONE || argc > ARG_SIZE_TWO) {
-        ACCOUNT_LOGE("Need input at least one parameter, but got %{public}zu", argc);
-        std::string errMsg = "Parameter error. The number of parameters should be at least 1";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+    if (argc < ARG_SIZE_ONE) {
+        ThrowParamAtLeastCountError(env, ARG_SIZE_ONE, argc, asyncContext->throwErr);
+        return false;
+    }
+    if (argc > ARG_SIZE_TWO) {
+        ThrowParamCountError(env, ARG_SIZE_TWO, argc, asyncContext->throwErr);
         return false;
     }
     if (!GetStringProperty(env, argv[PARAM_ZERO], asyncContext->privilege)) {
-        ACCOUNT_LOGE("Get name failed");
-        std::string errMsg = "The type of arg 1 must be string";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "string", asyncContext->throwErr);
         return false;
     }
     if (argc == ARG_SIZE_TWO) {
@@ -213,15 +205,11 @@ static bool ParseContextForReleaseAuthorization(napi_env env, napi_callback_info
     napi_value thisVar = nullptr;
     NAPI_CALL_BASE(env, napi_get_cb_info(env, cbInfo, &argc, argv, &thisVar, NULL), false);
     if (argc < ARG_SIZE_ONE) {
-        ACCOUNT_LOGE("The number of parameters should be at least 1");
-        std::string errMsg = "Parameter error. The number of parameters should be at least 1";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamAtLeastCountError(env, ARG_SIZE_ONE, argc, true);
         return false;
     }
     if (!GetStringProperty(env, argv[PARAM_ZERO], asyncContext->privilege)) {
-        ACCOUNT_LOGE("Get privilege failed");
-        std::string errMsg = "The type of \"privilege\" must be string";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "string", true);
         return false;
     }
     return true;
@@ -329,15 +317,11 @@ static bool ParseContextForHasAuthorization(napi_env env, napi_callback_info cbI
     napi_value thisVar = nullptr;
     NAPI_CALL_BASE(env, napi_get_cb_info(env, cbInfo, &argc, argv, &thisVar, NULL), false);
     if (argc < ARG_SIZE_ONE) {
-        ACCOUNT_LOGE("Need input at least one parameter, but got %{public}zu", argc);
-        std::string errMsg = "Parameter error. The number of parameters should be at least 1";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+        ThrowParamAtLeastCountError(env, ARG_SIZE_ONE, argc, asyncContext->throwErr);
         return false;
     }
     if (!GetStringProperty(env, argv[PARAM_ZERO], asyncContext->privilege)) {
-        ACCOUNT_LOGE("Get privilege failed");
-        std::string errMsg = "The type of privilege must be string";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "string", asyncContext->throwErr);
         return false;
     }
     return true;

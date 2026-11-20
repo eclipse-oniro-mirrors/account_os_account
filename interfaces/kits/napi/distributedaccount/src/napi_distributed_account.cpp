@@ -84,38 +84,44 @@ bool ParseQueryOhosAccountInfoAsyncContext(
     NAPI_CALL_BASE(env, napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr), false);
     if (argc >= ARGS_SIZE_ONE) {
         if (!GetCallbackProperty(env, argv[PARAM_ZERO], asyncContext->callbackRef, 1)) {
-            ACCOUNT_LOGE("Get callbackRef failed.");
-            std::string errMsg = "Parameter error. The type of \"callback\" must be function";
-            AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+            ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "function", asyncContext->throwErr);
             return false;
         }
     }
     return true;
 }
 
-static bool GetAccountInfo(napi_env env, napi_value object, DistributedAccountAsyncContext *asyncContext)
+static std::string BuildAccountPropertyTypeError(napi_env env, int paramIndex, const std::string &propertyName,
+    napi_value object, const std::string &expected)
+{
+    napi_value propValue = GetPropertyValue(env, object, propertyName);
+    return BuildPropertyTypeError(env, paramIndex, propertyName, propValue, expected);
+}
+
+static bool GetAccountInfo(napi_env env, napi_value object, DistributedAccountAsyncContext *asyncContext,
+    int paramIndex)
 {
     if (!GetStringPropertyByKey(env, object, PROPERTY_KEY_NAME, asyncContext->ohosAccountInfo.name_)) {
         ACCOUNT_LOGE("Failed to get DistributedInfo's %{public}s property", PROPERTY_KEY_NAME.c_str());
-        std::string errMsg = "Parameter error. The type of " + PROPERTY_KEY_NAME + " must be string";
+        std::string errMsg = BuildAccountPropertyTypeError(env, paramIndex, PROPERTY_KEY_NAME, object, "string");
         AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
         return false;
     }
     if (!GetStringPropertyByKey(env, object, PROPERTY_KEY_ID, asyncContext->ohosAccountInfo.uid_)) {
         ACCOUNT_LOGE("Failed to get DistributedInfo's %{public}s property", PROPERTY_KEY_ID.c_str());
-        std::string errMsg = "Parameter error. The type of " + PROPERTY_KEY_ID + " must be string";
+        std::string errMsg = BuildAccountPropertyTypeError(env, paramIndex, PROPERTY_KEY_ID, object, "string");
         AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
         return false;
     }
     if (!GetOptionalStringPropertyByKey(env, object, PROPERTY_KEY_NICKNAME, asyncContext->ohosAccountInfo.nickname_)) {
         ACCOUNT_LOGE("Failed to get DistributedInfo's %{public}s property", PROPERTY_KEY_NICKNAME.c_str());
-        std::string errMsg = "Parameter error. The type of " + PROPERTY_KEY_NICKNAME + " must be string";
+        std::string errMsg = BuildAccountPropertyTypeError(env, paramIndex, PROPERTY_KEY_NICKNAME, object, "string");
         AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
         return false;
     }
     if (!GetOptionalStringPropertyByKey(env, object, PROPERTY_KEY_AVATAR, asyncContext->ohosAccountInfo.avatar_)) {
         ACCOUNT_LOGE("Failed to get DistributedInfo's %{public}s property", PROPERTY_KEY_AVATAR.c_str());
-        std::string errMsg = "Parameter error. The type of " + PROPERTY_KEY_AVATAR + " must be string";
+        std::string errMsg = BuildAccountPropertyTypeError(env, paramIndex, PROPERTY_KEY_AVATAR, object, "string");
         AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
         return false;
     }
@@ -132,7 +138,8 @@ static bool GetAccountInfo(napi_env env, napi_value object, DistributedAccountAs
         } else {
             if (!AppExecFwk::UnwrapWantParams(env, value, params)) {
                 ACCOUNT_LOGE("Failed to get DistributedInfo's %{public}s property", PROPERTY_KEY_SCALABLE.c_str());
-                std::string errMsg = "Parameter error. The type of " + PROPERTY_KEY_SCALABLE + " must be object";
+                std::string errMsg = BuildAccountPropertyTypeError(env, paramIndex, PROPERTY_KEY_SCALABLE, object,
+                    "object");
                 AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
                 return false;
             }
@@ -144,22 +151,21 @@ static bool GetAccountInfo(napi_env env, napi_value object, DistributedAccountAs
     return true;
 }
 
-static bool ParseInfoAndEvent(napi_env env, napi_value argv, DistributedAccountAsyncContext *asyncContext)
+static bool ParseInfoAndEvent(napi_env env, napi_value argv, DistributedAccountAsyncContext *asyncContext,
+    int paramIndex)
 {
     napi_valuetype valueType = napi_undefined;
     NAPI_CALL_BASE(env, napi_typeof(env, argv, &valueType), false);
     if (valueType != napi_object) {
-        ACCOUNT_LOGE("DistributedInfo is not an object.");
-        std::string errMsg = "Parameter error. The type of \"accountInfo\" must be DistributedInfo";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+        ThrowParamTypeError(env, paramIndex, argv, "DistributedInfo", asyncContext->throwErr);
         return false;
     }
-    if (!GetAccountInfo(env, argv, asyncContext)) {
+    if (!GetAccountInfo(env, argv, asyncContext, paramIndex)) {
         return false;
     }
     if (!GetStringPropertyByKey(env, argv, PROPERTY_KEY_EVENT, asyncContext->event)) {
         ACCOUNT_LOGE("Failed to get DistributedInfo's %{public}s property", PROPERTY_KEY_EVENT.c_str());
-        std::string errMsg = "Parameter error. The type of " + PROPERTY_KEY_EVENT + " must be string";
+        std::string errMsg = BuildAccountPropertyTypeError(env, paramIndex, PROPERTY_KEY_EVENT, argv, "string");
         AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
         return false;
     }
@@ -173,20 +179,16 @@ bool ParseUpdateOhosAccountInfoAsyncContext(
     napi_value argv[ARGS_SIZE_TWO] = {nullptr};
     NAPI_CALL_BASE(env, napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr), false);
     if (argc < ARGS_SIZE_ONE) {
-        ACCOUNT_LOGE("The number of parameters should be at least 1.");
-        std::string errMsg = "Parameter error. The number of parameters should be at least 1";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+        ThrowParamAtLeastCountError(env, ARGS_SIZE_ONE, argc, asyncContext->throwErr);
         return false;
     }
     if (argc >= ARGS_SIZE_TWO) {
         if (!GetCallbackProperty(env, argv[PARAM_ONE], asyncContext->callbackRef, 1)) {
-            ACCOUNT_LOGE("Get callbackRef failed.");
-            std::string errMsg = "Parameter error. The type of \"callback\" must be function";
-            AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+            ThrowParamTypeError(env, PARAM_ONE, argv[PARAM_ONE], "function", asyncContext->throwErr);
             return false;
         }
     }
-    return ParseInfoAndEvent(env, argv[PARAM_ZERO], asyncContext);
+    return ParseInfoAndEvent(env, argv[PARAM_ZERO], asyncContext, static_cast<int>(PARAM_ZERO));
 }
 
 void ProcessCallbackOrPromise(
@@ -455,26 +457,20 @@ static bool ParseSetOsAccountDistributedInfoByLocalId(napi_env env, napi_callbac
     napi_value argv[ARGS_SIZE_THREE] = {nullptr};
     NAPI_CALL_BASE(env, napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr), false);
     if (argc < ARGS_SIZE_TWO) {
-        ACCOUNT_LOGE("The number of parameters should be at least 2.");
-        std::string errMsg = "Parameter error. The number of parameters should be at least 2";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+        ThrowParamAtLeastCountError(env, ARGS_SIZE_TWO, argc, asyncContext->throwErr);
         return false;
     }
     if (argc >= ARGS_SIZE_THREE) {
         if (!GetCallbackProperty(env, argv[PARAM_TWO], asyncContext->callbackRef, 1)) {
-            ACCOUNT_LOGE("Get callbackRef failed.");
-            std::string errMsg = "Parameter error. The type of \"callback\" must be function";
-            AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+            ThrowParamTypeError(env, PARAM_TWO, argv[PARAM_TWO], "function", asyncContext->throwErr);
             return false;
         }
     }
     if (!GetIntProperty(env, argv[PARAM_ZERO], asyncContext->localId)) {
-        ACCOUNT_LOGE("Get localId failed.");
-        std::string errMsg = "Parameter error. The type of \"localId\" must be number";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "number", asyncContext->throwErr);
         return false;
     }
-    return ParseInfoAndEvent(env, argv[PARAM_ONE], asyncContext);
+    return ParseInfoAndEvent(env, argv[PARAM_ONE], asyncContext, static_cast<int>(PARAM_ONE));
 }
 
 napi_value NapiDistributedAccount::SetOsAccountDistributedInfoByLocalId(napi_env env, napi_callback_info cbInfo)
@@ -514,23 +510,17 @@ static bool ParseGetOsAccountDistributedInfoByLocalId(napi_env env, napi_callbac
     napi_value argv[ARGS_SIZE_TWO] = {nullptr};
     NAPI_CALL_BASE(env, napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr), false);
     if (argc < ARGS_SIZE_ONE) {
-        ACCOUNT_LOGE("The number of parameters should be at least 1.");
-        std::string errMsg = "Parameter error. The number of parameters should be at least 1";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+        ThrowParamAtLeastCountError(env, ARGS_SIZE_ONE, argc, asyncContext->throwErr);
         return false;
     }
     if (argc >= ARGS_SIZE_TWO) {
         if (!GetCallbackProperty(env, argv[PARAM_ONE], asyncContext->callbackRef, 1)) {
-            ACCOUNT_LOGE("Get callbackRef failed.");
-            std::string errMsg = "Parameter error. The type of \"callback\" must be function";
-            AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+            ThrowParamTypeError(env, PARAM_ONE, argv[PARAM_ONE], "function", asyncContext->throwErr);
             return false;
         }
     }
     if (!GetIntProperty(env, argv[PARAM_ZERO], asyncContext->localId)) {
-        ACCOUNT_LOGE("Get localId failed.");
-        std::string errMsg = "Parameter error. The type of \"localId\" must be number";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, asyncContext->throwErr);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "number", asyncContext->throwErr);
         return false;
     }
     return true;

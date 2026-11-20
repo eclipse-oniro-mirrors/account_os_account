@@ -54,31 +54,23 @@ static bool ParseContextForRegisterInputer(
     napi_value argv[ARG_SIZE_TWO] = {nullptr};
     NAPI_CALL_BASE(env, napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr), false);
     if (argc != ARG_SIZE_TWO) {
-        std::string errMsg = "Parameter error. The number of parameters should be at least 2";
-        ACCOUNT_LOGE("%{public}s", errMsg.c_str());
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamCountError(env, ARG_SIZE_TWO, argc, true);
         return false;
     }
     if (!GetIntProperty(env, argv[PARAM_ZERO], authType)) {
-        std::string errMsg = "Parameter error. The type of \"authType\" must be AuthType";
-        ACCOUNT_LOGE("%{public}s", errMsg.c_str());
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "AuthType", true);
         return false;
     }
     bool hasProp = false;
     napi_has_named_property(env, argv[PARAM_ONE], "onGetData", &hasProp);
     if (!hasProp) {
-        std::string errMsg = "Parameter error. The type of \"inputer\" must be IInputer";
-        ACCOUNT_LOGE("%{public}s", errMsg.c_str());
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowPropertyRequiredError(env, PARAM_ONE, "onGetData", true);
         return false;
     }
     napi_value onGetData = nullptr;
     napi_get_named_property(env, argv[PARAM_ONE], "onGetData", &onGetData);
     if (!GetCallbackProperty(env, onGetData, callback, 1)) {
-        std::string errMsg = "Parameter error. The type of \"inputer\" must be IInputer";
-        ACCOUNT_LOGE("%{public}s", errMsg.c_str());
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowPropertyTypeError(env, PARAM_ONE, "onGetData", onGetData, "function");
         return false;
     }
     return true;
@@ -107,16 +99,12 @@ napi_value NapiAccountIAMInputerManager::UnregisterInputer(napi_env env, napi_ca
     napi_value argv[ARG_SIZE_ONE] = {nullptr};
     NAPI_CALL(env, napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr));
     if (argc != ARG_SIZE_ONE) {
-        std::string errMsg = "Parameter error. The number of parameters should be at least 1";
-        ACCOUNT_LOGE("%{public}s", errMsg.c_str());
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamCountError(env, ARG_SIZE_ONE, argc, true);
         return nullptr;
     }
     int32_t authType = -1;
     if (!GetIntProperty(env, argv[PARAM_ZERO], authType)) {
-        std::string errMsg = "Parameter error. The type of \"authType\" must be AuthType";
-        ACCOUNT_LOGE("%{public}s", errMsg.c_str());
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "AuthType", true);
         return nullptr;
     }
     ErrCode errCode = AccountIAMClient::GetInstance().UnregisterInputer(authType);

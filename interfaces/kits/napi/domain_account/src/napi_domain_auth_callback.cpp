@@ -27,6 +27,8 @@ namespace OHOS {
 namespace AccountJsKit {
 namespace {
 const size_t ARGS_SIZE_TWO = 2;
+const size_t PARAM_ZERO = 0;
+const size_t PARAM_ONE = 1;
 }
 using namespace AccountSA;
 
@@ -70,7 +72,7 @@ static bool ParseDoaminAuthResult(napi_env env, napi_value value, DomainAuthResu
         napi_value napiToken = nullptr;
         napi_get_named_property(env, value, "token", &napiToken);
         if (ParseUint8TypedArrayToVector(env, napiToken, authResult.token) != napi_ok) {
-            ACCOUNT_LOGE("failed to parse token");
+            ThrowPropertyTypeError(env, PARAM_ONE, "token", napiToken, "Uint8Array");
             return false;
         }
     }
@@ -80,7 +82,7 @@ static bool ParseDoaminAuthResult(napi_env env, napi_value value, DomainAuthResu
         napi_value napiRemainTimes = nullptr;
         napi_get_named_property(env, value, "remainTimes", &napiRemainTimes);
         if (!GetIntProperty(env, napiRemainTimes, authResult.authStatusInfo.remainingTimes)) {
-            ACCOUNT_LOGE("failed to parse remainTimes");
+            ThrowPropertyTypeError(env, PARAM_ONE, "remainTimes", napiRemainTimes, "number");
             return false;
         }
     } else {
@@ -92,7 +94,7 @@ static bool ParseDoaminAuthResult(napi_env env, napi_value value, DomainAuthResu
         napi_value napiFreezingTime = nullptr;
         napi_get_named_property(env, value, "freezingTime", &napiFreezingTime);
         if (!GetIntProperty(env, napiFreezingTime, authResult.authStatusInfo.freezingTime)) {
-            ACCOUNT_LOGE("failed to parse freezingTime");
+            ThrowPropertyTypeError(env, PARAM_ONE, "freezingTime", napiFreezingTime, "number");
             return false;
         }
     } else {
@@ -108,17 +110,21 @@ static bool ParseContextForOnResult(napi_env env, napi_callback_info cbInfo, Cal
     napi_value thisVar = nullptr;
     napi_get_cb_info(env, cbInfo, &argc, argv, &thisVar, nullptr);
     if (argc != ARGS_SIZE_TWO) {
-        ACCOUNT_LOGE("the number of parameter should be two");
+        ThrowParamCountError(env, ARGS_SIZE_TWO, argc, true);
         return false;
     }
     NapiDomainAuthCallback *napiCallback = nullptr;
     napi_unwrap(env, thisVar, reinterpret_cast<void **>(&napiCallback));
     if (napiCallback == nullptr) {
         ACCOUNT_LOGE("the napi callback is nullptr");
+        ThrowParamTypeError(env, PARAM_ZERO, thisVar, "DomainAuthCallback", true);
         return false;
     }
     param->callback = napiCallback->GetDomainAuthCallback();
-    NAPI_CALL_BASE(env, napi_get_value_int32(env, argv[0], &(param->errCode)), false);
+    if (napi_get_value_int32(env, argv[0], &(param->errCode)) != napi_ok) {
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "number", true);
+        return false;
+    }
     return ParseDoaminAuthResult(env, argv[1], param->authResult);
 }
 
@@ -131,8 +137,6 @@ napi_value NapiDomainAuthCallback::JsOnResult(napi_env env, napi_callback_info c
     }
     std::unique_ptr<CallbackParam> paramPtr(param);
     if (!ParseContextForOnResult(env, cbInfo, param)) {
-        std::string errMsg = "fail to parse onResult parameters";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
         return nullptr;
     }
     napi_value resourceName = nullptr;

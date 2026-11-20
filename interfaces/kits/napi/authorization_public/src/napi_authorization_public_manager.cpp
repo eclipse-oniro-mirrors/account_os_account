@@ -64,7 +64,7 @@ static bool ParsePrivilegeString(napi_env env, napi_value value, std::string &pr
     napi_valuetype valueType = napi_undefined;
     NAPI_CALL_BASE(env, napi_typeof(env, value, &valueType), false);
     if (valueType != napi_string) {
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, "The type of \"privilege\" must be Privilege", throwErr);
+        ThrowParamTypeError(env, PARAM_ZERO, value, "string", throwErr);
         return false;
     }
     size_t len = 0;
@@ -79,13 +79,11 @@ static bool ValidateContext(napi_env env, napi_value value, AcquireAuthorization
     napi_valuetype valueType = napi_undefined;
     NAPI_CALL_BASE(env, napi_typeof(env, value, &valueType), false);
     if (valueType == napi_undefined || valueType == napi_null) {
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, "Parameter error. The type of \"context\" must be Context object",
-            asyncContext->throwErr);
+        ThrowParamRequiredError(env, PARAM_ONE, asyncContext->throwErr);
         return false;
     }
     if (valueType != napi_object) {
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, "Parameter error. The type of \"context\" must be Context object",
-            asyncContext->throwErr);
+        ThrowParamTypeError(env, PARAM_ONE, value, "object", asyncContext->throwErr);
         return false;
     }
     asyncContext->hasOptions = true;
@@ -93,9 +91,7 @@ static bool ValidateContext(napi_env env, napi_value value, AcquireAuthorization
     asyncContext->options.isContextValid = false;
     ConvertContextObject(env, value, asyncContext);
     if (!asyncContext->uiAbilityFlag) {
-        ACCOUNT_LOGE("Context is not UIAbilityContext, not supported in public API");
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR,
-            "Parameter error. The type of \"context\" must be UIAbilityContext", asyncContext->throwErr);
+        ThrowParamTypeError(env, PARAM_ONE, value, "UIAbilityContext", asyncContext->throwErr);
         return false;
     }
     return true;
@@ -112,9 +108,7 @@ static bool ParseContextForAcquireAuthorizationPublic(napi_env env, napi_callbac
         return false;
     }
     if (argc < ARG_SIZE_TWO) {
-        ACCOUNT_LOGE("Need input two parameters, but got %{public}zu", argc);
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, "Parameter error. The number of parameters should be 2",
-            asyncContext->throwErr);
+        ThrowParamCountError(env, ARG_SIZE_TWO, argc, asyncContext->throwErr);
         return false;
     }
     if (!ParsePrivilegeString(env, argv[PARAM_ZERO], asyncContext->privilege, asyncContext->throwErr)) {
@@ -160,9 +154,7 @@ static bool ParseContextForHasAuthorizationPublic(napi_env env, napi_callback_in
     napi_value thisVar = nullptr;
     NAPI_CALL_BASE(env, napi_get_cb_info(env, cbInfo, &argc, argv, &thisVar, nullptr), false);
     if (argc < ARG_SIZE_ONE) {
-        ACCOUNT_LOGE("Need input at least one parameter, but got %{public}zu", argc);
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, "Parameter error. The number of parameters should be at least 1",
-            asyncContext->throwErr);
+        ThrowParamAtLeastCountError(env, ARG_SIZE_ONE, argc, asyncContext->throwErr);
         return false;
     }
     return ParsePrivilegeString(env, argv[PARAM_ZERO], asyncContext->privilege, asyncContext->throwErr);
