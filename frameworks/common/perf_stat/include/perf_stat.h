@@ -64,8 +64,6 @@ public:
     void Dump(std::string& result) const;
 
 private:
-    void DumpAccountStateChangeRecords(std::string &result) const;
-
     int64_t accountBindBegin_ = 0;
     int64_t accountBindEnd_ = 0;
 

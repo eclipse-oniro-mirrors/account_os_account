@@ -766,15 +766,24 @@ ErrCode InnerDomainAccountManager::GetAccountServerConfig(
 void InnerDomainAccountManager::AuthResultInfoCallback(
     uint64_t contextId, PluginAuthResultInfo *authResultInfo, PluginBusinessError *error)
 {
-    std::lock_guard<std::recursive_mutex> lock(authContextIdMapMutex_);
-    auto it = authContextIdMap_.find(contextId);
-    if (it == authContextIdMap_.end()) {
-        ACCOUNT_LOGE("ContextId not found, contextId = %{public}" PRIu64, contextId);
-        std::string errMsg = "ContextId not found, contextId = " + std::to_string(contextId);
-        REPORT_DOMAIN_ACCOUNT_FAIL(ERR_JS_INVALID_CONTEXT_ID, errMsg, Constants::DOMAIN_OPT_AUTH, 0);
-        return;
+    sptr<InnerDomainAuthCallback> callback = nullptr;
+    {
+        std::lock_guard<std::recursive_mutex> lock(authContextIdMapMutex_);
+        auto it = authContextIdMap_.find(contextId);
+        if (it == authContextIdMap_.end()) {
+            ACCOUNT_LOGE("ContextId not found, contextId = %{public}" PRIu64, contextId);
+            std::string errMsg = "ContextId not found, contextId = " + std::to_string(contextId);
+            REPORT_DOMAIN_ACCOUNT_FAIL(ERR_JS_INVALID_CONTEXT_ID, errMsg, Constants::DOMAIN_OPT_AUTH, 0);
+            return;
+        }
+        callback = it->second;
     }
-    auto callback = it->second;
+    // Lock released before callback: OnResultWithUnlock/OnResult do cross-process
+    // IPC; holding authContextIdMapMutex_ across them stalls concurrent
+    // CancelAuth/Auth (Pitfall 6). Erasure is deferred to those callbacks
+    // (check-then-consume). If CancelAuth wins the race, OnResultWithUnlock skips
+    // HandleUnlockResult -> SetOsAccountIsVerified(true) (Pitfall 7) - but erasing
+    // here would make that skip unconditional, so the race is the lesser evil.
     DomainAuthResult result;
     DomainPluginAdapter::GetAndCleanPluginAuthResultInfo(&authResultInfo, result);
     ErrCode errCode = DomainPluginAdapter::GetAndCleanPluginBusinessError(&error, PluginMethodEnum::AUTH, -1);
@@ -1331,29 +1340,32 @@ ErrCode InnerDomainAccountManager::AuthUser(int32_t userId, const std::vector<ui
 
 ErrCode InnerDomainAccountManager::CancelAuth(const sptr<IDomainAccountCallback> &callback)
 {
-    std::lock_guard<std::recursive_mutex> lock(authContextIdMapMutex_);
     uint64_t contextId = 0;
-    if (!FindCallbackInContextMap(callback, contextId)) {
-        ACCOUNT_LOGE("Cannot find contextId for callback");
-        return ERR_JS_INVALID_CONTEXT_ID;
+    {
+        std::lock_guard<std::recursive_mutex> lock(authContextIdMapMutex_);
+        if (!FindCallbackInContextMap(callback, contextId)) {
+            ACCOUNT_LOGE("Cannot find contextId for callback");
+            return ERR_JS_INVALID_CONTEXT_ID;
+        }
     }
     return CancelAuthWork(contextId);
 }
 
 ErrCode InnerDomainAccountManager::CancelAuth(const uint64_t &contextId)
 {
-    std::lock_guard<std::recursive_mutex> lock(authContextIdMapMutex_);
-    auto it = authContextIdMap_.find(contextId);
-    if (it == authContextIdMap_.end()) {
-        ACCOUNT_LOGE("Cannot find contextId for callback");
-        return ERR_JS_INVALID_CONTEXT_ID;
+    {
+        std::lock_guard<std::recursive_mutex> lock(authContextIdMapMutex_);
+        auto it = authContextIdMap_.find(contextId);
+        if (it == authContextIdMap_.end()) {
+            ACCOUNT_LOGE("Cannot find contextId for callback");
+            return ERR_JS_INVALID_CONTEXT_ID;
+        }
     }
     return CancelAuthWork(contextId);
 }
 
 ErrCode InnerDomainAccountManager::CancelAuthWork(const uint64_t &contextId) __attribute__((no_sanitize("cfi")))
 {
-    std::lock_guard<std::recursive_mutex> lock(authContextIdMapMutex_);
     if (plugin_ == nullptr) {
         auto iter = methodMap_.find(PluginMethodEnum::CANCEL_AUTH);
         if (iter == methodMap_.end() || iter->second == nullptr) {
@@ -1365,9 +1377,23 @@ ErrCode InnerDomainAccountManager::CancelAuthWork(const uint64_t &contextId) __a
         PluginBusinessError *error = (*reinterpret_cast<CancelAuthFunc>(iter->second))(contextId);
         return DomainPluginAdapter::GetAndCleanPluginBusinessError(&error, iter->first, -1);
     }
-    auto it = authContextIdMap_.find(contextId);
-    if (it != authContextIdMap_.end()) {
-        sptr<IDomainAccountCallback> callback = it->second;
+    // Snapshot callback under lock; OnResult is called outside the lock
+    // and defers its own erase to InnerDomainAuthCallback::OnResult (check-then-consume).
+    // The null branch below is structurally unreachable today: AddToContextMap
+    // dereferences innerCallback (SetOpenContextIdCheck) before returning, so it
+    // can't store null. Kept as a defensive guard: if that invariant ever breaks,
+    // erase the bad entry to contain damage and log distinctly so it isn't mistaken
+    // for a normal contextId miss.
+    sptr<IDomainAccountCallback> callback = nullptr;
+    {
+        std::lock_guard<std::recursive_mutex> lock(authContextIdMapMutex_);
+        auto it = authContextIdMap_.find(contextId);
+        if (it == authContextIdMap_.end()) {
+            return ERR_JS_INVALID_CONTEXT_ID;
+        }
+        callback = it->second;
+    }
+    if (callback != nullptr) {
         ErrCode errCode = ERR_JS_AUTH_CANCELLED;
         AccountSA::DomainAuthResult result;
         Parcel resultParcel;
@@ -1377,13 +1403,11 @@ ErrCode InnerDomainAccountManager::CancelAuthWork(const uint64_t &contextId) __a
         }
         DomainAccountParcel domainAccountParcel;
         domainAccountParcel.SetParcelData(resultParcel);
-        if (callback != nullptr) {
-            callback->OnResult(errCode, domainAccountParcel);
-            return ERR_OK;
-        }
-        EraseFromContextMap(contextId);
+        callback->OnResult(errCode, domainAccountParcel);
+        return ERR_OK;
     }
-    ACCOUNT_LOGE("Invalid contextId = %{public}" PRIu64, contextId);
+    EraseFromContextMap(contextId);
+    ACCOUNT_LOGW("Invalid context ptr, contextId = %{public}" PRIu64, contextId);
     return ERR_JS_INVALID_CONTEXT_ID;
 }
 

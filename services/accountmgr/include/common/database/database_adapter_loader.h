@@ -36,7 +36,7 @@ public:
     void DestroyDataManager(IDbAdapterDataManager* dataManager);
     bool CheckAndUnload();
 private:
-    bool CheckAndLoad();
+    bool CheckAndLoadLocked();  // caller must hold loadMutex_
     FUNC_CREATE createFunc_ = nullptr;
     FUNC_DESTROY destroyFunc_ = nullptr;
     void *handle_ = nullptr;

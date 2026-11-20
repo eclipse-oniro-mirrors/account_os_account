@@ -58,9 +58,8 @@ bool DatabaseAdapterLoader::CheckAndUnload()
     return true;
 }
 
-bool DatabaseAdapterLoader::CheckAndLoad()
+bool DatabaseAdapterLoader::CheckAndLoadLocked()
 {
-    std::lock_guard<std::mutex> lock(loadMutex_);
     if ((handle_ != nullptr) && (createFunc_ != nullptr) && (destroyFunc_ != nullptr)) {
         return true;
     }
@@ -90,7 +89,8 @@ bool DatabaseAdapterLoader::CheckAndLoad()
 
 std::shared_ptr<IDbAdapterDataManager> DatabaseAdapterLoader::GetDataManager()
 {
-    if (!CheckAndLoad()) {
+    std::lock_guard<std::mutex> lock(loadMutex_);
+    if (!CheckAndLoadLocked()) {
         ACCOUNT_LOGE("Load kvstore adapter failed.");
         return nullptr;
     }
