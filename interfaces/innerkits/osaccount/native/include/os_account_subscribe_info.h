@@ -54,6 +54,61 @@ typedef int32_t (*OnOsAccountStateChangedFunc)(const COsAccountStateData *stateD
 }
 #endif
 
+/**
+ * Convert an OS account state to its enum name for logging, e.g. SWITCHING.
+ */
+inline const char *StateName(OsAccountState state)
+{
+    switch (state) {
+        case OsAccountState::ACTIVATED:
+            return "activated";
+        case OsAccountState::ACTIVATING:
+            return "activating";
+        case OsAccountState::UNLOCKED:
+            return "unlocked";
+        case OsAccountState::CREATED:
+            return "created";
+        case OsAccountState::REMOVED:
+            return "removed";
+        case OsAccountState::STOPPING:
+            return "stopping";
+        case OsAccountState::STOPPED:
+            return "stopped";
+        case OsAccountState::SWITCHING:
+            return "switching";
+        case OsAccountState::SWITCHED:
+            return "switched";
+        case OsAccountState::CREATING:
+            return "creating";
+        case OsAccountState::LOCKING:
+            return "locking";
+        case OsAccountState::LOCKED:
+            return "locked";
+        default:
+            return "unknown";
+    }
+}
+
+/**
+ * Check whether the subscription handshake is required for the given OS account state.
+ * The publisher attaches a reply callback only for these states, and the subscriber
+ * waits for its callbacks before replying. Both sides share this single definition.
+ */
+inline bool IsStateNeedHandshake(OsAccountState state)
+{
+    switch (state) {
+        case OsAccountState::STOPPING:
+        case OsAccountState::LOCKING:
+            return true;
+#ifdef OS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION
+        case OsAccountState::SWITCHING:
+            return true;
+#endif
+        default:
+            return false;
+    }
+}
+
 class OsAccountSubscribeInfo : public Parcelable {
 public:
     OsAccountSubscribeInfo();

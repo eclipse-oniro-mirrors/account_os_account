@@ -15,6 +15,7 @@
 
 #include "os_account_state_reply_callback_service.h"
 
+#include <chrono>
 #include "account_hisysevent_adapter.h"
 #include "account_log_wrapper.h"
 #include "ipc_skeleton.h"
@@ -22,6 +23,7 @@
 
 namespace OHOS {
 namespace AccountSA {
+
 namespace {
 constexpr int64_t TIMEOUT_THRESHOLD = 5000000; // 5s
 }
@@ -78,26 +80,30 @@ ErrCode OsAccountStateReplyCallbackService::OnComplete()
             std::chrono::system_clock::now() - startTime_).count();
     }
     if (isCompleted_) {
-        ACCOUNT_LOGE("Already completed, callingUid: %{public}d", subscriberUid_);
+        ACCOUNT_LOGE("Dynamic publish %{public}s reply repeated, from %{public}d with handshake",
+            StateName(state_), subscriberUid_);
         return ERR_OK;
     }
     int32_t callerUid = IPCSkeleton::GetCallingUid();
     if (callerUid != subscriberUid_) {
-        ACCOUNT_LOGE("Permission denied");
+        ACCOUNT_LOGE("Dynamic publish %{public}s reply rejected, from %{public}d with handshake",
+            StateName(state_), subscriberUid_);
         ReportOsAccountOperationFail(accountId_, ConvertStateToSceneFlag(state_), ERR_ACCOUNT_COMMON_PERMISSION_DENIED,
-            "Failed to check permission, callerUid=" + std::to_string(callerUid) + ", subscriberUid="
-            + std::to_string(subscriberUid_) + ", state=" + std::to_string(state_));
+            std::string("Dynamic publish ") + StateName(state_) + " reply rejected, from " +
+            std::to_string(subscriberUid_) + " with handshake, caller " + std::to_string(callerUid));
         return ERR_OK;
     }
     isCompleted_ = true;
     if (duration > TIMEOUT_THRESHOLD) {
-        ACCOUNT_LOGE("Timeout, callingUid: %{public}d, duration: %{public}lld us",
-            subscriberUid_, static_cast<long long>(duration));
+        ACCOUNT_LOGE("Dynamic publish %{public}s reply slow, from %{public}d with handshake, "
+            "duration=%{public}lldus",
+            StateName(state_), subscriberUid_, static_cast<long long>(duration));
         ReportOsAccountOperationFail(accountId_, ConvertStateToSceneFlag(state_), ERR_ACCOUNT_COMMON_OPERATION_TIMEOUT,
-            "OnComplete timed out, duration=" + std::to_string(duration) + "us, uid=" + std::to_string(subscriberUid_)
-            + ", state=" + std::to_string(state_));
+            std::string("Dynamic publish ") + StateName(state_) + " reply slow, from " +
+            std::to_string(subscriberUid_) + " with handshake, duration=" + std::to_string(duration) + "us");
     }
-    ACCOUNT_LOGI("Done, subscriberUid: %{public}d, state: %{public}d", subscriberUid_, state_);
+    ACCOUNT_LOGI("Dynamic publish %{public}s reply end, from %{public}d with handshake",
+        StateName(state_), subscriberUid_);
     CompleteInner();
     return ERR_OK;
 }
@@ -106,11 +112,13 @@ void OsAccountStateReplyCallbackService::ForceComplete()
 {
     std::lock_guard lock(mutex_);
     if (isCompleted_) {
-        ACCOUNT_LOGE("Already completed, subscriberUid: %{public}d", subscriberUid_);
+        ACCOUNT_LOGE("Dynamic publish %{public}s reply repeated, from %{public}d with handshake",
+            StateName(state_), subscriberUid_);
         return;
     }
     isCompleted_ = true;
-    ACCOUNT_LOGI("ForceComplete, subscriberUid: %{public}d, state: %{public}d", subscriberUid_, state_);
+    ACCOUNT_LOGI("Dynamic publish %{public}s reply forced, from %{public}d with handshake",
+        StateName(state_), subscriberUid_);
     CompleteInner();
 }
 

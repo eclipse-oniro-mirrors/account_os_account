@@ -16,6 +16,7 @@
 #include "account_event_provider.h"
 #include <chrono>
 #include <dlfcn.h>
+#include <future>
 #include <poll.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -51,6 +52,7 @@
 #include "os_account_static_subscriber_manager.h"
 #include "os_account_subscribe_manager.h"
 #include "os_account_sub_profile_subscribe_manager.h"
+#include "os_account_thread_helper.h"
 #include "parameter.h"
 #include "parcel.h"
 #include "securec.h"
@@ -3349,7 +3351,9 @@ void IInnerOsAccountManager::RollBackToEarlierAccount(int32_t fromId, int32_t to
     ACCOUNT_LOGI("RollBackToEarlierAccount end publishing pre switch event.");
     OsAccountInfo osAccountInfo;
     osAccountInfo.SetLocalId(toId);
-    subscribeManager_.Publish(fromId, OS_ACCOUNT_SUBSCRIBE_TYPE::SWITCHING, toId, displayId);
+    std::future<ErrCode> switchingFuture = subscribeManager_.Publish(
+        fromId, OS_ACCOUNT_SUBSCRIBE_TYPE::SWITCHING, toId, displayId);
+    subscribeManager_.AwaitPublish(switchingFuture, OsAccountState::SWITCHING, fromId, toId, displayId);
     OsAccountInterface::PublishCommonEvent(osAccountInfo,
         OHOS::EventFwk::CommonEventSupport::COMMON_EVENT_USER_FOREGROUND, Constants::OPERATION_SWITCH);
     subscribeManager_.Publish(fromId, OS_ACCOUNT_SUBSCRIBE_TYPE::SWITCHED, toId, displayId);
@@ -3361,24 +3365,16 @@ void IInnerOsAccountManager::RollBackToEarlierAccount(int32_t fromId, int32_t to
 #endif
 
 ErrCode IInnerOsAccountManager::SendToStorageAndAMSAccountStart(OsAccountInfo &osAccountInfo, const bool startStorage,
-    const uint64_t displayId, const bool isAppRecovery, int32_t oldId)
+    const uint64_t displayId, const bool isAppRecovery)
 {
-    int32_t localId = static_cast<int32_t>(osAccountInfo.GetLocalId());
-
+    ErrCode errCode = ERR_OK;
     if (startStorage) {
-        ErrCode errCode = SendToStorageAccountStart(osAccountInfo);
-        if (errCode != ERR_OK && !isAppRecovery) {
-            RollBackToEarlierAccount(localId, oldId, displayId);
-            return errCode;
-        }
+        errCode = SendToStorageAccountStart(osAccountInfo);
     }
-
-    ErrCode errCode = SendToAMSAndSamgrAccountStart(osAccountInfo, displayId, isAppRecovery);
-    if (errCode != ERR_OK) {
-        RollBackToEarlierAccount(localId, oldId, displayId);
-        return errCode;
+    if (errCode == ERR_OK || isAppRecovery) {
+        errCode = SendToAMSAndSamgrAccountStart(osAccountInfo, displayId, isAppRecovery);
     }
-    return ERR_OK;
+    return errCode;
 }
 
 ErrCode IInnerOsAccountManager::SendMsgForAccountActivate(OsAccountInfo &osAccountInfo, const bool startStorage,
@@ -3395,11 +3391,16 @@ ErrCode IInnerOsAccountManager::SendMsgForAccountActivate(OsAccountInfo &osAccou
         OsAccountInterface::PublishCommonEvent(osAccountInfo,
             OHOS::EventFwk::CommonEventSupport::COMMON_EVENT_USER_STARTING, Constants::OPERATION_STARTING);
     }
-    if (switched) {
-        subscribeManager_.Publish(oldId, OS_ACCOUNT_SUBSCRIBE_TYPE::SWITCHING, localId, displayId);
-    }
-    ErrCode errCode = SendToStorageAndAMSAccountStart(osAccountInfo, startStorage, displayId, isAppRecovery, oldId);
+
+    auto notifyFuture = switched ?
+        subscribeManager_.Publish(oldId, OsAccountState::SWITCHING, localId, displayId) : std::future<ErrCode>{};
+
+    ErrCode errCode = SendToStorageAndAMSAccountStart(osAccountInfo, startStorage, displayId, isAppRecovery);
+
+    subscribeManager_.AwaitPublish(notifyFuture, OsAccountState::SWITCHING, oldId, localId, displayId);
+
     if (errCode != ERR_OK) {
+        RollBackToEarlierAccount(localId, oldId, displayId);
         return errCode;
     }
 
@@ -4407,7 +4408,7 @@ ErrCode IInnerOsAccountManager::PublishOsAccountLockEvent(const int32_t localId,
 #else  // HAS_CES_PART
         ACCOUNT_LOGI("No common event part! Publish nothing!");
 #endif // HAS_CES_PART
-        return subscribeManager_.Publish(localId, OS_ACCOUNT_SUBSCRIBE_TYPE::LOCKING);
+        return subscribeManager_.PublishSync(localId, OS_ACCOUNT_SUBSCRIBE_TYPE::LOCKING);
     } else {
 #ifdef HAS_CES_PART
         AccountEventProvider::EventPublishAsUser(
@@ -4415,7 +4416,7 @@ ErrCode IInnerOsAccountManager::PublishOsAccountLockEvent(const int32_t localId,
 #else  // HAS_CES_PART
         ACCOUNT_LOGI("No common event part! Publish nothing!");
 #endif // HAS_CES_PART
-        return subscribeManager_.Publish(localId, OS_ACCOUNT_SUBSCRIBE_TYPE::LOCKED);
+        return subscribeManager_.PublishSync(localId, OS_ACCOUNT_SUBSCRIBE_TYPE::LOCKED);
     }
     return ERR_OK;
 }

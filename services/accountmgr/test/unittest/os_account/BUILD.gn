@@ -232,6 +232,7 @@ ohos_unittest("OsAccountFileManagerMultipleThreadTest") {
   ]
   sources += account_iam_source
   sources += account_service_sources
+  sources += [ "${services_path}/accountmgr/src/osaccount/os_account_static_subscriber_config.cpp" ]
   configs = [
     ":os_account_amgr_mock_config",
     "${services_path}/accountmgr/test:accountmgr_test_config",
@@ -327,6 +328,7 @@ ohos_unittest("OsAccountFileManagerMultipleThreadTest") {
   if (os_account_support_lock_os_account) {
     cflags_cc += [ "-DSUPPORT_LOCK_OS_ACCOUNT" ]
   }
+  cflags_cc += [ "-DOS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION" ]
   cflags_cc += [ "-DACCOUNT_TEST" ]
   cflags_cc += [ "-DBUNDLE_ADAPTER_MOCK" ]
   cflags_cc += [ "-DENABLE_MULTIPLE_OS_ACCOUNTS" ]
@@ -591,6 +593,7 @@ ohos_unittest("OsAccountInnerAccmgrCovTest") {
   ]
   sources += account_iam_source
   sources += account_service_sources
+  sources += [ "${services_path}/accountmgr/src/osaccount/os_account_static_subscriber_config.cpp" ]
   configs = [
     ":os_account_amgr_test_config",
     "${services_path}/accountmgr/test:accountmgr_test_config",
@@ -686,6 +689,7 @@ ohos_unittest("OsAccountInnerAccmgrCovTest") {
   if (os_account_support_lock_os_account) {
     cflags_cc += [ "-DSUPPORT_LOCK_OS_ACCOUNT" ]
   }
+  cflags_cc += [ "-DOS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION" ]
   cflags_cc += [ "-DACCOUNT_TEST" ]
   cflags_cc += [ "-DBUNDLE_ADAPTER_MOCK" ]
   cflags_cc += [ "-DENABLE_MULTIPLE_OS_ACCOUNTS" ]
@@ -1760,8 +1764,53 @@ ohos_unittest("os_account_static_subscriber_manager_test") {
     "${services_path}/accountmgr/test/unittest/domain_account/mock",
   ]
   sources = [
+    "${services_path}/accountmgr/src/osaccount/os_account_state_reply_callback_service.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_static_subscriber_config.cpp",
     "${services_path}/accountmgr/src/osaccount/os_account_static_subscriber_manager.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_thread_helper.cpp",
     "os_account_static_subscriber_manager_test.cpp",
+  ]
+
+  deps = [
+    "${common_path}:libaccount_common",
+    "${os_account_innerkits_native_path}:os_account_innerkits",
+    "${os_account_innerkits_native_path}:os_account_state_reply_callback_stub",
+  ]
+
+  external_deps = [
+    "cJSON:cjson",
+    "c_utils:utils",
+    "googletest:gmock_main",
+    "googletest:gtest_main",
+    "hilog:libhilog",
+    "ipc:ipc_single",
+  ]
+  part_name = "os_account"
+  cflags_cc = [ "-DACCOUNT_TEST" ]
+  cflags_cc += [ "-DOS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION" ]
+}
+
+ohos_unittest("os_account_static_subscriber_config_parse_test") {
+  branch_protector_ret = "pac_ret"
+
+  sanitize = {
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+
+  defines = [
+    "ACCOUNT_LOG_TAG = \"AccountCommonFwk\"",
+    "LOG_DOMAIN = 0xD001B00",
+  ]
+  module_out_path = module_output_path
+  include_dirs = [
+    "${services_path}/accountmgr/include/osaccount",
+    "${services_path}/accountmgr/test/unittest/domain_account/mock",
+  ]
+  sources = [
+    "${services_path}/accountmgr/src/osaccount/os_account_static_subscriber_config.cpp",
+    "os_account_static_subscriber_config_parse_test.cpp",
   ]
 
   deps = [
@@ -1770,15 +1819,26 @@ ohos_unittest("os_account_static_subscriber_manager_test") {
   ]
 
   external_deps = [
+    "cJSON:cjson",
     "c_utils:utils",
     "googletest:gmock_main",
     "googletest:gtest_main",
     "hilog:libhilog",
     "ipc:ipc_single",
   ]
-
   part_name = "os_account"
-  cflags_cc = [ "-DACCOUNT_TEST" ]
+
+  # The handshake macro is defined unconditionally here so the JSON config parsing source
+  # stays covered on products where the static-subscription flag is off. The GetOneCfgFile boot
+  # path is covered only when the product actually has the config_policy part.
+  cflags_cc = [
+    "-DACCOUNT_TEST",
+    "-DOS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION",
+  ]
+  if (has_config_policy_part) {
+    external_deps += [ "config_policy:configpolicy_util" ]
+    cflags_cc += [ "-DHAS_CONFIG_POLICY_PART" ]
+  }
 }
 
 ohos_unittest("os_account_activate_lock_plugin_manager_test") {
@@ -1850,6 +1910,61 @@ ohos_unittest("os_account_state_reply_callback_service_test") {
     "hilog:libhilog",
     "ipc:ipc_single",
   ]
+  part_name = "os_account"
+}
+
+ohos_unittest("os_account_subscribe_manager_test") {
+  branch_protector_ret = "pac_ret"
+
+  sanitize = {
+    cfi = true
+    cfi_cross_dso = true
+    debug = false
+  }
+
+  defines = [
+    "ACCOUNT_LOG_TAG = \"AccountMgrServiceTest\"",
+    "LOG_DOMAIN = 0xD001B00",
+  ]
+  module_out_path = module_output_path
+  include_dirs = [
+    "${services_path}/accountmgr/include/osaccount",
+    "${os_account_core_path}/include",
+    "mock/hisysevent_adapter",
+  ]
+  # WaitForStateReplies reads the configured state timeout from the static subscriber
+  # manager, so the manager and its config parser must be linked into this target; the
+  # config source is isolated behind the handshake flag in the service gni.
+  sources = [
+    "${os_account_core_path}/src/os_account_state_parcel.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_state_reply_callback_service.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_static_subscriber_config.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_static_subscriber_manager.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_subscribe_death_recipient.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_subscribe_manager.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_thread_helper.cpp",
+    "mock/hisysevent_adapter/account_hisysevent_adapter_mock.cpp",
+    "os_account_subscribe_manager_test.cpp",
+  ]
+
+  deps = [
+    "${common_path}:libaccount_common",
+    "${os_account_innerkits_native_path}:os_account_event_stub",
+    "${os_account_innerkits_native_path}:os_account_innerkits",
+    "${os_account_innerkits_native_path}:os_account_state_reply_callback_stub",
+  ]
+
+  external_deps = [
+    "cJSON:cjson",
+    "c_utils:utils",
+    "googletest:gmock_main",
+    "googletest:gtest_main",
+    "hilog:libhilog",
+    "ipc:ipc_single",
+  ]
+
+  cflags_cc = [ "-DOS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION" ]
+
   part_name = "os_account"
 }
 
@@ -1996,7 +2111,9 @@ group("unittest") {
     ":os_account_activate_lock_plugin_manager_test",
     ":os_account_maintenance_type_mock_test",
     ":os_account_state_reply_callback_service_test",
+    ":os_account_static_subscriber_config_parse_test",
     ":os_account_static_subscriber_manager_test",
+    ":os_account_subscribe_manager_test",
     ":DisplayUserZoneConfigManagerTest",
   ]
 

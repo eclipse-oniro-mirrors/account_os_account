@@ -102,7 +102,7 @@ HWTEST_F(OsAccountInnerAccountmgrMockCov, SendToStorageAndAMSAccountStartTest001
 {
     OsAccountInfo osAccountInfo;
     g_errType = ERR_INTERFACE_STORAGE_START;
-    ErrCode errCode = innerMgrService_->SendToStorageAndAMSAccountStart(osAccountInfo, true, 0, false, 0);
+    ErrCode errCode = innerMgrService_->SendToStorageAndAMSAccountStart(osAccountInfo, true, 0, false);
     EXPECT_EQ(errCode, ERR_ACCOUNT_COMMON_GET_SYSTEM_ABILITY_MANAGER);
 }
 

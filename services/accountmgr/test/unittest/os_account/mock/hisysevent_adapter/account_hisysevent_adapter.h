@@ -21,6 +21,9 @@
 
 namespace OHOS {
 namespace AccountSA {
+namespace Constants {
+const char OPERATION_EVENT_PUBLISH[] = "eventPublish";
+} // Constants
 extern std::string g_resultCodeStr;
 void ReportServiceStartFail(int32_t errCode, const std::string& errMsg);
 void ReportOsAccountOperationFail(

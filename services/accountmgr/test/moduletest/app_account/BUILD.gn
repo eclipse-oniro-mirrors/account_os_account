@@ -113,6 +113,7 @@ ohos_moduletest("app_account_manager_service_associated_data_test") {
     "${services_path}/accountmgr/src/osaccount/os_account_state_reply_callback_service.cpp",
     "${services_path}/accountmgr/src/osaccount/os_account_subscribe_death_recipient.cpp",
     "${services_path}/accountmgr/src/osaccount/os_account_subscribe_manager.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_thread_helper.cpp",
     "app_account_associated_data_test.cpp",
     "${services_path}/accountmgr/src/common/database/kvstore/kvstore_adapter_impl.cpp",
   ]
@@ -387,6 +388,7 @@ ohos_moduletest("app_account_control_manager_module_test") {
     "${services_path}/accountmgr/src/osaccount/os_account_state_reply_callback_service.cpp",
     "${services_path}/accountmgr/src/osaccount/os_account_subscribe_death_recipient.cpp",
     "${services_path}/accountmgr/src/osaccount/os_account_subscribe_manager.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_thread_helper.cpp",
     "app_account_control_manager_module_test.cpp",
     "${services_path}/accountmgr/src/common/database/kvstore/kvstore_adapter_impl.cpp",
   ]
@@ -534,6 +536,7 @@ ohos_moduletest("app_account_control_manager_subspace_module_test") {
     "${services_path}/accountmgr/src/osaccount/os_account_state_reply_callback_service.cpp",
     "${services_path}/accountmgr/src/osaccount/os_account_subscribe_death_recipient.cpp",
     "${services_path}/accountmgr/src/osaccount/os_account_subscribe_manager.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_thread_helper.cpp",
     "app_account_control_manager_subspace_module_test.cpp",
     "${services_path}/accountmgr/src/common/database/kvstore/kvstore_adapter_impl.cpp",
   ]
@@ -681,6 +684,7 @@ ohos_moduletest("app_account_control_manager_module_mock_test") {
     "${services_path}/accountmgr/src/osaccount/os_account_state_reply_callback_service.cpp",
     "${services_path}/accountmgr/src/osaccount/os_account_subscribe_death_recipient.cpp",
     "${services_path}/accountmgr/src/osaccount/os_account_subscribe_manager.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_thread_helper.cpp",
     "${services_path}/accountmgr/test/mock/app_account/app_account_info.cpp",
     "app_account_control_manager_module_mock_test.cpp",
     "${services_path}/accountmgr/src/common/database/kvstore/kvstore_adapter_impl.cpp",
@@ -859,6 +863,7 @@ ohos_moduletest("app_account_authenticator_session_module_test") {
     "${services_path}/accountmgr/src/osaccount/os_account_state_reply_callback_service.cpp",
     "${services_path}/accountmgr/src/osaccount/os_account_subscribe_death_recipient.cpp",
     "${services_path}/accountmgr/src/osaccount/os_account_subscribe_manager.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_thread_helper.cpp",
     "${services_path}/accountmgr/test/mock/common/bundle_manager_adapter.cpp",
   ]
 
@@ -1148,6 +1153,7 @@ ohos_moduletest("at_not_mock_app_account_manager_service_module_test") {
     "${services_path}/accountmgr/src/osaccount/os_account_state_reply_callback_service.cpp",
     "${services_path}/accountmgr/src/osaccount/os_account_subscribe_death_recipient.cpp",
     "${services_path}/accountmgr/src/osaccount/os_account_subscribe_manager.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_thread_helper.cpp",
     "at_not_mock_app_account_manager_service_module_test.cpp",
     "${services_path}/accountmgr/src/common/database/kvstore/kvstore_adapter_impl.cpp",
   ]
@@ -1413,6 +1419,7 @@ ohos_moduletest("app_account_authenticator_session_manager_module_test") {
     "${services_path}/accountmgr/src/osaccount/os_account_state_reply_callback_service.cpp",
     "${services_path}/accountmgr/src/osaccount/os_account_subscribe_death_recipient.cpp",
     "${services_path}/accountmgr/src/osaccount/os_account_subscribe_manager.cpp",
+    "${services_path}/accountmgr/src/osaccount/os_account_thread_helper.cpp",
     "${services_path}/accountmgr/test/mock/common/bundle_manager_adapter.cpp",
   ]
 

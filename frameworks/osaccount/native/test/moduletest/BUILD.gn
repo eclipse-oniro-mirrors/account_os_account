@@ -302,6 +302,9 @@ ohos_moduletest("os_account_subscribe_test") {
   if (os_account_support_lock_os_account) {
     cflags_cc += [ "-DSUPPORT_LOCK_OS_ACCOUNT" ]
   }
+  if (os_account_support_static_subscription) {
+    cflags_cc += [ "-DOS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION" ]
+  }
 }
 
 group("moduletest") {

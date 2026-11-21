@@ -371,6 +371,11 @@ ohos_shared_library("accountmgr") {
     cflags_cc += [ "-DSUPPORT_BACKUP_RESTORE" ]
   }
 
+  if (os_account_support_static_subscription) {
+    cflags_cc += [ "-DOS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION" ]
+    sources += [ "${services_path}/accountmgr/src/osaccount/os_account_static_subscriber_config.cpp" ]
+  }
+
   if (os_account_distributed_feature && !use_libfuzzer) {
     cflags_cc += [ "-DENABLE_FILE_WATCHER" ]
     sources +=
@@ -657,6 +662,7 @@ ohos_source_set("accountmgr_test_source_set") {
   sources += account_service_sources
   sources += ability_manager_sources
   sources += bundle_manager_sources
+  sources += [ "${services_path}/accountmgr/src/osaccount/os_account_static_subscriber_config.cpp" ]
 
   defines = [
     "ACCOUNT_LOG_TAG = \"AccountMgrTest\"",
@@ -783,6 +789,8 @@ ohos_source_set("accountmgr_test_source_set") {
   if (os_account_support_backup_restore) {
     cflags_cc += [ "-DSUPPORT_BACKUP_RESTORE" ]
   }
+
+  cflags_cc += [ "-DOS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION" ]
 
   if (os_account_distributed_feature && !use_libfuzzer) {
     cflags_cc += [ "-DENABLE_FILE_WATCHER" ]
@@ -996,6 +1004,7 @@ ohos_source_set("accountmgr_test_source_set_no_bms") {
   ]
   sources += account_service_sources
   sources += ability_manager_sources
+  sources += [ "${services_path}/accountmgr/src/osaccount/os_account_static_subscriber_config.cpp" ]
 
   defines = [
     "ACCOUNT_LOG_TAG = \"AccountMgrTest\"",
@@ -1245,6 +1254,7 @@ ohos_source_set("accountmgr_test_source_set_no_bms") {
   if (os_account_support_backup_restore) {
     cflags_cc += [ "-DSUPPORT_BACKUP_RESTORE" ]
   }
+  cflags_cc += [ "-DOS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION" ]
   subsystem_name = "account"
   part_name = "os_account"
 }

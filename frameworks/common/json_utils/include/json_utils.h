@@ -144,6 +144,9 @@ std::map<std::uint64_t, std::int32_t> PackJsonToMapUint64Int32(const CJson *json
 std::map<std::uint64_t, std::int32_t> PackJsonToMapUint64Int32(const CJsonUnique &jsonObj);
 CJsonUnique CreateJsonFromMap(const std::map<std::string, std::string> &mapData);
 
+bool GetFirstEntryFromObj(const CJson *jsonObj, std::string &key, int32_t &value);
+bool GetFirstEntryFromObj(const CJsonUnique &jsonObj, std::string &key, int32_t &value);
+
 // set
 bool GetSetStringFromJson(const CJsonUnique &jsonObj, const std::string &key, std::set<std::string> &setData);
 bool GetSetStringFromJson(const CJson *jsonObj, const std::string &key, std::set<std::string> &setData);
