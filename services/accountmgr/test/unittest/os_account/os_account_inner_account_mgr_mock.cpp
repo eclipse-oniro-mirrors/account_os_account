@@ -19,6 +19,9 @@
 #include <string>
 
 #include "account_error_no.h"
+#ifdef SUPPORT_ETC_USER_SYNC
+#include "os_account_etc_file.h"
+#endif // SUPPORT_ETC_USER_SYNC
 #include "errors.h"
 #include "os_account_constants.h"
 #include "os_account_manager.h"
@@ -28,6 +31,9 @@
 #define private public
 #include "account_file_watcher_manager.h"
 #include "os_account_control_file_manager.h"
+#ifdef SUPPORT_DOMAIN_ACCOUNTS
+#include "os_account_domain_account_callback.h"
+#endif // SUPPORT_DOMAIN_ACCOUNTS
 #include "os_account_subscribe_manager.h"
 #undef private
 #ifdef BUNDLE_ADAPTER_MOCK
@@ -103,6 +109,9 @@ void OsAccountInnerAccmgrMockTest::SetUpTestCase(void)
     AccountFileOperator osAccountFileOperator;
     osAccountFileOperator.DeleteDirOrFile(USER_INFO_BASE);
     GTEST_LOG_(INFO) << "delete account test path " << USER_INFO_BASE;
+#ifdef SUPPORT_ETC_USER_SYNC
+    system(("mkdir -p " + std::string(EtcAccountFileUtils::ETC_FILE_DIR)).c_str());
+#endif // SUPPORT_ETC_USER_SYNC
 #endif  // ACCOUNT_TEST
     IInnerOsAccountManager *innerMgrService = &IInnerOsAccountManager::GetInstance();
     std::shared_ptr<OsAccountControlFileManager> osAccountControl =
@@ -2747,5 +2756,285 @@ HWTEST_F(OsAccountInnerAccmgrMockTest, CleanGarbageOsAccounts_Eacces_ClearsOpera
     EXPECT_TRUE(added);
     innerMgrService_->RemoveLocalIdToOperating(id);
 }
+#ifdef SUPPORT_ETC_USER_SYNC
+/**
+ * @tc.name: OsAccountInnerAccmgrEtcWiringTest001
+ * @tc.desc: SendMsgForAccountCreate calls SyncEtcForCreate before FinalizeAccountCreate.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, OsAccountInnerAccmgrEtcWiringTest001, TestSize.Level1)
+{
+    auto ptr = std::make_shared<MockOsAccountControlFileManager>();
+    innerMgrService_->osAccountControl_ = ptr;
+    OsAccountInfo osAccountInfo;
+    osAccountInfo.SetLocalId(101);
+    osAccountInfo.SetLocalName("etcwiring");
+    osAccountInfo.SetShortName("etcwiring");
+    osAccountInfo.SetType(OsAccountType::NORMAL);
+    testing::InSequence seq;
+    EXPECT_CALL(*ptr, SyncEtcForCreate(testing::_)).WillOnce(testing::Return(ERR_OK));
+    EXPECT_CALL(*ptr, UpdateOsAccount(testing::_)).WillOnce(testing::Return(ERR_OK));
+    ErrCode ret = innerMgrService_->SendMsgForAccountCreate(osAccountInfo);
+    EXPECT_EQ(ret, ERR_OK);
+    testing::Mock::VerifyAndClearExpectations(ptr.get());
+}
+
+/**
+ * @tc.name: OsAccountInnerAccmgrEtcWiringTest002
+ * @tc.desc: SendMsgForAccountCreate fails when SyncEtcForCreate fails; rollback cleans etc row.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, OsAccountInnerAccmgrEtcWiringTest002, TestSize.Level1)
+{
+    auto ptr = std::make_shared<MockOsAccountControlFileManager>();
+    innerMgrService_->osAccountControl_ = ptr;
+    OsAccountInfo osAccountInfo;
+    osAccountInfo.SetLocalId(101);
+    osAccountInfo.SetLocalName("etcwiring");
+    osAccountInfo.SetShortName("etcwiring");
+    osAccountInfo.SetType(OsAccountType::NORMAL);
+    EXPECT_CALL(*ptr, SyncEtcForCreate(testing::_))
+        .WillOnce(testing::Return(ERR_ACCOUNT_COMMON_INVALID_PARAMETER));
+    EXPECT_CALL(*ptr, UpdateOsAccount(testing::_)).Times(0);
+    EXPECT_CALL(*ptr, SyncEtcForRemove(testing::_)).WillOnce(testing::Return(ERR_OK));
+    EXPECT_CALL(*ptr, DelOsAccount(testing::_)).WillOnce(testing::Return(ERR_OK));
+    ErrCode ret = innerMgrService_->SendMsgForAccountCreate(osAccountInfo);
+    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+    testing::Mock::VerifyAndClearExpectations(ptr.get());
+}
+
+/**
+ * @tc.name: OsAccountInnerAccmgrEtcWiringTest003
+ * @tc.desc: SendMsgForAccountRemove calls SyncEtcForRemove before DelOsAccount.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, OsAccountInnerAccmgrEtcWiringTest003, TestSize.Level1)
+{
+    auto ptr = std::make_shared<MockOsAccountControlFileManager>();
+    innerMgrService_->osAccountControl_ = ptr;
+    OsAccountInfo osAccountInfo;
+    osAccountInfo.SetLocalId(101);
+    osAccountInfo.SetLocalName("etcwiring");
+    osAccountInfo.SetShortName("etcwiring");
+    testing::InSequence seq;
+    EXPECT_CALL(*ptr, SyncEtcForRemove(testing::_)).WillOnce(testing::Return(ERR_OK));
+    EXPECT_CALL(*ptr, DelOsAccount(testing::_)).WillOnce(testing::Return(ERR_OK));
+    ErrCode ret = innerMgrService_->SendMsgForAccountRemove(osAccountInfo);
+    EXPECT_EQ(ret, ERR_OK);
+    testing::Mock::VerifyAndClearExpectations(ptr.get());
+}
+
+/**
+ * @tc.name: OsAccountInnerAccmgrEtcWiringTest004
+ * @tc.desc: Finalize failure triggers rollback which cleans etc row before deleting account info.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, OsAccountInnerAccmgrEtcWiringTest004, TestSize.Level1)
+{
+    auto ptr = std::make_shared<MockOsAccountControlFileManager>();
+    innerMgrService_->osAccountControl_ = ptr;
+    OsAccountInfo osAccountInfo;
+    osAccountInfo.SetLocalId(101);
+    osAccountInfo.SetLocalName("etcwiring");
+    osAccountInfo.SetShortName("etcwiring");
+    osAccountInfo.SetType(OsAccountType::NORMAL);
+    testing::InSequence seq;
+    EXPECT_CALL(*ptr, SyncEtcForCreate(testing::_)).WillOnce(testing::Return(ERR_OK));
+    EXPECT_CALL(*ptr, UpdateOsAccount(testing::_))
+        .WillOnce(testing::Return(ERR_ACCOUNT_COMMON_INVALID_PARAMETER));
+    EXPECT_CALL(*ptr, SyncEtcForRemove(testing::_)).WillOnce(testing::Return(ERR_OK));
+    EXPECT_CALL(*ptr, DelOsAccount(testing::_)).WillOnce(testing::Return(ERR_OK));
+    ErrCode ret = innerMgrService_->SendMsgForAccountCreate(osAccountInfo);
+    EXPECT_EQ(ret, ERR_OSACCOUNT_SERVICE_INNER_UPDATE_ACCOUNT_ERROR);
+    testing::Mock::VerifyAndClearExpectations(ptr.get());
+}
+
+/**
+ * @tc.name: OsAccountInnerAccmgrEtcWiringTest005
+ * @tc.desc: First user (localId=100) skips the etc gate; SyncEtcForCreate is not called.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, OsAccountInnerAccmgrEtcWiringTest005, TestSize.Level1)
+{
+    auto ptr = std::make_shared<MockOsAccountControlFileManager>();
+    innerMgrService_->osAccountControl_ = ptr;
+    OsAccountInfo osAccountInfo;
+    osAccountInfo.SetLocalId(Constants::START_USER_ID);
+    osAccountInfo.SetLocalName("etcwiring");
+    osAccountInfo.SetShortName("etcwiring");
+    osAccountInfo.SetType(OsAccountType::NORMAL);
+    EXPECT_CALL(*ptr, SyncEtcForCreate(testing::_)).Times(0);
+    EXPECT_CALL(*ptr, UpdateOsAccount(testing::_)).WillOnce(testing::Return(ERR_OK));
+    ErrCode ret = innerMgrService_->SendMsgForAccountCreate(osAccountInfo);
+    EXPECT_EQ(ret, ERR_OK);
+    testing::Mock::VerifyAndClearExpectations(ptr.get());
+}
+
+/**
+ * @tc.name: OsAccountInnerAccmgrEtcWiringTest008
+ * @tc.desc: First user (localId=100) finalize failure rolls back without etc cleanup.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, OsAccountInnerAccmgrEtcWiringTest008, TestSize.Level1)
+{
+    auto ptr = std::make_shared<MockOsAccountControlFileManager>();
+    innerMgrService_->osAccountControl_ = ptr;
+    OsAccountInfo osAccountInfo;
+    osAccountInfo.SetLocalId(Constants::START_USER_ID);
+    osAccountInfo.SetLocalName("etcwiring");
+    osAccountInfo.SetShortName("etcwiring");
+    osAccountInfo.SetType(OsAccountType::NORMAL);
+    EXPECT_CALL(*ptr, SyncEtcForCreate(testing::_)).Times(0);
+    EXPECT_CALL(*ptr, SyncEtcForRemove(testing::_)).Times(0);
+    EXPECT_CALL(*ptr, UpdateOsAccount(testing::_))
+        .WillOnce(testing::Return(ERR_ACCOUNT_COMMON_INVALID_PARAMETER));
+    EXPECT_CALL(*ptr, DelOsAccount(testing::_)).WillOnce(testing::Return(ERR_OK));
+    ErrCode ret = innerMgrService_->SendMsgForAccountCreate(osAccountInfo);
+    EXPECT_EQ(ret, ERR_OSACCOUNT_SERVICE_INNER_UPDATE_ACCOUNT_ERROR);
+    testing::Mock::VerifyAndClearExpectations(ptr.get());
+}
+
+/**
+ * @tc.name: OsAccountInnerAccmgrEtcWiringTest009
+ * @tc.desc: Boot account (localId=1) skips the etc gate; etc failure never blocks boot create.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, OsAccountInnerAccmgrEtcWiringTest009, TestSize.Level1)
+{
+    auto ptr = std::make_shared<MockOsAccountControlFileManager>();
+    innerMgrService_->osAccountControl_ = ptr;
+    OsAccountInfo osAccountInfo;
+    osAccountInfo.SetLocalId(Constants::U1_ID);
+    osAccountInfo.SetLocalName("etcwiring");
+    osAccountInfo.SetShortName("etcwiring");
+    osAccountInfo.SetType(OsAccountType::NORMAL);
+    EXPECT_CALL(*ptr, SyncEtcForCreate(testing::_)).Times(0);
+    EXPECT_CALL(*ptr, UpdateOsAccount(testing::_)).WillOnce(testing::Return(ERR_OK));
+    ErrCode ret = innerMgrService_->SendMsgForAccountCreate(osAccountInfo);
+    EXPECT_EQ(ret, ERR_OK);
+    testing::Mock::VerifyAndClearExpectations(ptr.get());
+}
+
+/**
+ * @tc.name: OsAccountInnerAccmgrEtcWiringTest010
+ * @tc.desc: Double failure: finalize fails and rollback etc cleanup also fails; account rollback
+ *           still completes and the finalize error (not the etc error) is returned.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, OsAccountInnerAccmgrEtcWiringTest010, TestSize.Level1)
+{
+    auto ptr = std::make_shared<MockOsAccountControlFileManager>();
+    innerMgrService_->osAccountControl_ = ptr;
+    OsAccountInfo osAccountInfo;
+    osAccountInfo.SetLocalId(101);
+    osAccountInfo.SetLocalName("etcwiring");
+    osAccountInfo.SetShortName("etcwiring");
+    osAccountInfo.SetType(OsAccountType::NORMAL);
+    testing::InSequence seq;
+    EXPECT_CALL(*ptr, SyncEtcForCreate(testing::_)).WillOnce(testing::Return(ERR_OK));
+    EXPECT_CALL(*ptr, UpdateOsAccount(testing::_))
+        .WillOnce(testing::Return(ERR_ACCOUNT_COMMON_INVALID_PARAMETER));
+    EXPECT_CALL(*ptr, SyncEtcForRemove(testing::_))
+        .WillOnce(testing::Return(ERR_ACCOUNT_COMMON_FILE_NOT_EXIST)); // rollback etc cleanup fails
+    EXPECT_CALL(*ptr, DelOsAccount(testing::_)).WillOnce(testing::Return(ERR_OK)); // rollback continues
+    ErrCode ret = innerMgrService_->SendMsgForAccountCreate(osAccountInfo);
+    EXPECT_EQ(ret, ERR_OSACCOUNT_SERVICE_INNER_UPDATE_ACCOUNT_ERROR);
+    testing::Mock::VerifyAndClearExpectations(ptr.get());
+}
+
+/**
+ * @tc.name: OsAccountInnerAccmgrEtcWiringTest006
+ * @tc.desc: SendMsgForAccountRemove continues deletion even when SyncEtcForRemove fails.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, OsAccountInnerAccmgrEtcWiringTest006, TestSize.Level1)
+{
+    auto ptr = std::make_shared<MockOsAccountControlFileManager>();
+    innerMgrService_->osAccountControl_ = ptr;
+    OsAccountInfo osAccountInfo;
+    osAccountInfo.SetLocalId(101);
+    osAccountInfo.SetLocalName("etcwiring");
+    osAccountInfo.SetShortName("etcwiring");
+    testing::InSequence seq;
+    EXPECT_CALL(*ptr, SyncEtcForRemove(testing::_))
+        .WillOnce(testing::Return(ERR_ACCOUNT_COMMON_FILE_NOT_EXIST));
+    EXPECT_CALL(*ptr, DelOsAccount(testing::_)).WillOnce(testing::Return(ERR_OK));
+    ErrCode ret = innerMgrService_->SendMsgForAccountRemove(osAccountInfo);
+    EXPECT_EQ(ret, ERR_OK);
+    testing::Mock::VerifyAndClearExpectations(ptr.get());
+}
+
+#ifdef SUPPORT_DOMAIN_ACCOUNTS
+/**
+ * @tc.name: OsAccountInnerAccmgrEtcWiringTest007
+ * @tc.desc: Domain account unbind failure triggers SyncEtcForRemove before DelOsAccount.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, OsAccountInnerAccmgrEtcWiringTest007, TestSize.Level1)
+{
+    auto ptr = std::make_shared<MockOsAccountControlFileManager>();
+    std::shared_ptr<IOsAccountControl> control = ptr;
+    OsAccountInfo osAccountInfo;
+    osAccountInfo.SetLocalId(101);
+    osAccountInfo.SetLocalName("etcwiring");
+    osAccountInfo.SetShortName("etcwiring");
+    auto callbackPtr = std::make_shared<BindDomainAccountCallback>(control, osAccountInfo, nullptr);
+    testing::InSequence seq;
+    EXPECT_CALL(*ptr, SyncEtcForRemove(testing::_)).WillOnce(testing::Return(ERR_OK));
+    EXPECT_CALL(*ptr, DelOsAccount(testing::_)).WillOnce(testing::Return(ERR_OK));
+    callbackPtr->HandleUnbindDomainAccountFailed();
+    testing::Mock::VerifyAndClearExpectations(ptr.get());
+}
+#endif // SUPPORT_DOMAIN_ACCOUNTS
+
+#ifdef ENABLE_ACCOUNT_SHORT_NAME
+/**
+ * @tc.name: FirstAccountShortNameValidate001
+ * @tc.desc: First account (user 100, empty shortName) with invalid shortName is rejected.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, FirstAccountShortNameValidate001, TestSize.Level1)
+{
+    auto service = std::make_unique<OsAccountManagerService>();
+    OsAccountInfo osAccountInfo;
+    CreateOsAccountOptions options;
+    ErrCode ret = service->CreateOsAccount("firstuser", "_bad",
+        OsAccountType::NORMAL, osAccountInfo, options);
+    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+
+    ret = service->CreateOsAccount("firstuser", "root",
+        OsAccountType::NORMAL, osAccountInfo, options);
+    EXPECT_EQ(ret, ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+}
+
+/**
+ * @tc.name: FirstAccountShortNameValidate002
+ * @tc.desc: First account (user 100) with valid shortName succeeds and shortName is set.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountInnerAccmgrMockTest, FirstAccountShortNameValidate002, TestSize.Level1)
+{
+    auto service = std::make_unique<OsAccountManagerService>();
+    OsAccountInfo osAccountInfo;
+    CreateOsAccountOptions options;
+    ErrCode ret = service->CreateOsAccount("firstuser", "firstuser",
+        OsAccountType::NORMAL, osAccountInfo, options);
+    EXPECT_EQ(ret, ERR_OK);
+    EXPECT_EQ(osAccountInfo.GetShortName(), "firstuser");
+}
+#endif // ENABLE_ACCOUNT_SHORT_NAME
+#endif // SUPPORT_ETC_USER_SYNC
 }  // namespace AccountSA
 }  // namespace OHOS

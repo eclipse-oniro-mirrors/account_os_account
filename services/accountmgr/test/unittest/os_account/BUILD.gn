@@ -40,7 +40,11 @@ ohos_unittest("OsAccountControlFileManagerUnitTest") {
 
   module_out_path = module_output_path
   use_exceptions = true
-  sources = [ "os_account_control_file_manager_test.cpp" ]
+  sources = [
+    "os_account_control_file_manager_test.cpp",
+    "os_account_etc_file_test.cpp",
+    "os_account_etc_file_manager_test.cpp",
+  ]
   configs = [
     ":os_account_control_file_manager_test_config",
     "${services_path}/accountmgr/test:accountmgr_test_config",
@@ -99,6 +103,14 @@ ohos_unittest("OsAccountControlFileManagerUnitTest") {
   include_dirs += [ "${common_path}/account_posix_adapter/include" ]
   sources +=
       [ "${common_path}/account_posix_adapter/src/account_posix_tools.cpp" ]
+
+  # build SUPPORT_ETC_USER_SYNC in default
+  cflags_cc += [ "-DSUPPORT_ETC_USER_SYNC" ]
+  sources +=
+      [ "${services_path}/accountmgr/src/osaccount/etc/os_account_etc_file.cpp" ]
+  sources +=
+      [ "${services_path}/accountmgr/src/osaccount/etc/os_account_etc_file_manager.cpp" ]
+  external_deps += [ "selinux_adapter:librestorecon" ]
 
   part_name = "os_account"
 }
@@ -864,6 +876,7 @@ ohos_unittest("OsAccountInnerAccmgrBundleAdapterMockTest") {
   cflags_cc += [
     "-DBUNDLE_ADAPTER_MOCK",
     "-DACCOUNT_TEST",
+    "-DENABLE_ACCOUNT_SHORT_NAME",
   ]
   if (os_account_enable_account_1) {
     cflags_cc += [ "-DENABLE_U1_ACCOUNT" ]
@@ -879,6 +892,11 @@ ohos_unittest("OsAccountInnerAccmgrBundleAdapterMockTest") {
   if (os_account_support_backup_restore) {
     cflags_cc += [ "-DSUPPORT_BACKUP_RESTORE" ]
   }
+  # build SUPPORT_ETC_USER_SYNC in default for etc wiring tests
+  cflags_cc += [ "-DSUPPORT_ETC_USER_SYNC" ]
+  sources += [ "${services_path}/accountmgr/src/osaccount/etc/os_account_etc_file.cpp" ]
+  sources += [ "${services_path}/accountmgr/src/osaccount/etc/os_account_etc_file_manager.cpp" ]
+  external_deps += [ "selinux_adapter:librestorecon" ]
   part_name = "os_account"
 }
 
@@ -1679,6 +1697,9 @@ ohos_unittest("os_account_maintenance_type_mock_test") {
 
   part_name = "os_account"
   cflags_cc = [ "-DACCOUNT_TEST" ]
+  if (os_account_support_etc_user_sync) {
+    cflags_cc += [ "-DSUPPORT_ETC_USER_SYNC" ]
+  }
   if (os_account_enable_multiple_foreground_os_accounts) {
     cflags_cc += [ "-DENABLE_MULTI_FOREGROUND_OS_ACCOUNTS" ]
   }

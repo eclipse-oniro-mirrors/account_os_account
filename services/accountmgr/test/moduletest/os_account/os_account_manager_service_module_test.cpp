@@ -193,6 +193,56 @@ HWTEST_F(OsAccountManagerServiceModuleTest, InnerOsAccountManagerTest001, TestSi
     EXPECT_EQ(ret, ERR_OK);
 }
 
+#ifdef SUPPORT_ETC_USER_SYNC
+/**
+ * @tc.name: ValidateShortNameNewRules001
+ * @tc.desc: Short names valid under new whitelist rules pass.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountManagerServiceModuleTest, ValidateShortNameNewRules001, TestSize.Level1)
+{
+    EXPECT_EQ(osAccountManagerService_->ValidateShortName("Zhangsan"), ERR_OK);
+    EXPECT_EQ(osAccountManagerService_->ValidateShortName("user-1"), ERR_OK);
+    EXPECT_EQ(osAccountManagerService_->ValidateShortName("user_name"), ERR_OK);
+    EXPECT_EQ(osAccountManagerService_->ValidateShortName("101room"), ERR_OK);
+    EXPECT_EQ(osAccountManagerService_->ValidateShortName("a"), ERR_OK);
+    EXPECT_EQ(osAccountManagerService_->ValidateShortName("a-b_c9"), ERR_OK);
+}
+
+/**
+ * @tc.name: ValidateShortNameNewRules002
+ * @tc.desc: Short names violating new whitelist rules are rejected with 12300002.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountManagerServiceModuleTest, ValidateShortNameNewRules002, TestSize.Level1)
+{
+    EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("_user"));
+    EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("root"));
+    EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("user:name"));
+    EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("user name"));
+    EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("user!name"));
+    EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("user\nname"));
+    EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("."));
+    EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("..."));
+}
+
+/**
+ * @tc.name: ValidateShortNameNewRules003
+ * @tc.desc: Short name length boundary checks.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountManagerServiceModuleTest, ValidateShortNameNewRules003, TestSize.Level1)
+{
+    std::string maxLen(255, 'a');
+    EXPECT_EQ(osAccountManagerService_->ValidateShortName(maxLen), ERR_OK);
+    std::string overLen(256, 'a');
+    EXPECT_NE(osAccountManagerService_->ValidateShortName(overLen), ERR_OK);
+}
+#endif // SUPPORT_ETC_USER_SYNC
+
 /**
  * @tc.name: OsAccountManagerServiceModuleTest001
  * @tc.desc: Test CreateOsAccount with valid data.

@@ -85,6 +85,9 @@ ohos_unittest("os_account_info_test") {
       cflags_cc += [ "-DSUPPORT_ADMIN_ACCESS_CONTROL" ]
     }
   }
+  if (os_account_support_etc_user_sync) {
+    cflags_cc += [ "-DSUPPORT_ETC_USER_SYNC" ]
+  }
 }
 
 ohos_unittest("os_account_subscribe_info_test") {

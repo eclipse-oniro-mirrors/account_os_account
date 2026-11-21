@@ -94,6 +94,19 @@ public:
     {
         return ERR_OK;
     }
+#ifdef SUPPORT_ETC_USER_SYNC
+    ErrCode SyncEtcForCreate(const OsAccountInfo &osAccountInfo)
+    {
+        return ERR_OK;
+    }
+    ErrCode SyncEtcForRemove(const OsAccountInfo &osAccountInfo)
+    {
+        return ERR_OK;
+    }
+    void CheckAndRecoverEtcFile()
+    {
+    }
+#endif // SUPPORT_ETC_USER_SYNC
     ErrCode GetGlobalOAConstraintsList(std::vector<std::string> &constraintsList)
     {
         return ERR_OK;

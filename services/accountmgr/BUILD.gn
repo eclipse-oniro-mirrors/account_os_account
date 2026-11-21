@@ -483,6 +483,13 @@ ohos_shared_library("accountmgr") {
     include_dirs += [ "${common_path}/account_posix_adapter/include" ]
   }
 
+  if (os_account_support_etc_user_sync) {
+    cflags_cc += [ "-DSUPPORT_ETC_USER_SYNC" ]
+    sources += [ "src/osaccount/etc/os_account_etc_file.cpp" ]
+    sources += [ "src/osaccount/etc/os_account_etc_file_manager.cpp" ]
+    external_deps += [ "selinux_adapter:librestorecon" ]
+  }
+
   if (build_variant == "user") {
     cflags_cc += [ "-DIS_RELEASE_VERSION" ]
   }
@@ -887,6 +894,13 @@ ohos_source_set("accountmgr_test_source_set") {
   if (os_account_support_posix_adapter) {
     cflags_cc += [ "-DSUPPORT_POSIX_ADAPTER" ]
     include_dirs += [ "${common_path}/account_posix_adapter/include" ]
+  }
+
+  if (os_account_support_etc_user_sync) {
+    cflags_cc += [ "-DSUPPORT_ETC_USER_SYNC" ]
+    sources += [ "src/osaccount/etc/os_account_etc_file.cpp" ]
+    sources += [ "src/osaccount/etc/os_account_etc_file_manager.cpp" ]
+    external_deps += [ "selinux_adapter:librestorecon" ]
   }
 
   if (build_variant == "user") {
