@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <map>
+#include <mutex>
 #include "singleton.h"
 
 namespace OHOS {
@@ -81,6 +82,7 @@ private:
     int64_t serviceInit_ = 0;
 
     std::map<std::string, int64_t> accountStateChangeRecords_;
+    mutable std::mutex mutex_;
 
     bool enableStat_ = true;
 };

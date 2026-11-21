@@ -112,9 +112,6 @@ DbAdapterStatus DbAdapterSqlite::CheckOrOpenDb()
         return DbAdapterStatus::SUCCESS;
     }
     Utils::UniqueWriteGuard<Utils::RWLock> lock(DATABASE_RWLOCK);
-    if (appAccountDb_ == nullptr) {
-        appAccountDb_ = AppAccountSqliteHelper::GetInstance();
-    }
     appAccountDb_->Open();
     isReady = appAccountDb_->CheckReady();
     if (!isReady) {
