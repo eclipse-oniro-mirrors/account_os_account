@@ -64,6 +64,7 @@ HWTEST_F(OsAccountStateReplyCallbackServiceTest, OsAccountStateReplyCallbackServ
         OsAccountState::STOPPING,
         nullptr,
         nullptr,
+        nullptr,
         99 // Invalid subscriberUid
     );
     EXPECT_EQ(service.OnComplete(), ERR_OK);
@@ -81,6 +82,7 @@ HWTEST_F(OsAccountStateReplyCallbackServiceTest, OsAccountStateReplyCallbackServ
     OsAccountStateReplyCallbackService service(
         100, // Test ID
         OsAccountState::STOPPED,
+        nullptr,
         nullptr,
         nullptr,
         99 // Invalid subscriberUid
@@ -102,6 +104,7 @@ HWTEST_F(OsAccountStateReplyCallbackServiceTest, OsAccountStateReplyCallbackServ
         OsAccountState::ACTIVATED,
         nullptr,
         nullptr,
+        nullptr,
         99 // Invalid subscriberUid
     );
     EXPECT_EQ(service.OnComplete(), ERR_OK);
@@ -119,6 +122,7 @@ HWTEST_F(OsAccountStateReplyCallbackServiceTest, OsAccountStateReplyCallbackServ
     OsAccountStateReplyCallbackService service(
         100, // Test ID
         OsAccountState::ACTIVATING,
+        nullptr,
         nullptr,
         nullptr,
         99 // Invalid subscriberUid
@@ -140,6 +144,7 @@ HWTEST_F(OsAccountStateReplyCallbackServiceTest, OsAccountStateReplyCallbackServ
         OsAccountState::CREATED,
         nullptr,
         nullptr,
+        nullptr,
         99 // Invalid subscriberUid
     );
     EXPECT_EQ(service.OnComplete(), ERR_OK);
@@ -157,6 +162,7 @@ HWTEST_F(OsAccountStateReplyCallbackServiceTest, OsAccountStateReplyCallbackServ
     OsAccountStateReplyCallbackService service(
         100, // Test ID
         OsAccountState::REMOVED,
+        nullptr,
         nullptr,
         nullptr,
         99 // Invalid subscriberUid
@@ -178,6 +184,7 @@ HWTEST_F(OsAccountStateReplyCallbackServiceTest, OsAccountStateReplyCallbackServ
         OsAccountState::SWITCHING,
         nullptr,
         nullptr,
+        nullptr,
         99 // Invalid subscriberUid
     );
     EXPECT_EQ(service.OnComplete(), ERR_OK);
@@ -195,6 +202,7 @@ HWTEST_F(OsAccountStateReplyCallbackServiceTest, OsAccountStateReplyCallbackServ
     OsAccountStateReplyCallbackService service(
         100, // Test ID
         OsAccountState::SWITCHED,
+        nullptr,
         nullptr,
         nullptr,
         99 // Invalid subscriberUid
@@ -216,6 +224,7 @@ HWTEST_F(OsAccountStateReplyCallbackServiceTest, OsAccountStateReplyCallbackServ
         OsAccountState::UNLOCKED,
         nullptr,
         nullptr,
+        nullptr,
         99 // Invalid subscriberUid
     );
     EXPECT_EQ(service.OnComplete(), ERR_OK);
@@ -235,6 +244,7 @@ HWTEST_F(OsAccountStateReplyCallbackServiceTest, OsAccountStateReplyCallbackServ
         static_cast<OsAccountState>(99), // default
         nullptr,
         nullptr,
+        nullptr,
         99 // Invalid subscriberUid
     );
     EXPECT_EQ(service.OnComplete(), ERR_OK);
@@ -250,9 +260,10 @@ HWTEST_F(OsAccountStateReplyCallbackServiceTest, OsAccountStateReplyCallbackServ
 HWTEST_F(OsAccountStateReplyCallbackServiceTest, ForceComplete_Normal, TestSize.Level1)
 {
     auto cv = std::make_shared<std::condition_variable>();
+    auto mutex = std::make_shared<std::mutex>();
     auto queue = std::make_shared<SafeQueue<uint8_t>>();
     queue->Push(1);
-    OsAccountStateReplyCallbackService service(100, OsAccountState::STOPPING, cv, queue, 99);
+    OsAccountStateReplyCallbackService service(100, OsAccountState::STOPPING, mutex, cv, queue, 99);
     service.ForceComplete();
     EXPECT_EQ(queue->Size(), 0);
 }
@@ -266,9 +277,10 @@ HWTEST_F(OsAccountStateReplyCallbackServiceTest, ForceComplete_Normal, TestSize.
 HWTEST_F(OsAccountStateReplyCallbackServiceTest, ForceComplete_Idempotent, TestSize.Level1)
 {
     auto cv = std::make_shared<std::condition_variable>();
+    auto mutex = std::make_shared<std::mutex>();
     auto queue = std::make_shared<SafeQueue<uint8_t>>();
     queue->Push(1);
-    OsAccountStateReplyCallbackService service(100, OsAccountState::STOPPING, cv, queue, 99);
+    OsAccountStateReplyCallbackService service(100, OsAccountState::STOPPING, mutex, cv, queue, 99);
     service.ForceComplete();
     service.ForceComplete(); // second call should be no-op
     EXPECT_EQ(queue->Size(), 0);
@@ -283,7 +295,7 @@ HWTEST_F(OsAccountStateReplyCallbackServiceTest, ForceComplete_Idempotent, TestS
  */
 HWTEST_F(OsAccountStateReplyCallbackServiceTest, ForceComplete_NullQueue, TestSize.Level1)
 {
-    OsAccountStateReplyCallbackService service(100, OsAccountState::STOPPING, nullptr, nullptr, 99);
+    OsAccountStateReplyCallbackService service(100, OsAccountState::STOPPING, nullptr, nullptr, nullptr, 99);
     service.ForceComplete(); // CompleteInner: nullptr branch, logs and returns early
     EXPECT_TRUE(service.isCompleted_);
 }

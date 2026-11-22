@@ -17,30 +17,50 @@
 #define OS_ACCOUNT_SERVICES_ACCOUNTMGR_INCLUDE_OS_ACCOUNT_STATIC_SUBSCRIBER_MANAGER_H
 
 #include <map>
-#include <mutex>
 #include <memory>
+#include <mutex>
+#include <set>
+#include <string>
+#include <vector>
 #include "account_error_no.h"
+#include "os_account_static_subscriber_config.h"
 #include "os_account_subscribe_info.h"
 
 namespace OHOS {
 namespace AccountSA {
 struct StaticSubscriber {
+    // Deleted copy members suppress the implicit default constructor; restore it explicitly
+    // so std::make_shared keeps working.
+    StaticSubscriber() = default;
     ~StaticSubscriber();
+    // The destructor dlcloses the handle; a value copy would close it twice, so copying and
+    // moving are disallowed. Subscribers are shared by pointer (std::shared_ptr) only.
+    DISALLOW_COPY_AND_MOVE(StaticSubscriber);
+    std::string name;
     std::string path;
     void *handle = nullptr;
     void *callback = nullptr;
+    bool withHandshake = false;
 };
 
 class OsAccountStaticSubscriberManager {
 public:
     static OsAccountStaticSubscriberManager& GetInstance();
     ErrCode Publish(int32_t fromId, OsAccountState state, int32_t toId, uint64_t displayId = 0);
+    ErrCode SyncPublish(int32_t fromId, OsAccountState state, int32_t toId, uint64_t displayId = 0);
+    int32_t GetStateWaitTimeMs(OsAccountState state);
 
 private:
     OsAccountStaticSubscriberManager();
     ~OsAccountStaticSubscriberManager() = default;
     void Init(const std::map<OsAccountState, std::set<std::string>> &staticSubscriberConfig);
     std::shared_ptr<StaticSubscriber> ParseStaticSubscriber(const std::string &path);
+#ifdef OS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION
+    void LoadSubscribers(const std::vector<SubscriberConfig> &configs);
+    bool IsSubscriberNameExists(const std::string &name);
+    ErrCode SyncPublishToSubscribers(const std::set<std::shared_ptr<StaticSubscriber>> &subscribers,
+        const COsAccountStateData &data);
+#endif
     static ErrCode PublishToSubscriber(
         const std::shared_ptr<StaticSubscriber> &subscriber, const COsAccountStateData &data);
     DISALLOW_COPY_AND_MOVE(OsAccountStaticSubscriberManager);
@@ -49,6 +69,7 @@ private:
     std::recursive_mutex mutex_;
     std::map<std::string, std::shared_ptr<StaticSubscriber>> staticSubscribers_;
     std::map<OsAccountState, std::set<std::shared_ptr<StaticSubscriber>>> state2Subscribers_;
+    std::map<OsAccountState, int32_t> stateTimeouts_;
 };
 } // AccountSA
 } // OHOS

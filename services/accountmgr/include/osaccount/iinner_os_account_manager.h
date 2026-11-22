@@ -16,6 +16,7 @@
 #ifndef OS_ACCOUNT_SERVICES_ACCOUNTMGR_INCLUDE_OSACCOUNT_IINNER_OS_ACCOUNT_MANAGER_H
 #define OS_ACCOUNT_SERVICES_ACCOUNTMGR_INCLUDE_OSACCOUNT_IINNER_OS_ACCOUNT_MANAGER_H
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -253,7 +254,7 @@ private:
     ErrCode GetNonSACreatedOACount(unsigned int &nonSACreatedOACount) const;
     std::vector<int32_t> GetVerifiedAccountIds(const SafeMap<int32_t, bool> &verifiedAccounts);
     ErrCode SendToStorageAndAMSAccountStart(OsAccountInfo &osAccountInfo, const bool startStorage,
-        const uint64_t displayId, const bool isAppRecovery, int32_t oldId);
+        const uint64_t displayId, const bool isAppRecovery);
     ErrCode PrepareActivateOsAccount(const int32_t id, const uint64_t displayId,
         OsAccountInfo &osAccountInfo, int32_t &foregroundId);
     ErrCode ResetDefaultActivatedAccount(int32_t localId);

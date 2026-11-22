@@ -43,7 +43,10 @@ ohos_unittest("os_account_test") {
     "${os_account_core_path}/src/os_account_constraint_subscriber_manager.cpp",
     "${os_account_innerkits_native_path}/src/os_account_constraint_subscribe_info.cpp",
     "${os_account_innerkits_native_path}/src/os_account_constraint_subscriber.cpp",
+    "${os_account_core_path}/src/os_account_event_listener.cpp",
+    "${os_account_core_path}/src/os_account_state_parcel.cpp",
     "${os_account_core_path}/src/os_account_state_reply_callback.cpp",
+    "os_account_event_listener_test.cpp",
     "os_account_test.cpp"
   ]
 
@@ -54,8 +57,10 @@ ohos_unittest("os_account_test") {
     "${common_path}:libaccount_common",
     "${innerkits_native_path}:libaccountkits",
     "${os_account_innerkits_native_path}:os_account_constraint_event_stub",
+    "${os_account_innerkits_native_path}:os_account_event_stub",
     "${os_account_innerkits_native_path}:os_account_innerkits",
     "${os_account_innerkits_native_path}:os_account_proxy",
+    "${os_account_innerkits_native_path}:os_account_state_reply_callback_proxy",
   ]
 
   external_deps = [
@@ -77,6 +82,9 @@ ohos_unittest("os_account_test") {
   if (os_account_support_lock_os_account) {
     cflags_cc += [ "-DSUPPORT_LOCK_OS_ACCOUNT" ]
   }
+  # Defined unconditionally so the switch-handshake branch of the event listener stays covered on
+  # products where the static-subscription flag is off.
+  cflags_cc += [ "-DOS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION" ]
 }
 
 group("unittest") {

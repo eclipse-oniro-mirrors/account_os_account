@@ -14,6 +14,8 @@
  */
 #include <gtest/gtest.h>
 
+#include <cstdint>
+
 #include "account_error_no.h"
 #include "account_log_wrapper.h"
 #include "json_utils.h"
@@ -625,7 +627,7 @@ HWTEST_F(JsonUtilsTest, Uint64StringToJsonTest001, TestSize.Level3)
 {
     auto jsonObj = CreateJson();
     std::string key = "test_key";
-    uint64_t value = 18446744073709551615ull;
+    uint64_t value = 18446744073709551615uLL;
 
     EXPECT_FALSE(AddUint64ToJson(jsonObj, "", -1));
     bool result = AddUint64ToJson(jsonObj, key, value);
@@ -1198,4 +1200,89 @@ HWTEST_F(JsonUtilsTest, AddVectorUint8ToJsonReturnTest001, TestSize.Level4)
         EXPECT_EQ(vec[i], result[i]);
     }
     EXPECT_FALSE(AddVectorUint8ToJson(jsonObj, "", vec));
+}
+
+/**
+ * @tc.name: GetFirstEntryFromObjTest001
+ * @tc.desc: GetFirstEntryFromObj reads the first number entry of an object via both overloads
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(JsonUtilsTest, GetFirstEntryFromObjTest001, TestSize.Level4)
+{
+    auto jsonObj = CreateJsonFromString("{\"SWITCHING\": 800}");
+    ASSERT_NE(nullptr, jsonObj);
+    std::string key;
+    int32_t value = 0;
+    EXPECT_TRUE(GetFirstEntryFromObj(jsonObj.get(), key, value));
+    EXPECT_EQ(key, "SWITCHING");
+    EXPECT_EQ(value, 800);
+
+    std::string keyOfUnique;
+    int32_t valueOfUnique = 0;
+    EXPECT_TRUE(GetFirstEntryFromObj(jsonObj, keyOfUnique, valueOfUnique));
+    EXPECT_EQ(keyOfUnique, "SWITCHING");
+    EXPECT_EQ(valueOfUnique, 800);
+}
+
+/**
+ * @tc.name: GetFirstEntryFromObjTest002
+ * @tc.desc: GetFirstEntryFromObj rejects non-object, empty object and non-number first entry
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(JsonUtilsTest, GetFirstEntryFromObjTest002, TestSize.Level4)
+{
+    std::string key;
+    int32_t value = 0;
+    EXPECT_FALSE(GetFirstEntryFromObj(nullptr, key, value));
+
+    auto arrJson = CreateJsonFromString("[1, 2]");
+    ASSERT_NE(nullptr, arrJson);
+    EXPECT_FALSE(GetFirstEntryFromObj(arrJson.get(), key, value));
+
+    auto emptyJson = CreateJsonFromString("{}");
+    ASSERT_NE(nullptr, emptyJson);
+    EXPECT_FALSE(GetFirstEntryFromObj(emptyJson.get(), key, value));
+
+    auto strJson = CreateJsonFromString("{\"SWITCHING\": \"800\"}");
+    ASSERT_NE(nullptr, strJson);
+    EXPECT_FALSE(GetFirstEntryFromObj(strJson.get(), key, value));
+
+    CJsonUnique nullJson;
+    EXPECT_FALSE(GetFirstEntryFromObj(nullJson, key, value));
+}
+
+/**
+ * @tc.name: GetFirstEntryFromObjTest003
+ * @tc.desc: GetFirstEntryFromObj rejects numbers out of int32 range and keeps boundary values
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(JsonUtilsTest, GetFirstEntryFromObjTest003, TestSize.Level4)
+{
+    std::string key;
+    int32_t value = 0;
+
+    auto minJson = CreateJsonFromString("{\"MIN\": -2147483648}");
+    ASSERT_NE(nullptr, minJson);
+    EXPECT_TRUE(GetFirstEntryFromObj(minJson.get(), key, value));
+    EXPECT_EQ(value, INT32_MIN);
+
+    auto maxJson = CreateJsonFromString("{\"MAX\": 2147483647}");
+    ASSERT_NE(nullptr, maxJson);
+    EXPECT_TRUE(GetFirstEntryFromObj(maxJson.get(), key, value));
+    EXPECT_EQ(value, INT32_MAX);
+
+    auto overflowJson = CreateJsonFromString("{\"OVERFLOW\": 2147483648}");
+    ASSERT_NE(nullptr, overflowJson);
+    EXPECT_FALSE(GetFirstEntryFromObj(overflowJson.get(), key, value));
+
+    auto underflowJson = CreateJsonFromString("{\"UNDERFLOW\": -2147483649}");
+    ASSERT_NE(nullptr, underflowJson);
+    EXPECT_FALSE(GetFirstEntryFromObj(underflowJson.get(), key, value));
+
+    auto hugeJson = CreateJsonFromString("{\"HUGE\": 1e300}");
+    ASSERT_NE(nullptr, hugeJson);
+    EXPECT_FALSE(GetFirstEntryFromObj(hugeJson.get(), key, value));
 }

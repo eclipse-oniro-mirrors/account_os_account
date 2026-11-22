@@ -33,10 +33,12 @@ bool OsAccountStateReplyCallbackStubFuzzTest(const uint8_t *data, size_t size)
     message.WriteInterfaceToken(DESCRIPTOR);
     MessageParcel reply;
     MessageOption option;
+    auto mutexPtr = std::make_shared<std::mutex>();
     auto cvPtr = std::make_shared<std::condition_variable>();
     auto safeQueue = std::make_shared<SafeQueue<uint8_t>>();
     auto replyCallbackService = std::make_shared<OsAccountStateReplyCallbackService>(fuzzData.GetData<int32_t>(),
-        static_cast<OsAccountState>(fuzzData.GetData<int32_t>()), cvPtr, safeQueue, fuzzData.GetData<int32_t>());
+        static_cast<OsAccountState>(fuzzData.GetData<int32_t>()), mutexPtr, cvPtr, safeQueue,
+        fuzzData.GetData<int32_t>());
     replyCallbackService->OnRemoteRequest(
         static_cast<int32_t>(IOsAccountStateReplyCallbackIpcCode::COMMAND_ON_COMPLETE), message, reply, option);
     return true;

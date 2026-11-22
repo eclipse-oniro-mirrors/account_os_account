@@ -17,6 +17,7 @@
 #define OS_ACCOUNT_SERVICES_ACCOUNTMGR_INCLUDE_IOS_ACCOUNT_SUBSCRIBE_H
 
 #include <optional>
+#include <future>
 #include "account_error_no.h"
 #include "os_account_subscribe_info.h"
 #include "iremote_object.h"
@@ -60,8 +61,15 @@ public:
     virtual ErrCode UnsubscribeOsAccount(const sptr<IRemoteObject> &eventListener) = 0;
     virtual const std::shared_ptr<OsAccountSubscribeInfo> GetSubscribeRecordInfo(
         const sptr<IRemoteObject> &eventListener) = 0;
-    virtual ErrCode Publish(int32_t fromId, OsAccountState state, int32_t toId = -1,
+    // Single-account event: no counterpart account, the id fills the from/to pair so dispatch
+    // logs and subscriber parcels stay consistent.
+    virtual std::future<ErrCode> Publish(int32_t id, OsAccountState state) = 0;
+    virtual std::future<ErrCode> Publish(int32_t fromId, OsAccountState state, int32_t toId,
         std::optional<uint64_t> displayId = std::nullopt) = 0;
+    // Publish and wait the bounded reply window, so callers never touch the bare future.
+    virtual ErrCode PublishSync(int32_t id, OsAccountState state) = 0;
+    virtual void AwaitPublish(std::future<ErrCode> &notifyFuture, OsAccountState state, int32_t fromId,
+        int32_t toId, uint64_t displayId) = 0;
 };
 }  // namespace AccountSA
 }  // namespace OHOS

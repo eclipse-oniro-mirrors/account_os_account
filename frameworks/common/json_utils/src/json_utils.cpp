@@ -15,6 +15,7 @@
 
 #include "json_utils.h"
 #include <cinttypes>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <cerrno>
@@ -278,6 +279,30 @@ std::map<std::string, std::string> PackJsonToMap(const CJson *jsonObj)
 std::map<std::string, std::string> PackJsonToMap(const CJsonUnique &jsonObj)
 {
     return PackJsonToMap(jsonObj.get());
+}
+
+bool GetFirstEntryFromObj(const CJson *jsonObj, std::string &key, int32_t &value)
+{
+    if (!IsObject(jsonObj)) {
+        return false;
+    }
+    cJSON *item = jsonObj->child;
+    if (item == nullptr || item->string == nullptr || !cJSON_IsNumber(item)) {
+        return false;
+    }
+    key = item->string;
+    double number = cJSON_GetNumberValue(item);
+    if (std::isnan(number) || number < static_cast<double>(INT32_MIN) ||
+        number > static_cast<double>(INT32_MAX)) {
+        return false;
+    }
+    value = static_cast<int32_t>(number);
+    return true;
+}
+
+bool GetFirstEntryFromObj(const CJsonUnique &jsonObj, std::string &key, int32_t &value)
+{
+    return GetFirstEntryFromObj(jsonObj.get(), key, value);
 }
 
 std::map<std::uint64_t, std::int32_t> PackJsonToMapUint64Int32(const CJson *jsonObj)

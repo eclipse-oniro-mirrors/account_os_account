@@ -15,7 +15,11 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <map>
+#include <mutex>
 #include <thread>
 
 #include "accesstoken_kit.h"
@@ -33,6 +37,8 @@
 #include "os_account_manager_service.h"
 #include "os_account_interface.h"
 #include "os_account_info.h"
+#include "os_account_subscribe_info.h"
+#include "os_account_static_subscriber_manager.h"
 #include "account_log_wrapper.h"
 #undef private
 #include "os_account_subscribe_manager.h"
@@ -289,5 +295,67 @@ HWTEST_F(OsAccountInnerAccmgrCoverageTest, SetOsAccountCredentialId002, TestSize
     ASSERT_EQ(innerMgrService_->RemoveOsAccount(localID), ERR_OK);
 }
 #endif // ENABLE_MULTIPLE_OS_ACCOUNTS
+
+#ifdef OS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION
+namespace {
+std::mutex g_rollbackMutex;
+std::condition_variable g_rollbackCv;
+std::atomic<int32_t> g_rollbackCallCount(0);
+std::atomic<int32_t> g_rollbackLastToId(-1);
+constexpr int32_t ROLLBACK_WAIT_SECONDS = 5;
+
+int32_t RollbackTestOnOsAccountStateChanged(const COsAccountStateData *stateData)
+{
+    if (stateData != nullptr && stateData->state == OsAccountState::SWITCHING) {
+        {
+            std::lock_guard<std::mutex> lock(g_rollbackMutex);
+            g_rollbackCallCount++;
+            g_rollbackLastToId = stateData->toId;
+        }
+        g_rollbackCv.notify_all();
+    }
+    return 0;
+}
+
+// The unconfigured dispatch is advisory: the callback runs on a detached thread, so wait
+// for it via the condition variable instead of assuming ordering with the publish call.
+bool WaitForRollbackCall()
+{
+    std::unique_lock<std::mutex> lock(g_rollbackMutex);
+    return g_rollbackCv.wait_for(lock, std::chrono::seconds(ROLLBACK_WAIT_SECONDS),
+        []() { return g_rollbackCallCount.load() >= 1; });
+}
+} // namespace
+
+/*
+ * @tc.name: RollBackToEarlierAccountHandshake001
+ * @tc.desc: Rollback publishes SWITCHING to static subscribers even without a configured
+ *           wait (advisory dispatch), and the payload carries the rollback toId as-is
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountInnerAccmgrCoverageTest, RollBackToEarlierAccountHandshake001, TestSize.Level1)
+{
+    auto &staticMgr = OsAccountStaticSubscriberManager::GetInstance();
+    auto subscriber = std::make_shared<StaticSubscriber>();
+    subscriber->name = "rollback_static_sub";
+    subscriber->withHandshake = true;
+    subscriber->callback = reinterpret_cast<void *>(&RollbackTestOnOsAccountStateChanged);
+    staticMgr.state2Subscribers_[OsAccountState::SWITCHING] = { subscriber };
+
+    g_rollbackCallCount = 0;
+    g_rollbackLastToId = -1;
+    innerMgrService_->RollBackToEarlierAccount(TEST_USER_ID10, TEST_USER_ID55, 0);
+    EXPECT_TRUE(WaitForRollbackCall()); // no timeout configured: the static publish still runs
+    EXPECT_EQ(g_rollbackLastToId.load(), TEST_USER_ID55); // payload carries the rollback toId
+
+    g_rollbackCallCount = 0;
+    innerMgrService_->RollBackToEarlierAccount(TEST_USER_ID10, INVALID_USERID, 0);
+    EXPECT_TRUE(WaitForRollbackCall()); // negative toId is forwarded as-is; publish has no toId guard
+    EXPECT_EQ(g_rollbackLastToId.load(), INVALID_USERID);
+
+    staticMgr.state2Subscribers_.erase(OsAccountState::SWITCHING);
+}
+#endif
 }  // namespace AccountSA
 }  // namespace OHOS

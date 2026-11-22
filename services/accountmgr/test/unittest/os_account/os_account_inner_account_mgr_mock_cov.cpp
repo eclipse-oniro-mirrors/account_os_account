@@ -102,7 +102,23 @@ HWTEST_F(OsAccountInnerAccountmgrMockCov, SendToStorageAndAMSAccountStartTest001
 {
     OsAccountInfo osAccountInfo;
     g_errType = ERR_INTERFACE_STORAGE_START;
-    ErrCode errCode = innerMgrService_->SendToStorageAndAMSAccountStart(osAccountInfo, true, 0, false, 0);
+    ErrCode errCode = innerMgrService_->SendToStorageAndAMSAccountStart(osAccountInfo, true, 0, false);
+    EXPECT_EQ(errCode, ERR_ACCOUNT_COMMON_GET_SYSTEM_ABILITY_MANAGER);
+}
+
+/**
+ * @tc.name: SendMsgForAccountActivateTest001
+ * @tc.desc: When the storage/AMS start fails, the switch publish future is joined first
+ *           (AwaitPublish), then rollback runs and the error code is passed through to
+ *           the caller instead of being swallowed.
+ * @tc.type: FUNC
+ */
+HWTEST_F(OsAccountInnerAccountmgrMockCov, SendMsgForAccountActivateTest001, TestSize.Level1)
+{
+    OsAccountInfo osAccountInfo;
+    osAccountInfo.SetLocalId(TEST_USER_ID10);
+    g_errType = ERR_INTERFACE_STORAGE_START;
+    ErrCode errCode = innerMgrService_->SendMsgForAccountActivate(osAccountInfo, true, 0, false);
     EXPECT_EQ(errCode, ERR_ACCOUNT_COMMON_GET_SYSTEM_ABILITY_MANAGER);
 }
 

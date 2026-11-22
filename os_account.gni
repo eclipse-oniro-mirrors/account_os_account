@@ -176,6 +176,10 @@ declare_args() {
   os_account_enable_multiple_os_account_sub_profiles = false
 }
 
+declare_args() {
+  os_account_support_static_subscription = false
+}
+
 if (!defined(global_parts_info) ||
     defined(global_parts_info.hiviewdfx_hicollie)) {
   hicollie_enable = true

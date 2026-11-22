@@ -27,8 +27,8 @@ namespace AccountSA {
 class OsAccountStateReplyCallbackService : public OsAccountStateReplyCallbackStub {
 public:
     OsAccountStateReplyCallbackService(int32_t accountId, OsAccountState state,
-        const std::shared_ptr<std::condition_variable> &cvPtr, const std::shared_ptr<SafeQueue<uint8_t>> &safeQueue,
-        int32_t subscriberUid);
+        const std::shared_ptr<std::mutex> &mutexPtr, const std::shared_ptr<std::condition_variable> &cvPtr,
+        const std::shared_ptr<SafeQueue<uint8_t>> &safeQueue, int32_t subscriberUid);
     ~OsAccountStateReplyCallbackService() override;
     ErrCode OnComplete() override;
     void ForceComplete();
@@ -39,6 +39,7 @@ private:
     void CompleteInner();
     int32_t accountId_;
     OsAccountState state_;
+    std::shared_ptr<std::mutex> mutexPtr_;
     std::shared_ptr<std::condition_variable> cvPtr_;
     std::shared_ptr<SafeQueue<uint8_t>> safeQueue_;
     int32_t subscriberUid_;

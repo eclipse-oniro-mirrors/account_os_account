@@ -58,6 +58,8 @@ public:
     MOCK_METHOD3(OnStateChanged, void(OsAccountState state, int32_t fromId, int32_t toId));
     MOCK_METHOD4(OnStateChangedWithDisplayId,
         void(OsAccountState state, int32_t fromId, int32_t toId, std::optional<uint64_t> displayId));
+    MOCK_METHOD4(OnStateChangedWithCallback,
+        void(OsAccountState state, int32_t fromId, int32_t toId, bool hasCallback));
 };
 
 class TestSubscriber final : public OsAccountSubscriber {
@@ -156,6 +158,44 @@ void TestDisplayIdSubscriber::OnStateChanged(const OsAccountStateData &data)
     }
     data.callback->OnComplete();
 }
+class TestStateHandshakeSubscriber final : public OsAccountSubscriber {
+public:
+    TestStateHandshakeSubscriber(const OsAccountSubscribeInfo &info,
+        std::shared_ptr<MockSubscriber> &mockSubscriber, OsAccountState targetState, bool isBlock = false)
+        : OsAccountSubscriber(info), mockSubscriber_(mockSubscriber), targetState_(targetState), isBlock_(isBlock) {};
+
+    void OnStateChanged(const OsAccountStateData &data) override;
+
+private:
+    std::shared_ptr<MockSubscriber> mockSubscriber_;
+    OsAccountState targetState_;
+    bool isBlock_;
+};
+
+void TestStateHandshakeSubscriber::OnStateChanged(const OsAccountStateData &data)
+{
+    ACCOUNT_LOGI("State: %{public}d, fromId: %{public}d, toId: %{public}d, callback is nullptr: %{public}d",
+        data.state, data.fromId, data.toId, data.callback == nullptr);
+    if (data.state != targetState_) {
+        return;
+    }
+    if (mockSubscriber_ != nullptr) {
+        mockSubscriber_->OnStateChangedWithCallback(
+            data.state, data.fromId, data.toId, data.callback != nullptr);
+    }
+    if (isBlock_) {
+        ACCOUNT_LOGI("Sleep start, %{public}d seconds", SLEEP_SECONDS);
+        isBlock_ = false;
+        sleep(SLEEP_SECONDS);
+        ACCOUNT_LOGI("Sleep seconds end");
+    }
+    if (data.callback == nullptr) {
+        ACCOUNT_LOGE("Callback is nullptr");
+        return;
+    }
+    data.callback->OnComplete();
+}
+
 void TestStateLockingMachine(int32_t localId, bool isBlock, std::shared_ptr<MockSubscriber> mockSubscriber)
 {
 #ifdef SUPPORT_LOCK_OS_ACCOUNT
@@ -333,6 +373,157 @@ HWTEST_F(OsAccountSubscribeTest, OsAccountSubscribeTestWithDisplayId, TestSize.L
     }
     
     EXPECT_EQ(OsAccountManager::UnsubscribeOsAccount(subscriber), ERR_OK);
-    
+
     SUCCEED();
 }
+
+/**
+ * @tc.name: OsAccountSubscribeTest07
+ * @tc.desc: Test subscribing STOPPING state with handshake mechanism, reply immediately (not timeout)
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountSubscribeTest, OsAccountSubscribeTest07, TestSize.Level1)
+{
+    std::set<OsAccountState> states = { OsAccountState::STOPPING };
+    OsAccountSubscribeInfo subscribeInfo(states, true);
+    auto mockSubscriber = std::make_shared<MockSubscriber>();
+    auto subscriber = std::make_shared<TestStateHandshakeSubscriber>(
+        subscribeInfo, mockSubscriber, OsAccountState::STOPPING, false);
+    EXPECT_EQ(OsAccountManager::SubscribeOsAccount(subscriber), ERR_OK);
+
+    OsAccountInfo info;
+    EXPECT_EQ(CreateOsAccountForTest(ACCOUNT_NAME, OsAccountType::NORMAL, info), ERR_OK);
+    int32_t localId = info.GetLocalId();
+    EXPECT_EQ(OsAccountManager::ActivateOsAccount(localId), ERR_OK);
+    EXPECT_CALL(*mockSubscriber,
+        OnStateChangedWithCallback(OsAccountState::STOPPING, localId, localId, true)).Times(AtLeast(1));
+    EXPECT_EQ(OsAccountManager::ActivateOsAccount(Constants::START_USER_ID), ERR_OK);
+    EXPECT_EQ(OsAccountManager::DeactivateOsAccount(localId), ERR_OK);
+    EXPECT_EQ(RemoveOsAccountForTest(localId), ERR_OK);
+    EXPECT_EQ(OsAccountManager::UnsubscribeOsAccount(subscriber), ERR_OK);
+    SUCCEED();
+}
+
+/**
+ * @tc.name: OsAccountSubscribeTest08
+ * @tc.desc: Test subscribing STOPPING state with handshake mechanism, reply after a long time (timeout)
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountSubscribeTest, OsAccountSubscribeTest08, TestSize.Level1)
+{
+    std::set<OsAccountState> states = { OsAccountState::STOPPING };
+    OsAccountSubscribeInfo subscribeInfo(states, true);
+    auto mockSubscriber = std::make_shared<MockSubscriber>();
+    auto subscriber = std::make_shared<TestStateHandshakeSubscriber>(
+        subscribeInfo, mockSubscriber, OsAccountState::STOPPING, true);
+    EXPECT_EQ(OsAccountManager::SubscribeOsAccount(subscriber), ERR_OK);
+
+    OsAccountInfo info;
+    EXPECT_EQ(CreateOsAccountForTest(ACCOUNT_NAME, OsAccountType::NORMAL, info), ERR_OK);
+    int32_t localId = info.GetLocalId();
+    EXPECT_EQ(OsAccountManager::ActivateOsAccount(localId), ERR_OK);
+    EXPECT_CALL(*mockSubscriber,
+        OnStateChangedWithCallback(OsAccountState::STOPPING, localId, localId, true)).Times(AtLeast(1));
+    EXPECT_EQ(OsAccountManager::ActivateOsAccount(Constants::START_USER_ID), ERR_OK);
+    EXPECT_EQ(OsAccountManager::DeactivateOsAccount(localId), ERR_OK);
+    EXPECT_EQ(RemoveOsAccountForTest(localId), ERR_OK);
+    EXPECT_EQ(OsAccountManager::UnsubscribeOsAccount(subscriber), ERR_OK);
+    SUCCEED();
+}
+
+#ifdef SUPPORT_LOCK_OS_ACCOUNT
+/**
+ * @tc.name: OsAccountSubscribeTest09
+ * @tc.desc: Test subscribing LOCKING state with handshake mechanism, reply immediately (not timeout)
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountSubscribeTest, OsAccountSubscribeTest09, TestSize.Level1)
+{
+    std::set<OsAccountState> states = { OsAccountState::LOCKING };
+    OsAccountSubscribeInfo subscribeInfo(states, true);
+    auto mockSubscriber = std::make_shared<MockSubscriber>();
+    auto subscriber = std::make_shared<TestStateHandshakeSubscriber>(
+        subscribeInfo, mockSubscriber, OsAccountState::LOCKING, false);
+    EXPECT_EQ(OsAccountManager::SubscribeOsAccount(subscriber), ERR_OK);
+
+    OsAccountInfo info;
+    EXPECT_EQ(CreateOsAccountForTest(ACCOUNT_NAME, OsAccountType::NORMAL, info), ERR_OK);
+    int32_t localId = info.GetLocalId();
+    EXPECT_EQ(OsAccountManager::ActivateOsAccount(localId), ERR_OK);
+    EXPECT_CALL(*mockSubscriber,
+        OnStateChangedWithCallback(OsAccountState::LOCKING, localId, localId, true)).Times(AtLeast(1));
+    EXPECT_EQ(OsAccountManager::PublishOsAccountLockEvent(localId, true), ERR_OK);
+    EXPECT_EQ(OsAccountManager::PublishOsAccountLockEvent(localId, false), ERR_OK);
+    EXPECT_EQ(OsAccountManager::ActivateOsAccount(Constants::START_USER_ID), ERR_OK);
+    EXPECT_EQ(RemoveOsAccountForTest(localId), ERR_OK);
+    EXPECT_EQ(OsAccountManager::UnsubscribeOsAccount(subscriber), ERR_OK);
+    SUCCEED();
+}
+#endif
+
+#ifdef OS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION
+/**
+ * @tc.name: OsAccountSubscribeTest10
+ * @tc.desc: Test subscribing SWITCHING state with handshake mechanism, reply immediately; the
+ *           switch is not blocked by the handshake
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountSubscribeTest, OsAccountSubscribeTest10, TestSize.Level1)
+{
+    std::set<OsAccountState> states = { OsAccountState::SWITCHING };
+    OsAccountSubscribeInfo subscribeInfo(states, true);
+    auto mockSubscriber = std::make_shared<MockSubscriber>();
+    auto subscriber = std::make_shared<TestStateHandshakeSubscriber>(
+        subscribeInfo, mockSubscriber, OsAccountState::SWITCHING, false);
+    EXPECT_EQ(OsAccountManager::SubscribeOsAccount(subscriber), ERR_OK);
+
+    OsAccountInfo info;
+    EXPECT_EQ(CreateOsAccountForTest(ACCOUNT_NAME, OsAccountType::NORMAL, info), ERR_OK);
+    int32_t localId = info.GetLocalId();
+    EXPECT_CALL(*mockSubscriber,
+        OnStateChangedWithCallback(OsAccountState::SWITCHING, _, _, true)).Times(AtLeast(1));
+    // The SWITCHING handshake is advisory: ActivateOsAccount returns without waiting for the
+    // subscriber reply.
+    EXPECT_EQ(OsAccountManager::ActivateOsAccount(localId), ERR_OK);
+    EXPECT_EQ(OsAccountManager::ActivateOsAccount(Constants::START_USER_ID), ERR_OK);
+    EXPECT_EQ(OsAccountManager::DeactivateOsAccount(localId), ERR_OK);
+    EXPECT_EQ(RemoveOsAccountForTest(localId), ERR_OK);
+    EXPECT_EQ(OsAccountManager::UnsubscribeOsAccount(subscriber), ERR_OK);
+    SUCCEED();
+}
+
+/**
+ * @tc.name: OsAccountSubscribeTest11
+ * @tc.desc: Test subscribing SWITCHING state with handshake mechanism, reply after a long time
+ *           (later than the server wait window); the switch is still not blocked
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountSubscribeTest, OsAccountSubscribeTest11, TestSize.Level1)
+{
+    std::set<OsAccountState> states = { OsAccountState::SWITCHING };
+    OsAccountSubscribeInfo subscribeInfo(states, true);
+    auto mockSubscriber = std::make_shared<MockSubscriber>();
+    auto subscriber = std::make_shared<TestStateHandshakeSubscriber>(
+        subscribeInfo, mockSubscriber, OsAccountState::SWITCHING, true);
+    EXPECT_EQ(OsAccountManager::SubscribeOsAccount(subscriber), ERR_OK);
+
+    OsAccountInfo info;
+    EXPECT_EQ(CreateOsAccountForTest(ACCOUNT_NAME, OsAccountType::NORMAL, info), ERR_OK);
+    int32_t localId = info.GetLocalId();
+    EXPECT_CALL(*mockSubscriber,
+        OnStateChangedWithCallback(OsAccountState::SWITCHING, _, _, true)).Times(AtLeast(1));
+    // The blocking subscriber replies later than the server wait window; the switch handshake
+    // is advisory, so ActivateOsAccount must still return success without being blocked.
+    EXPECT_EQ(OsAccountManager::ActivateOsAccount(localId), ERR_OK);
+    EXPECT_EQ(OsAccountManager::ActivateOsAccount(Constants::START_USER_ID), ERR_OK);
+    EXPECT_EQ(OsAccountManager::DeactivateOsAccount(localId), ERR_OK);
+    EXPECT_EQ(RemoveOsAccountForTest(localId), ERR_OK);
+    EXPECT_EQ(OsAccountManager::UnsubscribeOsAccount(subscriber), ERR_OK);
+    SUCCEED();
+}
+#endif

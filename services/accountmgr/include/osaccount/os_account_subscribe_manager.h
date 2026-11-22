@@ -16,7 +16,9 @@
 #ifndef OS_ACCOUNT_SERVICES_ACCOUNTMGR_INCLUDE_APP_ACCOUNT_SUBSCRIBE_MANAGER_H
 #define OS_ACCOUNT_SERVICES_ACCOUNTMGR_INCLUDE_APP_ACCOUNT_SUBSCRIBE_MANAGER_H
 
+#include <condition_variable>
 #include <deque>
+#include <future>
 #include <map>
 #include <optional>
 #include <memory>
@@ -64,8 +66,23 @@ public:
     ErrCode UnsubscribeOsAccount(const sptr<IRemoteObject> &eventListener) override;
     const std::shared_ptr<OsAccountSubscribeInfo> GetSubscribeRecordInfo(
         const sptr<IRemoteObject> &eventListener) override;
-    ErrCode Publish(int32_t fromId, OsAccountState state, int32_t toId = -1,
+    struct StatePublishToken {
+        // Shared between the reply waiter and the notifier: CompleteInner pops the queue item
+        // under this mutex, so a notify can never land between the waiter's predicate check
+        // and its park (lost wakeup would misreport a delivered reply as a timeout).
+        std::shared_ptr<std::mutex> mutexPtr;
+        std::shared_ptr<std::condition_variable> cvPtr;
+        std::shared_ptr<SafeQueue<uint8_t>> safeQueue;
+    };
+    StatePublishToken EnqueueStateChange(int32_t fromId, OsAccountState state, int32_t toId,
+        std::optional<uint64_t> displayId);
+    ErrCode WaitForStateReplies(const StatePublishToken &token, OsAccountState state);
+    std::future<ErrCode> Publish(int32_t id, OsAccountState state) override;
+    std::future<ErrCode> Publish(int32_t fromId, OsAccountState state, int32_t toId,
         std::optional<uint64_t> displayId = std::nullopt) override;
+    ErrCode PublishSync(int32_t id, OsAccountState state) override;
+    void AwaitPublish(std::future<ErrCode> &notifyFuture, OsAccountState state, int32_t fromId,
+        int32_t toId, uint64_t displayId) override;
 
 private:
     OsAccountSubscribeManager();
@@ -79,10 +96,9 @@ private:
     DISALLOW_COPY_AND_MOVE(OsAccountSubscribeManager);
     ErrCode RemoveSubscribeRecord(const sptr<IRemoteObject> &eventListener);
     void PublishToAllSubscribers(int32_t fromId, OsAccountState state, int32_t toId,
-        std::optional<uint64_t> displayId, std::shared_ptr<std::condition_variable> cvPtr,
-        std::shared_ptr<SafeQueue<uint8_t>> safeQueue);
-    ErrCode WaitForAllReplies(std::shared_ptr<std::condition_variable> cvPtr,
-        std::shared_ptr<SafeQueue<uint8_t>> safeQueue);
+        std::optional<uint64_t> displayId, const StatePublishToken &token);
+    void ReportDynamicReplyTimeout(OsAccountState state, int32_t fromId, int32_t toId,
+        const std::optional<uint64_t> &displayId);
     std::string FormatStateInfo(const OsAccountStateParcel& stateParcel, int32_t targetUid,
         const std::string& phase, ErrCode errCode = ERR_OK) const;
     void LogPublishEvent(const OsAccountStateParcel& stateParcel, int32_t targetUid,
