@@ -118,6 +118,30 @@ HWTEST_F(OsAccountEventListenerTest, OnStateChangedNoCallbackWithoutHandshake002
 }
 
 /**
+ * @tc.name: StateName001
+ * @tc.desc: Every OsAccountState maps to its own log name, and unknown values fall back to
+ *           "unknown" instead of garbage.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountEventListenerTest, StateName001, TestSize.Level1)
+{
+    EXPECT_STREQ(StateName(OsAccountState::ACTIVATED), "activated");
+    EXPECT_STREQ(StateName(OsAccountState::ACTIVATING), "activating");
+    EXPECT_STREQ(StateName(OsAccountState::UNLOCKED), "unlocked");
+    EXPECT_STREQ(StateName(OsAccountState::CREATED), "created");
+    EXPECT_STREQ(StateName(OsAccountState::REMOVED), "removed");
+    EXPECT_STREQ(StateName(OsAccountState::STOPPING), "stopping");
+    EXPECT_STREQ(StateName(OsAccountState::STOPPED), "stopped");
+    EXPECT_STREQ(StateName(OsAccountState::SWITCHING), "switching");
+    EXPECT_STREQ(StateName(OsAccountState::SWITCHED), "switched");
+    EXPECT_STREQ(StateName(OsAccountState::CREATING), "creating");
+    EXPECT_STREQ(StateName(OsAccountState::LOCKING), "locking");
+    EXPECT_STREQ(StateName(OsAccountState::LOCKED), "locked");
+    EXPECT_STREQ(StateName(OsAccountState::INVALID_TYPE), "unknown");
+}
+
+/**
  * @tc.name: IsStateNeedHandshake001
  * @tc.desc: Only the states whose publisher waits for subscriber replies require the handshake.
  * @tc.type: FUNC

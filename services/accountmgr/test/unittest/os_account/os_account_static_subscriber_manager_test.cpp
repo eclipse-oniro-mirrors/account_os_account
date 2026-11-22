@@ -14,6 +14,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <atomic>
 #include <fstream>
 #include <unistd.h>
 #include "dlfcn.h"
@@ -83,6 +84,14 @@ int32_t OnOsAccountStateChanged(const COsAccountStateData *stateData)
 int32_t BlockOnOsAccountStateChanged(const COsAccountStateData *stateData)
 {
     sleep(SYNC_BLOCK_SECONDS);
+    return 0;
+}
+
+// Records delivery of an advisory (non-handshake) dispatch without blocking the publisher.
+std::atomic<int32_t> g_adviseDispatchCount(0);
+int32_t CountOnOsAccountStateChanged(const COsAccountStateData *stateData)
+{
+    g_adviseDispatchCount++;
     return 0;
 }
 #endif
@@ -555,6 +564,30 @@ HWTEST_F(OsAccountStaticSubscriberManagerTest, LoadConfig012, TestSize.Level1)
     EXPECT_EQ(manager.state2Subscribers_.count(OsAccountState::SWITCHING), 0);
     EXPECT_EQ(manager.staticSubscribers_.size(), 0);
 }
+
+/**
+ * @tc.name: LoadConfig013
+ * @tc.desc: A subscriber whose name duplicates an already-loaded one is rejected at load
+ *           time, so a name is loaded at most once no matter how many config entries use it.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountStaticSubscriberManagerTest, LoadConfig013, TestSize.Level1)
+{
+    WriteConfigFile(TEST_CONFIG_PATH,
+        "{\"subscribers\": ["
+        "  {\"name\": \"same_name\", \"events\": [\"SWITCHING\"],"
+        "   \"soPath\": \"" + VALID_CONFIG_SO_RELATIVE_PATH + "\", \"withHandshake\": true},"
+        "  {\"name\": \"same_name\", \"events\": [\"SWITCHING\"],"
+        "   \"soPath\": \"" + VALID_CONFIG_SO_RELATIVE_PATH + "\", \"withHandshake\": false}"
+        "]}");
+    auto &manager = OsAccountStaticSubscriberManager::GetInstance();
+    manager.LoadSubscribers(OsAccountStaticSubscriberConfig::Load(TEST_CONFIG_PATH).subscribers);
+    auto it = manager.state2Subscribers_.find(OsAccountState::SWITCHING);
+    ASSERT_NE(it, manager.state2Subscribers_.end());
+    EXPECT_EQ(it->second.size(), 1u); // the duplicate entry is rejected
+    EXPECT_TRUE(it->second.begin()->get()->withHandshake); // the first entry wins
+}
 #endif
 
 /**
@@ -612,7 +645,9 @@ HWTEST_F(OsAccountStaticSubscriberManagerTest, SyncPublish003, TestSize.Level1)
 
 /**
  * @tc.name: SyncPublish004
- * @tc.desc: Test SyncPublish skips non-handshake subscribers
+ * @tc.desc: A non-handshake subscriber is dispatched fire-and-forget instead of being
+ *           dropped: SyncPublish returns ERR_OK without waiting for it and the
+ *           notification still reaches the subscriber.
  * @tc.type: FUNC
  * @tc.require:
  */
@@ -622,9 +657,15 @@ HWTEST_F(OsAccountStaticSubscriberManagerTest, SyncPublish004, TestSize.Level1)
     auto subscriber = std::make_shared<StaticSubscriber>();
     subscriber->withHandshake = false; // non-handshake subscriber
     subscriber->handle = g_ptrWithSymbol;
-    subscriber->callback = reinterpret_cast<void *>(BlockOnOsAccountStateChanged);
+    subscriber->callback = reinterpret_cast<void *>(CountOnOsAccountStateChanged);
     manager.state2Subscribers_[OsAccountState::SWITCHING] = { subscriber };
+    g_adviseDispatchCount = 0;
     EXPECT_EQ(ERR_OK, manager.SyncPublish(TEST_ACCOUNT_ID, OsAccountState::SWITCHING, TEST_ACCOUNT_ID));
+    // fire-and-forget: wait for the detached dispatch to land (bounded poll)
+    for (int i = 0; i < 100 && g_adviseDispatchCount.load() == 0; ++i) {
+        usleep(10 * 1000);
+    }
+    EXPECT_EQ(g_adviseDispatchCount.load(), 1); // the notification was delivered
 }
 
 /**

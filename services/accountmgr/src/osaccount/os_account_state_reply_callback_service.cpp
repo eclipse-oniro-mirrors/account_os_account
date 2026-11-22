@@ -55,19 +55,25 @@ OsAccountStateReplyCallbackService::~OsAccountStateReplyCallbackService()
 {}
 
 OsAccountStateReplyCallbackService::OsAccountStateReplyCallbackService(int32_t accountId, OsAccountState state,
-    const std::shared_ptr<std::condition_variable> &cvPtr, const std::shared_ptr<SafeQueue<uint8_t>> &safeQueue,
-    int32_t subscriberUid)
-    : accountId_(accountId), state_(state), cvPtr_(cvPtr), safeQueue_(safeQueue), subscriberUid_(subscriberUid)
+    const std::shared_ptr<std::mutex> &mutexPtr, const std::shared_ptr<std::condition_variable> &cvPtr,
+    const std::shared_ptr<SafeQueue<uint8_t>> &safeQueue, int32_t subscriberUid)
+    : accountId_(accountId), state_(state), mutexPtr_(mutexPtr), cvPtr_(cvPtr), safeQueue_(safeQueue),
+      subscriberUid_(subscriberUid)
 {}
 
 void OsAccountStateReplyCallbackService::CompleteInner()
 {
-    if (cvPtr_ == nullptr || safeQueue_ == nullptr) {
-        ACCOUNT_LOGE("CvPtr or SafeQueue is nullptr");
+    if (mutexPtr_ == nullptr || cvPtr_ == nullptr || safeQueue_ == nullptr) {
+        ACCOUNT_LOGE("MutexPtr, cvPtr or SafeQueue is nullptr");
         return;
     }
-    uint8_t tmp;
-    safeQueue_->Pop(tmp);
+    {
+        // Pop under the mutex shared with the publisher's wait, so the notify below can never
+        // be lost between the waiter's predicate check and its park.
+        std::lock_guard<std::mutex> lock(*mutexPtr_);
+        uint8_t tmp;
+        safeQueue_->Pop(tmp);
+    }
     cvPtr_->notify_one();
 }
 

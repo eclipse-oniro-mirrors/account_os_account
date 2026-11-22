@@ -67,6 +67,10 @@ public:
     const std::shared_ptr<OsAccountSubscribeInfo> GetSubscribeRecordInfo(
         const sptr<IRemoteObject> &eventListener) override;
     struct StatePublishToken {
+        // Shared between the reply waiter and the notifier: CompleteInner pops the queue item
+        // under this mutex, so a notify can never land between the waiter's predicate check
+        // and its park (lost wakeup would misreport a delivered reply as a timeout).
+        std::shared_ptr<std::mutex> mutexPtr;
         std::shared_ptr<std::condition_variable> cvPtr;
         std::shared_ptr<SafeQueue<uint8_t>> safeQueue;
     };

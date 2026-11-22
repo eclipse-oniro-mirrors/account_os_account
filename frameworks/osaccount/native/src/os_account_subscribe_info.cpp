@@ -139,5 +139,37 @@ bool OsAccountSubscribeInfo::ReadFromParcel(Parcel &parcel)
     }
     return true;
 }
+
+const char *StateName(OsAccountState state)
+{
+    switch (state) {
+        case OsAccountState::ACTIVATED:
+            return "activated";
+        case OsAccountState::ACTIVATING:
+            return "activating";
+        case OsAccountState::UNLOCKED:
+            return "unlocked";
+        case OsAccountState::CREATED:
+            return "created";
+        case OsAccountState::REMOVED:
+            return "removed";
+        case OsAccountState::STOPPING:
+            return "stopping";
+        case OsAccountState::STOPPED:
+            return "stopped";
+        case OsAccountState::SWITCHING:
+            return "switching";
+        case OsAccountState::SWITCHED:
+            return "switched";
+        case OsAccountState::CREATING:
+            return "creating";
+        case OsAccountState::LOCKING:
+            return "locking";
+        case OsAccountState::LOCKED:
+            return "locked";
+        default:
+            return "unknown";
+    }
+}
 }  // namespace AccountSA
 }  // namespace OHOS

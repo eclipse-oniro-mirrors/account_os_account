@@ -16,7 +16,6 @@
 #include "os_account_thread_helper.h"
 
 #include <memory>
-#include <new>
 #include <pthread.h>
 
 namespace OHOS {
@@ -40,12 +39,7 @@ bool StartDetachedThread(const std::function<void()> &task, const char *threadNa
     task();
     return true;
 #else
-    // nothrow new: OOM returns nullptr instead of aborting; make_unique is NOT usable here because
-    // it allocates with throwing new, which terminates the process under -fno-exceptions.
-    std::unique_ptr<std::function<void()>> heapTask(new (std::nothrow) std::function<void()>(task));
-    if (heapTask == nullptr) {
-        return false;
-    }
+    std::unique_ptr<std::function<void()>> heapTask = std::make_unique<std::function<void()>>(task);
     pthread_t threadId;
     if (pthread_create(&threadId, nullptr, RunDetachedTask, heapTask.get()) != 0) {
         return false; // heapTask is released automatically, no manual delete needed

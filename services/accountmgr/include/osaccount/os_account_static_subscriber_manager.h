@@ -29,7 +29,13 @@
 namespace OHOS {
 namespace AccountSA {
 struct StaticSubscriber {
+    // Deleted copy members suppress the implicit default constructor; restore it explicitly
+    // so std::make_shared keeps working.
+    StaticSubscriber() = default;
     ~StaticSubscriber();
+    // The destructor dlcloses the handle; a value copy would close it twice, so copying and
+    // moving are disallowed. Subscribers are shared by pointer (std::shared_ptr) only.
+    DISALLOW_COPY_AND_MOVE(StaticSubscriber);
     std::string name;
     std::string path;
     void *handle = nullptr;

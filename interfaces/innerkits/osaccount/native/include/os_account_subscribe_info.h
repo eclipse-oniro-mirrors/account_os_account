@@ -57,37 +57,7 @@ typedef int32_t (*OnOsAccountStateChangedFunc)(const COsAccountStateData *stateD
 /**
  * Convert an OS account state to its enum name for logging, e.g. SWITCHING.
  */
-inline const char *StateName(OsAccountState state)
-{
-    switch (state) {
-        case OsAccountState::ACTIVATED:
-            return "activated";
-        case OsAccountState::ACTIVATING:
-            return "activating";
-        case OsAccountState::UNLOCKED:
-            return "unlocked";
-        case OsAccountState::CREATED:
-            return "created";
-        case OsAccountState::REMOVED:
-            return "removed";
-        case OsAccountState::STOPPING:
-            return "stopping";
-        case OsAccountState::STOPPED:
-            return "stopped";
-        case OsAccountState::SWITCHING:
-            return "switching";
-        case OsAccountState::SWITCHED:
-            return "switched";
-        case OsAccountState::CREATING:
-            return "creating";
-        case OsAccountState::LOCKING:
-            return "locking";
-        case OsAccountState::LOCKED:
-            return "locked";
-        default:
-            return "unknown";
-    }
-}
+const char *StateName(OsAccountState state);
 
 /**
  * Check whether the subscription handshake is required for the given OS account state.

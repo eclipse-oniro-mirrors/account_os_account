@@ -181,5 +181,25 @@ HWTEST_F(OsAccountStaticSubscriberConfigParseTest, LoadStaticSubscriberConfig003
     WriteConfigFile(TEST_EMPTY_CONFIG_PATH, "");
     EXPECT_TRUE(OsAccountStaticSubscriberConfig::Load(TEST_EMPTY_CONFIG_PATH).subscribers.empty());
 }
+
+/**
+ * @tc.name: LoadDefault001
+ * @tc.desc: LoadDefault resolves exactly what GetConfigPath points to: with no resolvable
+ *           config path it yields an empty set without crashing, otherwise it matches a
+ *           direct Load of the same path.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountStaticSubscriberConfigParseTest, LoadDefault001, TestSize.Level1)
+{
+    std::string configPath = OsAccountStaticSubscriberConfig::GetConfigPath();
+    SubscriberConfigData defaults = OsAccountStaticSubscriberConfig::LoadDefault();
+    if (configPath.empty()) {
+        EXPECT_TRUE(defaults.subscribers.empty());
+        return;
+    }
+    SubscriberConfigData loaded = OsAccountStaticSubscriberConfig::Load(configPath);
+    EXPECT_EQ(defaults.subscribers.size(), loaded.subscribers.size());
+}
 } // AccountSA
 } // OHOS

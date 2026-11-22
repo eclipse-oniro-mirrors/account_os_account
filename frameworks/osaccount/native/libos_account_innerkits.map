@@ -352,6 +352,7 @@
         "OHOS::AccountSA::OsAccountSubProfileEventService::GetTypesToRemove(std::__h::shared_ptr<OHOS::AccountSA::OsAccountSubProfileSubscribeCallback> const&, std::__h::set<OHOS::AccountSA::OsAccountSubProfileEventType, std::__h::less<OHOS::AccountSA::OsAccountSubProfileEventType>, std::__h::allocator<OHOS::AccountSA::OsAccountSubProfileEventType>>&)";
         "OHOS::AccountSA::OhosAccountInfo::Unmarshalling(OHOS::Parcel&)";
         "OHOS::AccountSA::SubProfileEventData::~SubProfileEventData()";
+        "OHOS::AccountSA::StateName(OHOS::AccountSA::OS_ACCOUNT_SUBSCRIBE_TYPE)";
     };
   local:
     *;

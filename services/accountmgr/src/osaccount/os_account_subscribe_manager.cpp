@@ -378,6 +378,7 @@ OsAccountSubscribeManager::StatePublishToken OsAccountSubscribeManager::EnqueueS
     int32_t fromId, OsAccountState state, int32_t toId, std::optional<uint64_t> displayId)
 {
     StatePublishToken token;
+    token.mutexPtr = std::make_shared<std::mutex>();
     token.cvPtr = std::make_shared<std::condition_variable>();
     token.safeQueue = std::make_shared<SafeQueue<uint8_t>>();
     const char *handshakeInfo = IsStateNeedHandshake(state) ? " with handshake" : "";
@@ -419,8 +420,9 @@ ErrCode OsAccountSubscribeManager::WaitForStateReplies(const StatePublishToken &
         waitTime = std::chrono::milliseconds(waitMs);
     }
 #endif
-    std::mutex mutex;
-    std::unique_lock<std::mutex> waitLock(mutex);
+    // The token mutex is shared with the reply callbacks, so a reply landing between the
+    // predicate check and the park still wakes the waiter instead of being lost.
+    std::unique_lock<std::mutex> waitLock(*token.mutexPtr);
     auto result = token.cvPtr->wait_for(waitLock, waitTime,
         [safeQueue = token.safeQueue]() { return safeQueue->Size() == 0; });
     if (!result) {
@@ -601,7 +603,7 @@ void OsAccountSubscribeManager::PublishToAllSubscribers(int32_t fromId, OsAccoun
         }
         if (IsStateNeedHandshake(state) && (subscribeRecord->subscribeInfoPtr_->IsWithHandshake())) {
             stateParcel.callback = new (std::nothrow) OsAccountStateReplyCallbackService(
-                fromId, state, token.cvPtr, token.safeQueue, subscriberUid);
+                fromId, state, token.mutexPtr, token.cvPtr, token.safeQueue, subscriberUid);
             if (stateParcel.callback != nullptr) {
                 token.safeQueue->Push(1);
             }

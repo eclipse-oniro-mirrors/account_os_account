@@ -225,6 +225,7 @@ ErrCode OsAccountStaticSubscriberManager::SyncPublish(int32_t fromId, OsAccountS
     data.toId = toId;
     data.displayId = displayId;
     std::set<std::shared_ptr<StaticSubscriber>> subscribers;
+    std::vector<std::shared_ptr<StaticSubscriber>> nonHandshakeSubscribers;
     {
         std::lock_guard<std::recursive_mutex> lock(mutex_);
         auto it = state2Subscribers_.find(state);
@@ -233,9 +234,26 @@ ErrCode OsAccountStaticSubscriberManager::SyncPublish(int32_t fromId, OsAccountS
             return ERR_OK;
         }
         for (const auto &subscriber : it->second) {
-            if (subscriber != nullptr && subscriber->withHandshake) {
-                subscribers.insert(subscriber);
+            if (subscriber == nullptr) {
+                continue;
             }
+            if (subscriber->withHandshake) {
+                subscribers.insert(subscriber);
+            } else {
+                // A non-handshake subscriber still gets the notification, dispatched
+                // fire-and-forget (like the legacy async Publish) instead of being dropped.
+                nonHandshakeSubscribers.push_back(subscriber);
+            }
+        }
+    }
+    for (const auto &subscriber : nonHandshakeSubscribers) {
+        auto task = [subscriber, data] { PublishToSubscriber(subscriber, data); }; // failure report inside
+        if (!StartDetachedThread(task, "StaticPublish")) {
+            ACCOUNT_LOGE("Static publish %{public}s dispatch failed, to %{public}s",
+                StateName(data.state), SubscriberKey(subscriber).c_str());
+            REPORT_OS_ACCOUNT_FAIL(data.toId, Constants::OPERATION_EVENT_PUBLISH, ERR_ACCOUNT_COMMON_BUSY,
+                std::string("Static publish ") + StateName(data.state) + " dispatch failed, to " +
+                SubscriberKey(subscriber));
         }
     }
     if (subscribers.empty()) {

@@ -29,12 +29,13 @@
 #include "os_account_state_parcel.h"
 #include "os_account_state_reply_callback_service.h"
 #include "os_account_subscribe_info.h"
-#include "os_account_subscribe_manager.h"
-// The handshake-wait tests below seed the static subscriber manager's per-state timeout
-// table, which has no public setter; reuse the repo's established private-access pattern
-// (see os_account_static_subscriber_manager_test.cpp). No header above includes it, so
-// the guard sees the private-opened copy only here.
+#include "os_account_thread_helper.h"
+// The handshake-wait tests below reach into singleton private state (the static manager's
+// per-state timeout table, the subscribe manager's switch-record map); reuse the repo's
+// established private-access pattern (see os_account_static_subscriber_manager_test.cpp).
+// No header above includes either one, so each guard sees the private-opened copy only here.
 #define private public
+#include "os_account_subscribe_manager.h"
 #include "os_account_static_subscriber_manager.h"
 #undef private
 
@@ -51,6 +52,7 @@ constexpr int32_t TEST_FIFO_SECOND_TO_ID = 222;
 const int32_t TEST_SUBSCRIBER_UID = static_cast<int32_t>(getuid());
 constexpr int32_t TEST_WAIT_SECONDS = 5;
 constexpr int32_t TEST_PENDING_COUNT = 1;
+#ifdef OS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION
 // Switching wait used by the handshake-wait tests: long enough to observe that a wait
 // actually happened, short enough to keep the suite fast.
 constexpr int32_t TEST_CONFIGURED_WAIT_MS = 300;
@@ -60,6 +62,7 @@ constexpr int32_t TEST_SLOW_REPLY_MS = 200;
 constexpr int32_t TEST_CALLER_WORK_MS = 100;
 // usleep takes microseconds; the test delays are authored in milliseconds.
 constexpr int32_t MS_TO_US = 1000;
+#endif
 
 class MockOsAccountEvent : public OsAccountEventStub {
 public:
@@ -70,11 +73,11 @@ public:
     MOCK_METHOD(int32_t, CallbackExit, (uint32_t code, int32_t result), (override));
 };
 
-sptr<OsAccountStateReplyCallbackService> CreateReplyCallback(
+sptr<OsAccountStateReplyCallbackService> CreateReplyCallback(const std::shared_ptr<std::mutex> &mutexPtr,
     const std::shared_ptr<std::condition_variable> &cvPtr, const std::shared_ptr<SafeQueue<uint8_t>> &safeQueue)
 {
     return new (std::nothrow) OsAccountStateReplyCallbackService(
-        TEST_ACCOUNT_ID, OsAccountState::SWITCHING, cvPtr, safeQueue, TEST_SUBSCRIBER_UID);
+        TEST_ACCOUNT_ID, OsAccountState::SWITCHING, mutexPtr, cvPtr, safeQueue, TEST_SUBSCRIBER_UID);
 }
 
 OsAccountStateParcel BuildStateParcel(const sptr<IRemoteObject> &callback)
@@ -87,6 +90,7 @@ OsAccountStateParcel BuildStateParcel(const sptr<IRemoteObject> &callback)
     return parcel;
 }
 
+#ifdef OS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION
 // Stand-in for a legal slow static subscriber: replies after TEST_SLOW_REPLY_MS, within its
 // configured budget (TEST_CONFIGURED_WAIT_MS).
 int32_t SlowReplyOnStateChanged(const COsAccountStateData *stateData)
@@ -94,6 +98,7 @@ int32_t SlowReplyOnStateChanged(const COsAccountStateData *stateData)
     usleep(TEST_SLOW_REPLY_MS * MS_TO_US);
     return 0;
 }
+#endif
 }  // namespace
 
 class OsAccountSubscribeManagerTest : public testing::Test {
@@ -130,10 +135,11 @@ void OsAccountSubscribeManagerTest::TearDown(void) __attribute__((no_sanitize("c
  */
 HWTEST_F(OsAccountSubscribeManagerTest, SwitchSubscribeInfo_ProductTask_SendFailed, TestSize.Level1)
 {
+    auto mutexPtr = std::make_shared<std::mutex>();
     auto cvPtr = std::make_shared<std::condition_variable>();
     auto safeQueue = std::make_shared<SafeQueue<uint8_t>>();
     safeQueue->Push(TEST_PENDING_COUNT);
-    auto callback = CreateReplyCallback(cvPtr, safeQueue);
+    auto callback = CreateReplyCallback(mutexPtr, cvPtr, safeQueue);
     ASSERT_NE(callback, nullptr);
     OsAccountStateParcel parcel = BuildStateParcel(callback);
     auto mockEvent = sptr<MockOsAccountEvent>(new (std::nothrow) MockOsAccountEvent());
@@ -143,8 +149,8 @@ HWTEST_F(OsAccountSubscribeManagerTest, SwitchSubscribeInfo_ProductTask_SendFail
     auto switchInfo = std::make_shared<SwitchSubscribeInfo>();
     EXPECT_TRUE(switchInfo->ProductTask(mockEvent, parcel));
 
-    std::mutex mutex;
-    std::unique_lock<std::mutex> lock(mutex);
+    // Wait on the same shared mutex the reply callback notifies under.
+    std::unique_lock<std::mutex> lock(*mutexPtr);
     bool result = cvPtr->wait_for(lock, std::chrono::seconds(TEST_WAIT_SECONDS),
         [safeQueue]() { return safeQueue->Size() == 0; });
     EXPECT_TRUE(result);
@@ -159,10 +165,11 @@ HWTEST_F(OsAccountSubscribeManagerTest, SwitchSubscribeInfo_ProductTask_SendFail
  */
 HWTEST_F(OsAccountSubscribeManagerTest, SwitchSubscribeInfo_ProductTask_SendOk, TestSize.Level1)
 {
+    auto mutexPtr = std::make_shared<std::mutex>();
     auto cvPtr = std::make_shared<std::condition_variable>();
     auto safeQueue = std::make_shared<SafeQueue<uint8_t>>();
     safeQueue->Push(TEST_PENDING_COUNT);
-    auto callback = CreateReplyCallback(cvPtr, safeQueue);
+    auto callback = CreateReplyCallback(mutexPtr, cvPtr, safeQueue);
     ASSERT_NE(callback, nullptr);
     OsAccountStateParcel parcel = BuildStateParcel(callback);
     auto mockEvent = sptr<MockOsAccountEvent>(new (std::nothrow) MockOsAccountEvent());
@@ -273,6 +280,7 @@ HWTEST_F(OsAccountSubscribeManagerTest, EnqueueStateChange_WaitForStateReplies_N
  * @tc.type: FUNC
  * @tc.require:
  */
+#ifdef OS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION
 HWTEST_F(OsAccountSubscribeManagerTest, EnqueueStateChange_AttachesCallbackForHandshakeSubscriber,
     TestSize.Level1)
 {
@@ -303,6 +311,7 @@ HWTEST_F(OsAccountSubscribeManagerTest, EnqueueStateChange_AttachesCallbackForHa
     EXPECT_EQ(manager.WaitForStateReplies(token, OsAccountState::SWITCHING), ERR_OK);
     EXPECT_EQ(manager.UnsubscribeOsAccount(eventListener), ERR_OK);
 }
+#endif // OS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION
 
 /**
  * @tc.name: EnqueueStateChange_NoCallbackWithoutHandshake
@@ -337,6 +346,55 @@ HWTEST_F(OsAccountSubscribeManagerTest, EnqueueStateChange_NoCallbackWithoutHand
     EXPECT_EQ(manager.WaitForStateReplies(token, OsAccountState::SWITCHING), ERR_OK);
     EXPECT_EQ(manager.UnsubscribeOsAccount(eventListener), ERR_OK);
 }
+
+/**
+ * @tc.name: StartDetachedThread_RunsTaskAsync
+ * @tc.desc: With a valid task the thread starts (also with a null name) and the task runs to
+ *           completion; the helper returns true.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+// shortcut: an empty std::function aborts the detached thread, and the pthread_create-failure /
+// OOM branches are not injectable without refactoring the helper; only the happy path is
+// covered here. No current caller passes an empty task.
+HWTEST_F(OsAccountSubscribeManagerTest, StartDetachedThread_RunsTaskAsync, TestSize.Level1)
+{
+    std::promise<void> firstDone;
+    auto firstTask = [&firstDone] { firstDone.set_value(); };
+    EXPECT_TRUE(StartDetachedThread(firstTask, nullptr)); // null name is legal
+    EXPECT_EQ(firstDone.get_future().wait_for(std::chrono::seconds(TEST_WAIT_SECONDS)),
+        std::future_status::ready);
+    std::promise<void> secondDone;
+    auto secondTask = [&secondDone] { secondDone.set_value(); };
+    EXPECT_TRUE(StartDetachedThread(secondTask, "osAccountEvent"));
+    EXPECT_EQ(secondDone.get_future().wait_for(std::chrono::seconds(TEST_WAIT_SECONDS)),
+        std::future_status::ready);
+}
+
+#ifndef OS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION
+/**
+ * @tc.name: Publish_NoHandshakeWhenFeatureDisabled
+ * @tc.desc: Feature-off contract (this binary is compiled without the static-subscription
+ *           define): SWITCHING is not a handshake state, the publish keeps the legacy inline
+ *           bounded wait so its future is ready with ERR_OK right after the call, and
+ *           AwaitPublish is a no-op that never blocks.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountSubscribeManagerTest, Publish_NoHandshakeWhenFeatureDisabled, TestSize.Level1)
+{
+    EXPECT_FALSE(IsStateNeedHandshake(OsAccountState::SWITCHING));
+    EXPECT_TRUE(IsStateNeedHandshake(OsAccountState::STOPPING));
+    EXPECT_TRUE(IsStateNeedHandshake(OsAccountState::LOCKING));
+    auto &manager = OsAccountSubscribeManager::GetInstance();
+    std::future<ErrCode> notifyFuture = manager.Publish(
+        TEST_ACCOUNT_ID, OsAccountState::SWITCHING, TEST_TO_ID, 0u);
+    EXPECT_EQ(notifyFuture.wait_for(std::chrono::seconds(TEST_WAIT_SECONDS)), std::future_status::ready);
+    EXPECT_EQ(notifyFuture.get(), ERR_OK); // no handshake attached: nothing to wait for
+    manager.AwaitPublish(notifyFuture, OsAccountState::SWITCHING, TEST_ACCOUNT_ID, TEST_TO_ID, 0u);
+    SUCCEED(); // feature-off await is a no-op; reaching here means it did not block
+}
+#endif
 
 #ifdef OS_ACCOUNT_SUPPORT_STATIC_SUBSCRIPTION
 /**
@@ -580,6 +638,38 @@ HWTEST_F(OsAccountSubscribeManagerTest, WaitForStateReplies_NoWaitWithoutConfigu
     auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - start).count();
     EXPECT_LT(elapsedMs, 1000); // ... yet the unconfigured state does not wait for it
+    EXPECT_EQ(manager.UnsubscribeOsAccount(eventListener), ERR_OK);
+}
+
+/**
+ * @tc.name: EnqueueStateChange_NoSwitchRecordForceCompletesPendingReply
+ * @tc.desc: When the SWITCHING dispatch fails because the subscriber uid has no switch
+ *           record, the pending reply item is force-completed on the spot so the
+ *           publisher's wait is released immediately instead of running out its budget.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountSubscribeManagerTest, EnqueueStateChange_NoSwitchRecordForceCompletesPendingReply,
+    TestSize.Level1)
+{
+    auto &staticManager = OsAccountStaticSubscriberManager::GetInstance();
+    staticManager.stateTimeouts_[OsAccountState::SWITCHING] = TEST_CONFIGURED_WAIT_MS;
+    auto &manager = OsAccountSubscribeManager::GetInstance();
+    std::set<OsAccountState> states = { OsAccountState::SWITCHING };
+    auto subscribeInfoPtr = std::make_shared<OsAccountSubscribeInfo>(states, true);
+    auto mockEvent = sptr<MockOsAccountEvent>(new (std::nothrow) MockOsAccountEvent());
+    ASSERT_NE(mockEvent, nullptr);
+    sptr<IRemoteObject> eventListener = mockEvent;
+    ASSERT_EQ(manager.SubscribeOsAccount(subscribeInfoPtr, eventListener), ERR_OK);
+    manager.switchRecordMap_.clear(); // simulate the dispatch failing before any consumer exists
+
+    auto start = std::chrono::steady_clock::now();
+    auto token = manager.EnqueueStateChange(TEST_ACCOUNT_ID, OsAccountState::SWITCHING, TEST_TO_ID, 0u);
+    EXPECT_EQ(token.safeQueue->Size(), 0); // the pushed pending reply was force-completed, not leaked
+    EXPECT_EQ(manager.WaitForStateReplies(token, OsAccountState::SWITCHING), ERR_OK);
+    auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - start).count();
+    EXPECT_LT(elapsedMs, TEST_CONFIGURED_WAIT_MS); // released by completion, not by budget expiry
     EXPECT_EQ(manager.UnsubscribeOsAccount(eventListener), ERR_OK);
 }
 #endif
