@@ -862,6 +862,16 @@ bool IInnerOsAccountManager::CheckAndCleanOsAccounts()
 
 void IInnerOsAccountManager::RollbackOsAccount(OsAccountInfo &osAccountInfo, bool needDelStorage, bool needDelBms)
 {
+#ifdef SUPPORT_ETC_USER_SYNC
+    if (osAccountInfo.GetLocalId() > Constants::START_USER_ID) {
+        ErrCode etcRet = osAccountControl_->SyncEtcForRemove(osAccountInfo);
+        if (etcRet != ERR_OK) {
+            ACCOUNT_LOGE("Sync etc files for rollback failed, errCode %{public}d.", etcRet);
+            REPORT_OS_ACCOUNT_FAIL(osAccountInfo.GetLocalId(), Constants::OPERATION_CREATE, etcRet,
+                "Sync etc files for rollback failed");
+        }
+    }
+#endif // SUPPORT_ETC_USER_SYNC
 #ifdef SUPPORT_ADMIN_ACCESS_CONTROL
     OsAccountTeeAdapter teeAdapter;
     ErrCode res = teeAdapter.DelOsAccountType(osAccountInfo.GetLocalId());
@@ -950,6 +960,18 @@ ErrCode IInnerOsAccountManager::SendMsgForAccountCreate(
         RollbackOsAccount(osAccountInfo, true, true);
         return errCode;
     }
+#ifdef SUPPORT_ETC_USER_SYNC
+    if (osAccountInfo.GetLocalId() > Constants::START_USER_ID) {
+        errCode = osAccountControl_->SyncEtcForCreate(osAccountInfo);
+        if (errCode != ERR_OK) {
+            ACCOUNT_LOGE("Sync etc files for created account failed, errCode %{public}d.", errCode);
+            REPORT_OS_ACCOUNT_FAIL(osAccountInfo.GetLocalId(), Constants::OPERATION_CREATE, errCode,
+                "Sync etc files for created account failed");
+            RollbackOsAccount(osAccountInfo, true, true);
+            return errCode;
+        }
+    }
+#endif // SUPPORT_ETC_USER_SYNC
     return FinalizeAccountCreate(osAccountInfo);
 }
 
@@ -1784,6 +1806,14 @@ ErrCode IInnerOsAccountManager::SendMsgForAccountRemove(OsAccountInfo &osAccount
         ACCOUNT_LOGE("SendToStorageAccountRemove failed, id %{public}d, errCode %{public}d", localId, errCode);
         return ERR_ACCOUNT_COMMON_GET_SYSTEM_ABILITY_MANAGER;
     }
+#ifdef SUPPORT_ETC_USER_SYNC
+    errCode = osAccountControl_->SyncEtcForRemove(osAccountInfo);
+    if (errCode != ERR_OK) {
+        ACCOUNT_LOGE("Sync etc files for removed account failed, errCode %{public}d.", errCode);
+        REPORT_OS_ACCOUNT_FAIL(localId, Constants::OPERATION_REMOVE, errCode,
+            "Sync etc files for removed account failed");
+    }
+#endif // SUPPORT_ETC_USER_SYNC
     errCode = osAccountControl_->DelOsAccount(localId);
     if (errCode != ERR_OK) {
         ACCOUNT_LOGE("Remove osaccount info failed, id: %{public}d, errCode %{public}d", localId, errCode);

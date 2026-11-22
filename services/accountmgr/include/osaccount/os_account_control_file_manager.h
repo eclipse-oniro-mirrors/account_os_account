@@ -28,6 +28,9 @@
 #if defined(HAS_KV_STORE_PART) && defined(DISTRIBUTED_FEATURE_ENABLED)
 #include "os_account_database_operator.h"
 #endif // defined(HAS_KV_STORE_PART) && defined(DISTRIBUTED_FEATURE_ENABLED)
+#ifdef SUPPORT_ETC_USER_SYNC
+#include "os_account_etc_file_manager.h"
+#endif // SUPPORT_ETC_USER_SYNC
 #include "os_account_file_operator.h"
 #include "os_account_photo_operator.h"
 namespace OHOS {
@@ -75,6 +78,11 @@ public:
     ErrCode InsertOsAccount(OsAccountInfo &osAccountInfo) override;
     ErrCode DelOsAccount(const int id) override;
     ErrCode UpdateOsAccount(OsAccountInfo &osAccountInfo) override;
+#ifdef SUPPORT_ETC_USER_SYNC
+    ErrCode SyncEtcForCreate(const OsAccountInfo &osAccountInfo) override;
+    ErrCode SyncEtcForRemove(const OsAccountInfo &osAccountInfo) override;
+    void CheckAndRecoverEtcFile() override;
+#endif // SUPPORT_ETC_USER_SYNC
     ErrCode GetSerialNumber(int64_t &serialNumber) override;
     ErrCode GetAllowCreateId(int &id) override;
     ErrCode IsOsAccountExists(const int id, bool &isExists) override;
@@ -187,6 +195,9 @@ private:
 #ifdef SUPPORT_POSIX_ADAPTER
     std::shared_ptr<OsAccountPosixFileManager> osAccountPosixFileManager_ = nullptr;
 #endif // SUPPORT_POSIX_ADAPTER
+#ifdef SUPPORT_ETC_USER_SYNC
+    std::shared_ptr<OsAccountEtcFileManager> osAccountEtcFileManager_ = nullptr;
+#endif // SUPPORT_ETC_USER_SYNC
     std::shared_ptr<OsAccountFileOperator> osAccountFileOperator_;
     std::shared_ptr<OsAccountPhotoOperator> osAccountPhotoOperator_;
     std::mutex accountListFileLock_;

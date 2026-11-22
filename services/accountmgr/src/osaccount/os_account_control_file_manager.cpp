@@ -24,6 +24,9 @@
 #ifdef SUPPORT_POSIX_ADAPTER
 #include "account_posix_tools.h"
 #endif // SUPPORT_POSIX_ADAPTER
+#ifdef SUPPORT_ETC_USER_SYNC
+#include "os_account_etc_file.h"
+#endif // SUPPORT_ETC_USER_SYNC
 #include "account_log_wrapper.h"
 #include "account_hisysevent_adapter.h"
 #ifdef HAS_CONFIG_POLICY_PART
@@ -402,6 +405,10 @@ void OsAccountControlFileManager::Init()
     osAccountPosixFileManager_ = std::make_shared<OsAccountPosixFileManager>(weak_from_this());
     CheckAndFlushPosixFile();
 #endif // SUPPORT_POSIX_ADAPTER
+#ifdef SUPPORT_ETC_USER_SYNC
+    osAccountEtcFileManager_ = std::make_shared<OsAccountEtcFileManager>(weak_from_this());
+    CheckAndRecoverEtcFile();
+#endif // SUPPORT_ETC_USER_SYNC
     ACCOUNT_LOGI("OsAccountControlFileManager Init end");
 }
 
@@ -1337,6 +1344,23 @@ ErrCode OsAccountControlFileManager::UpdateOsAccount(OsAccountInfo &osAccountInf
 #endif // SUPPORT_POSIX_ADAPTER
     return ERR_OK;
 }
+
+#ifdef SUPPORT_ETC_USER_SYNC
+ErrCode OsAccountControlFileManager::SyncEtcForCreate(const OsAccountInfo &osAccountInfo)
+{
+    return osAccountEtcFileManager_->SyncEtcForCreate(osAccountInfo);
+}
+
+ErrCode OsAccountControlFileManager::SyncEtcForRemove(const OsAccountInfo &osAccountInfo)
+{
+    return osAccountEtcFileManager_->SyncEtcForRemove(osAccountInfo);
+}
+
+void OsAccountControlFileManager::CheckAndRecoverEtcFile()
+{
+    osAccountEtcFileManager_->CheckAndRecover();
+}
+#endif // SUPPORT_ETC_USER_SYNC
 
 bool AccountExistsWithSerialNumber(const std::vector<OsAccountInfo>& osAccountInfos, int serialNumber)
 {

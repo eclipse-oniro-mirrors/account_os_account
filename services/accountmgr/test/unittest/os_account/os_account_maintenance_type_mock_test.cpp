@@ -72,7 +72,7 @@ HWTEST_F(OsAccountMaintenanceTypeTest, ValidateShortNameTest001, TestSize.Level1
     EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER,
         osAccountManagerService_->ValidateShortName(std::string(Constants::SHORT_NAME_MAX_SIZE + 1, 'a')));
 
-    // Special characters from SPECIAL_CHARACTER_ARRAY: "<>|\":*?/\"
+    // Names containing characters from SPECIAL_CHARACTER_ARRAY: "<>|\":*?/\"
     EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("invalid<name"));
     EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("invalid>name"));
     EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("invalid|name"));
@@ -80,6 +80,12 @@ HWTEST_F(OsAccountMaintenanceTypeTest, ValidateShortNameTest001, TestSize.Level1
     EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("invalid*name"));
     EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("invalid?name"));
     EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("invalid/name"));
+#ifdef SUPPORT_ETC_USER_SYNC
+    EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("..."));
+
+    // Reserved names: ".", "..", and "root"
+    EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("root"));
+#endif // SUPPORT_ETC_USER_SYNC
 
     // Reserved names from SHORT_NAME_CANNOT_BE_NAME_ARRAY: "." and ".."
     EXPECT_EQ(ERR_ACCOUNT_COMMON_INVALID_PARAMETER, osAccountManagerService_->ValidateShortName("."));
@@ -100,12 +106,12 @@ HWTEST_F(OsAccountMaintenanceTypeTest, ValidateShortNameTest002, TestSize.Level1
     // Valid short name with numbers and letters
     EXPECT_EQ(ERR_OK, osAccountManagerService_->ValidateShortName("validname123"));
 
+    // Valid short name with uppercase, hyphen, and underscore in middle
+    EXPECT_EQ(ERR_OK, osAccountManagerService_->ValidateShortName("Valid-Name_9"));
+
     // Exactly at maximum length (255 chars)
     EXPECT_EQ(ERR_OK,
         osAccountManagerService_->ValidateShortName(std::string(Constants::SHORT_NAME_MAX_SIZE, 'b')));
-
-    // Names that look like reserved but are not (e.g., "..." is not in the reserved list)
-    EXPECT_EQ(ERR_OK, osAccountManagerService_->ValidateShortName("..."));
 }
 
 /**

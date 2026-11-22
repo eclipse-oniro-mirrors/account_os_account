@@ -235,6 +235,9 @@ ohos_moduletest("inner_os_account_manager_test") {
   if (os_account_support_backup_restore) {
     cflags_cc += [ "-DSUPPORT_BACKUP_RESTORE" ]
   }
+  if (os_account_support_etc_user_sync) {
+    cflags_cc += [ "-DSUPPORT_ETC_USER_SYNC" ]
+  }
   part_name = "os_account"
 }
 

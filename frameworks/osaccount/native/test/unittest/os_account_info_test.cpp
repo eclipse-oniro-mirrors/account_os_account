@@ -1224,12 +1224,21 @@ HWTEST_F(OsAccountInfoTest, CreateOsAccount03, TestSize.Level1)
     RemoveOsAccountForTest(osAccountInfoOne.GetLocalId());
     CreateOsAccountOptions options;
     options.allowedHapList = std::make_optional<std::vector<std::string>>({});
+#ifdef SUPPORT_ETC_USER_SYNC
+    EXPECT_EQ(CreateOsAccountForTest("name3", "？", OsAccountType::NORMAL, options, osAccountInfoOne),
+              ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+    RemoveOsAccountForTest(osAccountInfoOne.GetLocalId());
+    EXPECT_EQ(CreateOsAccountForTest("name4", "：", OsAccountType::NORMAL, options, osAccountInfoOne),
+            ERR_ACCOUNT_COMMON_INVALID_PARAMETER);
+    RemoveOsAccountForTest(osAccountInfoOne.GetLocalId());
+#else
     EXPECT_EQ(CreateOsAccountForTest("name3", "？", OsAccountType::NORMAL, options, osAccountInfoOne),
               ERR_OK);
     RemoveOsAccountForTest(osAccountInfoOne.GetLocalId());
     EXPECT_EQ(CreateOsAccountForTest("name4", "：", OsAccountType::NORMAL, options, osAccountInfoOne),
             ERR_OK);
     RemoveOsAccountForTest(osAccountInfoOne.GetLocalId());
+#endif // SUPPORT_ETC_USER_SYNC
 }
 
 /**

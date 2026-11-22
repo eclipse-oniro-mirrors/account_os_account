@@ -62,6 +62,11 @@ public:
     MOCK_METHOD3(UpdateGlobalOAConstraints, ErrCode(const std::string& idStr,
         const std::vector<std::string>& ConstraintStr, bool isAdd));
     MOCK_METHOD1(SetNextLocalId, ErrCode(const int32_t &nextLocalId));
+#ifdef SUPPORT_ETC_USER_SYNC
+    MOCK_METHOD1(SyncEtcForCreate, ErrCode(const OsAccountInfo &osAccountInfo));
+    MOCK_METHOD1(SyncEtcForRemove, ErrCode(const OsAccountInfo &osAccountInfo));
+    void CheckAndRecoverEtcFile() {}
+#endif // SUPPORT_ETC_USER_SYNC
     void Init() {}
     ErrCode IsOsAccountExists(const int id, bool &isExists) { return ERR_OK; }
     ErrCode IsAllowedCreateAdmin(bool &isAllowedCreateAdmin) { return ERR_OK; }

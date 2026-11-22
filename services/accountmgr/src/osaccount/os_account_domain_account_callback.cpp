@@ -110,6 +110,13 @@ void BindDomainAccountCallback::HandleUnbindDomainAccountFailed()
     osAccountInfo_.GetDomainInfo(curDomainInfo);
     if (InnerDomainAccountManager::GetInstance().OnAccountUnBound(curDomainInfo, nullptr,
         osAccountInfo_.GetLocalId()) == ERR_OK) {
+#ifdef SUPPORT_ETC_USER_SYNC
+        ErrCode etcRet = osAccountControl_->SyncEtcForRemove(osAccountInfo_);
+        if (etcRet != ERR_OK) {
+            ACCOUNT_LOGE("Sync etc files for unbound domain account failed, localId = %{public}d, "
+                "errCode = %{public}d", osAccountInfo_.GetLocalId(), etcRet);
+        }
+#endif // SUPPORT_ETC_USER_SYNC
         (void)osAccountControl_->DelOsAccount(osAccountInfo_.GetLocalId());
     } else {
         ACCOUNT_LOGE("Failed to unbound domain account");

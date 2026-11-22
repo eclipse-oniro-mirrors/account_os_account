@@ -77,6 +77,7 @@ const char OPERATION_SET_GLOBAL_CONSTRAINTS[] = "setGlobalConstraints";
 const char OPERATION_SET_SPECIFIC_CONSTRAINTS[] = "setSpecificConstraints";
 const char OPERATION_SECOND_MOUNT[] = "secondMount";
 const char OPERATION_POSIX_FILE[] = "posixFileOperate";
+const char OPERATION_ETC_FILE[] = "etcFileOperate";
 const char OPERATION_LOCK[] = "lock";
 const char OPERATION_UPDATE[] = "update";
 const char OPERATION_SET_TYPE[] = "setType";

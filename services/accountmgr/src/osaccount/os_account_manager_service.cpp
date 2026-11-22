@@ -71,8 +71,12 @@ const std::string GET_DOMAIN_ACCOUNTS = "ohos.permission.GET_DOMAIN_ACCOUNTS";
 const std::string MANAGE_EDM_POLICY = "ohos.permission.MANAGE_EDM_POLICY";
 const int32_t EDM_UID = 3057;
 const std::set<uint32_t> uidWhiteListForCreation {EDM_UID};
+#ifdef SUPPORT_ETC_USER_SYNC
+const std::vector<std::string> SHORT_NAME_CANNOT_BE_NAME_ARRAY = {".", "..", "root"};
+#else
 const std::string SPECIAL_CHARACTER_ARRAY = "<>|\":*?/\\";
 const std::vector<std::string> SHORT_NAME_CANNOT_BE_NAME_ARRAY = {".", ".."};
+#endif // SUPPORT_ETC_USER_SYNC
 #ifdef HICOLLIE_ENABLE
 constexpr std::int32_t RECOVERY_TIMEOUT = 6; // timeout 6s
 #endif
@@ -277,6 +281,15 @@ ErrCode OsAccountManagerService::CreateOsAccount(
     return errCode;
 }
 
+#ifdef SUPPORT_ETC_USER_SYNC
+namespace {
+bool IsShortNameChar(char c)
+{
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+}
+}
+#endif // SUPPORT_ETC_USER_SYNC
+
 ErrCode OsAccountManagerService::ValidateShortName(const std::string &shortName)
 {
     size_t shortNameSize = shortName.size();
@@ -285,10 +298,23 @@ ErrCode OsAccountManagerService::ValidateShortName(const std::string &shortName)
         return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
     }
 
+#ifdef SUPPORT_ETC_USER_SYNC
+    if (shortName.front() == '_') {
+        ACCOUNT_LOGE("CreateOsAccount short name is invalidate, short name is %{public}s !", shortName.c_str());
+        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+    }
+    for (char c : shortName) {
+        if (!IsShortNameChar(c)) {
+            ACCOUNT_LOGE("CreateOsAccount short name is invalidate, short name is %{public}s !", shortName.c_str());
+            return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+        }
+    }
+#else
     if (shortName.find_first_of(SPECIAL_CHARACTER_ARRAY) != std::string::npos) {
         ACCOUNT_LOGE("CreateOsAccount short name is invalidate, short name is %{public}s !", shortName.c_str());
         return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
     }
+#endif // SUPPORT_ETC_USER_SYNC
 
     for (size_t i = 0; i < SHORT_NAME_CANNOT_BE_NAME_ARRAY.size(); i++) {
         if (shortName == SHORT_NAME_CANNOT_BE_NAME_ARRAY[i]) {
@@ -316,6 +342,13 @@ ErrCode OsAccountManagerService::CreateOsAccount(const std::string &localName, c
             ACCOUNT_LOGE("Account manager service, permission denied!");
             return ERR_ACCOUNT_COMMON_PERMISSION_DENIED;
         }
+#ifdef SUPPORT_ETC_USER_SYNC
+        code = ValidateShortName(shortName);
+        if (code != ERR_OK) {
+            ACCOUNT_LOGE("Validate short name for first os account failed, errCode %{public}d.", code);
+            return code;
+        }
+#endif // SUPPORT_ETC_USER_SYNC
         accountInfoOld.SetType(type);
         accountInfoOld.SetLocalName(localName);
         accountInfoOld.SetShortName(shortName);

@@ -48,6 +48,11 @@ public:
     virtual ErrCode InsertOsAccount(OsAccountInfo &osAccountInfo) = 0;
     virtual ErrCode DelOsAccount(const int id) = 0;
     virtual ErrCode UpdateOsAccount(OsAccountInfo &osAccountInfo) = 0;
+#ifdef SUPPORT_ETC_USER_SYNC
+    virtual ErrCode SyncEtcForCreate(const OsAccountInfo &osAccountInfo) = 0;
+    virtual ErrCode SyncEtcForRemove(const OsAccountInfo &osAccountInfo) = 0;
+    virtual void CheckAndRecoverEtcFile() = 0;
+#endif // SUPPORT_ETC_USER_SYNC
     virtual ErrCode GetSerialNumber(int64_t &serialNumber) = 0;
     virtual ErrCode GetAllowCreateId(int &id) = 0;
     virtual ErrCode IsOsAccountExists(const int id, bool &isExists) = 0;

@@ -31,7 +31,8 @@
       "os_account_support_lock_os_account",
       "os_account_support_authorization",
       "os_account_support_admin_access_control",
-      "os_account_support_backup_restore"
+      "os_account_support_backup_restore",
+      "os_account_support_etc_user_sync"
     ],
     "hisysevent_config": [
       "//base/account/os_account/hisysevent.yaml"
