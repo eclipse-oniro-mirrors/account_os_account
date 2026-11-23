@@ -109,7 +109,7 @@ static ohos::account::osAccount::authorization::AuthorizationResult WaitForAutho
         taihe::set_business_error(jsErrCode, errMsg.c_str());
         return InitializeAuthorizationResult();
     }
-    return std::move(*callback->taiheResult_);
+    return callback->BuildTaiheResult();
 }
 
 static BatchAuthResultMap WaitForBatchAuthorizationResult(
@@ -125,7 +125,7 @@ static BatchAuthResultMap WaitForBatchAuthorizationResult(
         taihe::set_business_error(jsErrCode, errMsg.c_str());
         return BatchAuthResultMap();
     }
-    return std::move(*callback->taiheResult_);
+    return callback->BuildTaiheResult();
 }
 
 class AuthorizationManagerImpl {
@@ -158,7 +158,7 @@ public:
         }
 
         auto callback = std::make_shared<TaiheAuthPublicCallback>(authContext, privilegeStr,
-            BuildPublicAuthorizationResult);
+            BuildPublicAuthorizationResult, InitializeAuthorizationResult());
         ErrCode errCode = OHOS::AccountSA::AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
             {privilegeStr}, isContextValid, callback);
         if (errCode != ERR_OK) {
@@ -206,7 +206,7 @@ public:
         }
 
         auto callback = std::make_shared<TaiheBatchAuthPublicCallback>(authContext,
-            BuildBatchAuthorizationResult);
+            BuildBatchAuthorizationResult, BatchAuthResultMap());
         ErrCode errCode = OHOS::AccountSA::AuthorizationClient::GetInstance().AcquireAuthorizationForPublic(
             privilegeStrs, isContextValid, callback);
         if (errCode != ERR_OK) {
