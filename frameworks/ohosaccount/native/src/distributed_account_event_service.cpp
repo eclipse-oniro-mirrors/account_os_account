@@ -16,9 +16,17 @@
 #include "account_log_wrapper.h"
 #include <algorithm>
 #include "distributed_account_event_service.h"
+#include <pthread.h>
+#include <thread>
 
 namespace OHOS {
 namespace AccountSA {
+namespace {
+#ifndef FUZZ_TEST
+const char THREAD_DISTRIBUTED_ACCOUNT_EVENT[] = "distCliEvent";
+#endif
+}
+
 DistributedAccountEventService::DistributedAccountEventService()
 {}
 
@@ -106,14 +114,27 @@ void DistributedAccountEventService::GetAllType(std::set<DISTRIBUTED_ACCOUNT_SUB
 
 ErrCode DistributedAccountEventService::OnAccountsChanged(const DistributedAccountEventData &eventData)
 {
-    std::lock_guard<std::mutex> lock(mapLock_);
-    auto it = typeMap_.find(eventData.type_);
-    if (it == typeMap_.end()) {
-        ACCOUNT_LOGI("callback is empty");
-        return ERR_OK;
+    std::set<std::shared_ptr<DistributedAccountSubscribeCallback>> callbacks;
+    {
+        std::lock_guard<std::mutex> lock(mapLock_);
+        auto it = typeMap_.find(eventData.type_);
+        if (it == typeMap_.end()) {
+            ACCOUNT_LOGI("callback is empty");
+            return ERR_OK;
+        }
+        callbacks = it->second;
     }
-    for (const auto &item : it->second) {
-        item->OnAccountsChanged(eventData);
+    for (const auto &item : callbacks) {
+        auto task = [item, eventData]() {
+            item->OnAccountsChanged(eventData);
+        };
+#ifdef FUZZ_TEST
+        task();
+#else
+        std::thread taskThread(task);
+        pthread_setname_np(taskThread.native_handle(), THREAD_DISTRIBUTED_ACCOUNT_EVENT);
+        taskThread.detach();
+#endif
     }
     return ERR_OK;
 }
