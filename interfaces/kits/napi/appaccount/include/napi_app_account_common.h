@@ -120,7 +120,7 @@ struct SetPropertiesContext : public CommonAsyncContext {
     JSAuthCallback callback;
 };
 
-// when new PropertyType is added, new error message need to be added in ErrMsgList.
+// when new PropertyType is added, new expected type need to be added in PropertyExpectedTypeList.
 typedef enum PropertyType {
     NAME = 0,
     OWNER,

@@ -33,6 +33,28 @@ void GenerateBusinessError(const int32_t nativeErrCode, int32_t &jsErrCode, std:
 void AccountNapiThrow(napi_env env, int32_t jsErrCode, const std::string &jsErrMsg, bool throwErr = true);
 void AccountNapiThrow(napi_env env, int32_t nativeErrCode, bool throwErr = true);
 void AccountIAMNapiThrow(napi_env env, int32_t jsErrCode, bool throwErr);
+
+std::string GetNapiValueTypeName(napi_env env, napi_value value);
+napi_value GetPropertyValue(napi_env env, napi_value container, const std::string &propName);
+std::string BuildParamCountError(size_t expectCount, size_t actualCount);
+std::string BuildParamAtLeastCountError(size_t expectCount, size_t actualCount);
+std::string BuildParamTypeError(int index, const std::string &expected, const std::string &actual);
+std::string BuildParamTypeError(napi_env env, int index, napi_value value, const std::string &expected);
+std::string BuildParamRequiredError(int index);
+std::string BuildPropertyTypeError(int index, const std::string &propName, const std::string &expected,
+    const std::string &actual);
+std::string BuildPropertyTypeError(napi_env env, int index, const std::string &propName, napi_value value,
+    const std::string &expected);
+std::string BuildPropertyRequiredError(int index, const std::string &propName);
+
+void ThrowParamTypeError(napi_env env, int index, napi_value value, const std::string &expected,
+    bool throwErr = true);
+void ThrowParamCountError(napi_env env, size_t expectCount, size_t actualCount, bool throwErr = true);
+void ThrowParamAtLeastCountError(napi_env env, size_t expectCount, size_t actualCount, bool throwErr = true);
+void ThrowParamRequiredError(napi_env env, int index, bool throwErr = true);
+void ThrowPropertyTypeError(napi_env env, int index, const std::string &propName, napi_value value,
+    const std::string &expected);
+void ThrowPropertyRequiredError(napi_env env, int index, const std::string &propName, bool throwErr = true);
 } // namespace AccountJsKit
 } // namespace OHOS
 

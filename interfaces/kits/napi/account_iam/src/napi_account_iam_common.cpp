@@ -1034,21 +1034,15 @@ bool ParseParaOnCredChange(const napi_env &env, napi_callback_info cbInfo,
     napi_value thisVar = nullptr;
     NAPI_CALL_BASE(env, napi_get_cb_info(env, cbInfo, &argc, argv, &thisVar, NULL), false);
     if (argc < ARG_SIZE_TWO) {
-        ACCOUNT_LOGE("The number of parameters should be at least 2");
-        std::string errMsg = "Parameter error. The number of parameters should be at least 2";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamAtLeastCountError(env, ARG_SIZE_TWO, argc, true);
         return false;
     }
     if (ParseInt32Array(env, argv[PARAM_ZERO], inputTypes) != napi_ok) {
-        ACCOUNT_LOGE("Parameter error. The type of \"keys\" must be AuthType's array");
-        std::string errMsg = "Parameter error. The type of \"keys\" must be AuthType's array";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "AuthType[]", true);
         return false;
     }
     if (!GetCallbackProperty(env, argv[PARAM_ONE], ref, 1)) {
-        ACCOUNT_LOGE("Get callbackRef failed");
-        std::string errMsg = "Parameter error. The type of \"callback\" must be function";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ONE, argv[PARAM_ONE], "function", true);
         return false;
     }
     return true;
@@ -1065,9 +1059,7 @@ bool ParseParaOffCredChange(const napi_env &env, napi_callback_info cbInfo, napi
         return true;
     }
     if (!GetCallbackProperty(env, argv[PARAM_ZERO], ref, 1)) {
-        ACCOUNT_LOGE("Get callbackRef failed.");
-        std::string errMsg = "Parameter error. The type of 'callback' must be function";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "function", true);
         return false;
     }
     return true;

@@ -92,8 +92,7 @@ static bool ParseContextForOpenSession(
     if (argc > 0) {
         if ((!GetCallbackProperty(env, argv[0], context->callbackRef, 1)) &&
             (!GetOptionIntProperty(env, argv[0], context->accountId, context->parseHasAccountId))) {
-            std::string errMsg = "Parameter error. The type of arg 1 must be function or number";
-            AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+            ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "function or number", true);
             return false;
         }
     }
@@ -108,8 +107,7 @@ static bool ParseContextForCloseSession(
     NAPI_CALL_BASE(env, napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr), false);
     if (argc > 0) {
         if (!GetOptionIntProperty(env, argv[0], context->accountId, context->parseHasAccountId)) {
-            std::string errMsg = "Parameter error. The type of \"accountId\" must be number";
-            AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+            ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "number", true);
             return false;
         }
     }
@@ -168,19 +166,16 @@ static bool ParseContextForUpdateCredential(napi_env env, napi_callback_info inf
     napi_value argv[ARG_SIZE_TWO] = {0};
     NAPI_CALL_BASE(env, napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr), false);
     if (argc < ARG_SIZE_TWO) {
-        std::string errMsg = "Parameter error. The number of parameters should be 2";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamCountError(env, ARG_SIZE_TWO, argc, true);
         return false;
     }
     if (ParseAddCredInfo(env, argv[PARAM_ZERO], *context) != napi_ok) {
-        std::string errMsg = "Parameter error. The type of \"credentialInfo\" must be CredentialInfo";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "CredentialInfo", true);
         return false;
     }
     context->callback = std::make_shared<JsIAMCallback>(env);
     if (ParseIAMCallback(env, argv[PARAM_ONE], context->callback) != napi_ok) {
-        std::string errMsg = "Parameter error. The type of \"callback\" must be function";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ONE, argv[PARAM_ONE], "IIdmCallback", true);
         return false;
     }
     return true;
@@ -267,17 +262,14 @@ napi_value NapiAccountIAMIdentityManager::Cancel(napi_env env, napi_callback_inf
     napi_value argv[ARG_SIZE_ONE] = {0};
     NAPI_CALL(env, napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr));
     if (argc < ARG_SIZE_ONE) {
-        ACCOUNT_LOGE("failed to parse parameters, expect one parameter, but got %{public}zu", argc);
-        std::string errMsg = "Parameter error. The number of parameters should be 1";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamCountError(env, ARG_SIZE_ONE, argc, true);
         return nullptr;
     }
     uint8_t *data = nullptr;
     size_t length = 0;
     napi_status status = ParseUint8TypedArray(env, argv[0], &data, &length);
     if ((status != napi_ok) || (length < sizeof(uint64_t))) {
-        std::string errMsg = "Parameter error. The type of \"challenge\" must be Uint8Array";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "Uint8Array", true);
         return nullptr;
     }
     int32_t ret = AccountIAMClient::GetInstance().Cancel(-1); // -1 indicates the current user
@@ -297,20 +289,16 @@ static napi_status ParseContextForDelUser(napi_env env, napi_callback_info info,
     napi_value argv[ARG_SIZE_TWO] = {0};
     NAPI_CALL_BASE(env, napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr), napi_generic_failure);
     if (argc != ARG_SIZE_TWO) {
-        ACCOUNT_LOGE("failed to parse parameters, expect two parameters, but got one");
-        std::string errMsg = "Parameter error. The number of parameters should be 2";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamCountError(env, ARG_SIZE_TWO, argc, true);
         return napi_invalid_arg;
     }
     if (ParseUint8TypedArrayToVector(env, argv[0], context->token) != napi_ok) {
-        std::string errMsg = "Parameter error. The type of \"token\" must be Uint8Array";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "Uint8Array", true);
         return napi_invalid_arg;
     }
     context->callback = std::make_shared<JsIAMCallback>(env);
     if (ParseIAMCallback(env, argv[PARAM_ONE], context->callback) != napi_ok) {
-        std::string errMsg = "Parameter error. The type of \"callback\" must be function";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ONE, argv[PARAM_ONE], "IIdmCallback", true);
         return napi_invalid_arg;
     }
     return napi_ok;
@@ -343,25 +331,20 @@ static napi_status ParseContextForDelCred(napi_env env, napi_callback_info info,
     napi_value argv[ARG_SIZE_THREE] = {0};
     NAPI_CALL_BASE(env, napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr), napi_generic_failure);
     if (argc < ARG_SIZE_THREE) {
-        ACCOUNT_LOGE("failed to parse parameters, expect three parameters, but got %zu", argc);
-        std::string errMsg = "Parameter error. The number of parameters should be 3";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamCountError(env, ARG_SIZE_THREE, argc, true);
         return napi_invalid_arg;
     }
     if (ParseUint8TypedArrayToUint64(env, argv[0], context->credentialId) != napi_ok) {
-        std::string errMsg = "Parameter error. The type of \"credentialId\" must be Uint8Array";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "Uint8Array", true);
         return napi_invalid_arg;
     }
     if (ParseUint8TypedArrayToVector(env, argv[PARAM_ONE], context->token) != napi_ok) {
-        std::string errMsg = "Parameter error. The type of \"token\" must be Uint8Array";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ONE, argv[PARAM_ONE], "Uint8Array", true);
         return napi_invalid_arg;
     }
     context->callback = std::make_shared<JsIAMCallback>(env);
     if (ParseIAMCallback(env, argv[PARAM_TWO], context->callback) != napi_ok) {
-        std::string errMsg = "Parameter error. The type of \"callback\" must be function";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_TWO, argv[PARAM_TWO], "IIdmCallback", true);
         return napi_invalid_arg;
     }
     return napi_ok;
@@ -410,24 +393,18 @@ static napi_status ParseOneParamForGetAuthInfo(napi_env env, GetAuthInfoContext 
     NAPI_CALL_BASE(env, napi_typeof(env, argv, &valueType), napi_generic_failure);
     if (valueType == napi_function) {
         if (!GetCallbackProperty(env, argv, context->callbackRef, 1)) {
-            ACCOUNT_LOGE("Get callbackRef failed");
-            std::string errMsg = "Parameter error. The type of \"callback\" must be function";
-            AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+            ThrowParamTypeError(env, PARAM_ZERO, argv, "function", true);
             return napi_invalid_arg;
         }
     } else if (valueType == napi_number) {
         if (!GetIntProperty(env, argv, authType)) {
-            ACCOUNT_LOGE("Get authType failed");
-            std::string errMsg = "Parameter error. The type of \"authType\" must be AuthType";
-            AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+            ThrowParamTypeError(env, PARAM_ZERO, argv, "AuthType", true);
             return napi_invalid_arg;
         }
         NAPI_CALL_BASE(env, napi_create_promise(env, &context->deferred, result), napi_generic_failure);
     } else if (valueType == napi_object) {
         if (!ParseGetAuthInfoOptions(env, argv, context, authType)) {
-            ACCOUNT_LOGE("Parse GetAuthInfoOptions failed");
-            std::string errMsg = "Parameter error. The type of \"options\" must be object";
-            AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+            ThrowParamTypeError(env, PARAM_ZERO, argv, "GetAuthInfoOptions", true);
             return napi_invalid_arg;
         }
         NAPI_CALL_BASE(env, napi_create_promise(env, &context->deferred, result), napi_generic_failure);
@@ -435,9 +412,7 @@ static napi_status ParseOneParamForGetAuthInfo(napi_env env, GetAuthInfoContext 
         ACCOUNT_LOGI("the arg 1 is undefined or null");
         NAPI_CALL_BASE(env, napi_create_promise(env, &context->deferred, result), napi_generic_failure);
     } else {
-        ACCOUNT_LOGE("Get arg 1 failed");
-        std::string errMsg = "Parameter error. The type of arg 1 must be AuthType, function or object";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ZERO, argv, "AuthType, function or GetAuthInfoOptions", true);
         return napi_invalid_arg;
     }
     return napi_ok;
@@ -461,9 +436,7 @@ static napi_status ParseContextForGetAuthInfo(
     }
     if (argc == ARG_SIZE_TWO) {
         if (!GetCallbackProperty(env, argv[PARAM_ONE], context->callbackRef, 1)) {
-            ACCOUNT_LOGE("Get callbackRef failed");
-            std::string errMsg = "Parameter error. The type of \"callback\" must be function";
-            AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+            ThrowParamTypeError(env, PARAM_ONE, argv[PARAM_ONE], "function", true);
             return napi_invalid_arg;
         }
         napi_valuetype valueType = napi_undefined;
@@ -472,9 +445,7 @@ static napi_status ParseContextForGetAuthInfo(
             ACCOUNT_LOGI("the authType is undefined or null");
         } else {
             if (!GetIntProperty(env, argv[PARAM_ZERO], authType)) {
-                ACCOUNT_LOGE("Get authType failed");
-                std::string errMsg = "Parameter error. The type of \"authType\" must be AuthType";
-                AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+                ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "AuthType", true);
                 return napi_invalid_arg;
             }
         }
@@ -525,18 +496,18 @@ static bool ParseContextForGetEnrolledId(
 
     NAPI_CALL_BASE(env, napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr), false);
     if (argc < ARG_SIZE_ONE) {
-        errMsg = "Parameter error. the parameter of number should be at least one";
+        errMsg = BuildParamAtLeastCountError(ARG_SIZE_ONE, argc);
         return false;
     }
     if (argc == ARG_SIZE_TWO) {
         if (!GetOptionIntProperty(env, argv[argc - 1], context->accountId, context->parseHasAccountId)) {
-            errMsg = "Parameter error. the type of \"accountId\" must be number";
+            errMsg = BuildParamTypeError(env, static_cast<int>(argc - 1), argv[argc - 1], "number");
             return false;
         }
     }
     int32_t authType = 0;
     if (!GetIntProperty(env, argv[0], authType)) {
-        errMsg = "Parameter error. the type of \"authType\" must be AuthType";
+        errMsg = BuildParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "AuthType");
         return false;
     }
     context->authType = static_cast<AuthType>(authType);

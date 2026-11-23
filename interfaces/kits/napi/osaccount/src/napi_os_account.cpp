@@ -992,15 +992,11 @@ static bool ParseUidFromCbInfo(napi_env env, napi_callback_info cbInfo, int32_t 
     napi_value argv[ARGS_SIZE_ONE] = {0};
     napi_get_cb_info(env, cbInfo, &argc, argv, nullptr, nullptr);
     if (argc == 0) {
-        ACCOUNT_LOGE("The number of parameters should be at least 1.");
-        std::string errMsg = "Parameter error. The number of parameters should be at least 1";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamAtLeastCountError(env, ARGS_SIZE_ONE, argc, true);
         return false;
     }
     if (!GetIntProperty(env, argv[0], uid)) {
-        ACCOUNT_LOGE("Get uid failed.");
-        std::string errMsg = "Parameter error. The type of \"uid\" must be number";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAMZERO, argv[PARAMZERO], "number", true);
         return false;
     }
     return true;

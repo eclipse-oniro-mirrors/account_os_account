@@ -58,9 +58,7 @@ napi_value OnSetData(napi_env env, napi_callback_info info)
     napi_value argv[ARG_SIZE_TWO] = {nullptr};
     NAPI_CALL(env, napi_get_cb_info(env, info, &argc, argv, &thisVar, nullptr));
     if (argc != ARG_SIZE_TWO) {
-        ACCOUNT_LOGE("Failed to parse parameters, expect two parameters, but got %{public}zu", argc);
-        std::string errMsg = "Parameter error. The number of parameters should be 2";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamCountError(env, ARG_SIZE_TWO, argc, true);
         return nullptr;
     }
     InputerContext *context = nullptr;
@@ -71,16 +69,12 @@ napi_value OnSetData(napi_env env, napi_callback_info info)
     }
     int32_t authSubType;
     if (!GetIntProperty(env, argv[PARAM_ZERO], authSubType)) {
-        ACCOUNT_LOGE("Get authSubType failed");
-        std::string errMsg = "Parameter error. The type of \"authSubType\" must be AuthSubType";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ZERO, argv[PARAM_ZERO], "AuthSubType", true);
         return nullptr;
     }
     std::vector<uint8_t> data;
     if (ParseUint8TypedArrayToVector(env, argv[PARAM_ONE], data) != napi_ok) {
-        ACCOUNT_LOGE("Get data failed");
-        std::string errMsg = "Parameter error. The type of \"data\" must be Uint8Array";
-        AccountNapiThrow(env, ERR_JS_PARAMETER_ERROR, errMsg, true);
+        ThrowParamTypeError(env, PARAM_ONE, argv[PARAM_ONE], "Uint8Array", true);
         return nullptr;
     }
     ACCOUNT_LOGI("Call OnSetData, authSubType: %{public}d", authSubType);
