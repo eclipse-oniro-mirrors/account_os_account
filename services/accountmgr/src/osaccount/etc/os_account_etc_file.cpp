@@ -23,6 +23,7 @@
 #include "account_hisysevent_adapter.h"
 #include "account_log_wrapper.h"
 #include "os_account_constants.h"
+#include "pinyin_converter.h"
 
 namespace OHOS {
 namespace AccountSA {
@@ -81,6 +82,58 @@ bool ParseInt32(const std::string &str, int32_t &value)
 bool IsBlankLine(const std::string &line)
 {
     return line.empty() || line.find_first_not_of(" \t\r") == std::string::npos;
+}
+
+bool IsEtcNameChar(unsigned char c)
+{
+    return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_';
+}
+
+bool IsEtcNameLeadingChar(unsigned char c)
+{
+    return c >= 'a' && c <= 'z';
+}
+
+std::string SanitizeToEtcName(const std::string &baseName)
+{
+    std::string candidate;
+    if (!PinyinConverter::ConvertToPinyin(baseName, candidate)) {
+        candidate = baseName;
+    }
+    std::transform(candidate.begin(), candidate.end(), candidate.begin(),
+        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    candidate.erase(std::remove_if(candidate.begin(), candidate.end(),
+        [](unsigned char c) { return !IsEtcNameChar(c); }), candidate.end());
+    constexpr size_t truncateSize = EtcAccountFileUtils::ETC_NAME_MAX_SIZE -
+        EtcAccountFileUtils::ETC_NAME_SUFFIX_RESERVE;
+    if (candidate.size() > truncateSize) {
+        candidate = candidate.substr(0, truncateSize);
+    }
+    if (candidate.empty() || !IsEtcNameLeadingChar(static_cast<unsigned char>(candidate[0]))) {
+        candidate = EtcAccountFileUtils::ETC_NAME_DEFAULT_PREFIX + candidate;
+    }
+    return candidate;
+}
+
+bool ResolveEtcNameConflict(const std::string &candidate, const std::set<std::string> &takenNames,
+    std::string &newName)
+{
+    if (takenNames.count(candidate) == 0) {
+        newName = candidate;
+        return true;
+    }
+    for (uint32_t suffix = 1; suffix <= EtcAccountFileUtils::ETC_NAME_SUFFIX_MAX; ++suffix) {
+        std::string tryName = candidate + std::to_string(suffix);
+        if (tryName.size() > EtcAccountFileUtils::ETC_NAME_MAX_SIZE) {
+            break;
+        }
+        if (takenNames.count(tryName) == 0) {
+            newName = tryName;
+            return true;
+        }
+    }
+    ACCOUNT_LOGE("Rename suffix exhausted");
+    return false;
 }
 
 std::string GetEtcFilePath(const std::string &fileName)
@@ -247,6 +300,88 @@ ErrCode EtcAccountFileUtils::IsEtcFaultFlagFileExist(bool &isExist)
     }
     isExist = true;
     return ERR_OK;
+}
+
+ErrCode EtcAccountFileUtils::CreateEtcMigrationFlagFile()
+{
+    AccountFileOperator fileOperator;
+    return fileOperator.InputFileByPathAndContent(GetEtcFilePath(ETC_MIGRATION_FLAG_NAME), "");
+}
+
+ErrCode EtcAccountFileUtils::IsEtcMigrationFlagExist(bool &isExist)
+{
+    isExist = false;
+    AccountFileOperator fileOperator;
+    ErrCode ret = fileOperator.CheckFileExistence(GetEtcFilePath(ETC_MIGRATION_FLAG_NAME));
+    if (ret == ERR_ACCOUNT_COMMON_FILE_NOT_EXIST) {
+        return ERR_OK;
+    }
+    if (ret != ERR_OK) {
+        ACCOUNT_LOGE("Find etc migration flag file failed, ret = %{public}d", ret);
+        return ret;
+    }
+    isExist = true;
+    return ERR_OK;
+}
+
+bool EtcAccountFileUtils::IsMigrationNameCompliant(const std::string &userName)
+{
+    if (userName.empty() || userName.size() > ETC_NAME_MAX_SIZE) {
+        return false;
+    }
+    if (!IsEtcNameLeadingChar(static_cast<unsigned char>(userName[0]))) {
+        return false;
+    }
+    for (char c : userName) {
+        if (!IsEtcNameChar(static_cast<unsigned char>(c))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool EtcAccountFileUtils::GenerateCompliantShortName(const std::string &baseName, int32_t localId,
+    const std::set<std::string> &takenNames, std::string &newName)
+{
+    std::string candidate = SanitizeToEtcName(baseName);
+    if (!ResolveEtcNameConflict(candidate, takenNames, newName)) {
+        ACCOUNT_LOGE("Generate compliant short name failed, localId = %{public}d", localId);
+        return false;
+    }
+    if (!IsMigrationNameCompliant(newName)) {
+        ACCOUNT_LOGE("Final validation failed, localId = %{public}d", localId);
+        return false;
+    }
+    return true;
+}
+
+void EtcAccountFileUtils::BuildRenamePlan(const std::vector<OsAccountInfo> &osAccountInfos,
+    std::vector<OsAccountInfo> &renamePlan)
+{
+    std::set<std::string> takenNames = { RESERVED_USER_NAME };
+    for (const auto &info : osAccountInfos) {
+        if (!info.GetShortName().empty()) {
+            takenNames.insert(info.GetShortName());
+        }
+    }
+    for (const auto &info : osAccountInfos) {
+        if (!info.GetIsCreateCompleted() || info.GetToBeRemoved() ||
+            IsMigrationNameCompliant(info.GetShortName())) {
+            continue;
+        }
+        std::string baseName = info.GetShortName().empty() ? info.GetLocalName() : info.GetShortName();
+        std::string newName;
+        if (!GenerateCompliantShortName(baseName, info.GetLocalId(), takenNames, newName)) {
+            ACCOUNT_LOGE("Migration rename unexpectedly failed for localId %{public}d, skip.",
+                info.GetLocalId());
+            continue;
+        }
+        takenNames.insert(newName);
+        OsAccountInfo renamed = info;
+        renamed.SetOldShortName(info.GetShortName());
+        renamed.SetShortName(newName);
+        renamePlan.push_back(renamed);
+    }
 }
 
 void EtcAccountFileUtils::SplitContentToLines(const std::string &content, std::vector<std::string> &lines)

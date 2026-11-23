@@ -150,6 +150,9 @@ public:
     bool CheckAndCleanOsAccounts();
     ErrCode GetRealOsAccountInfoById(const int id, OsAccountInfo &osAccountInfo);
     void CleanGarbageOsAccountsAsync() override;
+#ifdef SUPPORT_ETC_USER_SYNC
+    void CheckAndRecoverEtcFile();
+#endif // SUPPORT_ETC_USER_SYNC
 #ifdef SUPPORT_DOMAIN_ACCOUNTS
     ErrCode BindDomainAccount(const OsAccountType &type, const DomainAccountInfo &domainAccountInfo,
         OsAccountInfo &osAccountInfo, const CreateOsAccountForDomainOptions &options = {});

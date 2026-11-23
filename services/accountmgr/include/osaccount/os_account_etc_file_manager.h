@@ -16,6 +16,8 @@
 #ifndef OS_ACCOUNT_SERVICES_ACCOUNTMGR_INCLUDE_OSACCOUNT_OS_ACCOUNT_ETC_FILE_MANAGER_H
 #define OS_ACCOUNT_SERVICES_ACCOUNTMGR_INCLUDE_OSACCOUNT_OS_ACCOUNT_ETC_FILE_MANAGER_H
 
+#include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include "errors.h"
@@ -26,19 +28,28 @@ namespace AccountSA {
 #ifdef SUPPORT_ETC_USER_SYNC
 class OsAccountControlFileManager;
 
-class OsAccountEtcFileManager {
+class OsAccountEtcFileManager : public std::enable_shared_from_this<OsAccountEtcFileManager> {
 public:
     OsAccountEtcFileManager(const std::weak_ptr<OsAccountControlFileManager> &weakPtr) : weakPtr_(weakPtr) {}
     ~OsAccountEtcFileManager() = default;
     ErrCode FlushEtcFilesSync();
     ErrCode SyncEtcForCreate(const OsAccountInfo &osAccountInfo);
     ErrCode SyncEtcForRemove(const OsAccountInfo &osAccountInfo);
+    bool RecoverEtcFiles();
     void CheckAndRecover();
 private:
+    ErrCode MigrateAndSync();
+    ErrCode MigrateAndSyncInner();
+    ErrCode ReconcileEtcFiles();
+    bool RefreshTakenNamesAndResolve(const std::shared_ptr<OsAccountControlFileManager> &shared,
+        int32_t localId, std::string &name);
+    ErrCode ApplyRenamePlan(const std::vector<OsAccountInfo> &renamePlan);
+    void PostAsyncTask(const std::function<ErrCode()> &task);
     ErrCode ModifyEtcUser(const OsAccountInfo &osAccountInfo);
     ErrCode DeleteEtcUser(const OsAccountInfo &osAccountInfo);
     ErrCode FlushEtcFilesSyncLocked();
     std::mutex etcFileLock_;
+    std::atomic<bool> migrationInProgress_{false};
     std::weak_ptr<OsAccountControlFileManager> weakPtr_;
 };
 #endif // SUPPORT_ETC_USER_SYNC

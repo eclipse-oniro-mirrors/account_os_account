@@ -487,7 +487,12 @@ ohos_shared_library("accountmgr") {
     cflags_cc += [ "-DSUPPORT_ETC_USER_SYNC" ]
     sources += [ "src/osaccount/etc/os_account_etc_file.cpp" ]
     sources += [ "src/osaccount/etc/os_account_etc_file_manager.cpp" ]
+    sources += [ "src/osaccount/etc/pinyin_converter.cpp" ]
     external_deps += [ "selinux_adapter:librestorecon" ]
+    external_deps += [
+      "icu:shared_icui18n",
+      "icu:shared_icuuc",
+    ]
   }
 
   if (build_variant == "user") {
@@ -900,7 +905,12 @@ ohos_source_set("accountmgr_test_source_set") {
     cflags_cc += [ "-DSUPPORT_ETC_USER_SYNC" ]
     sources += [ "src/osaccount/etc/os_account_etc_file.cpp" ]
     sources += [ "src/osaccount/etc/os_account_etc_file_manager.cpp" ]
-    external_deps += [ "selinux_adapter:librestorecon" ]
+    sources += [ "src/osaccount/etc/pinyin_converter.cpp" ]
+    external_deps += [
+      "selinux_adapter:librestorecon",
+      "icu:shared_icui18n",
+      "icu:shared_icuuc",
+    ]
   }
 
   if (build_variant == "user") {

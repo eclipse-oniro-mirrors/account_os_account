@@ -16,6 +16,7 @@
 #define OS_ACCOUNT_SERVICES_ACCOUNTMGR_INCLUDE_OSACCOUNT_OS_ACCOUNT_ETC_FILE_H
 
 #include <cstdint>
+#include <set>
 #include <string>
 #include <vector>
 #include "errors.h"
@@ -56,6 +57,12 @@ public:
     static constexpr const char *PASSWD_FILE_NAME = "passwd";
     static constexpr const char *GROUP_FILE_NAME = "group";
     static constexpr const char *ETC_FAULT_FLAG_NAME = ".etc_fault_flag";
+    static constexpr const char *ETC_MIGRATION_FLAG_NAME = ".etc_migration_done";
+    static constexpr const char *RESERVED_USER_NAME = "root";
+    static constexpr size_t ETC_NAME_MAX_SIZE = 60;
+    static constexpr uint32_t ETC_NAME_SUFFIX_MAX = 999;
+    static constexpr size_t ETC_NAME_SUFFIX_RESERVE = 4;
+    static constexpr char ETC_NAME_DEFAULT_PREFIX = 'a';
     static constexpr const char *NORMAL_GROUP_NAME = "normal";
     static constexpr const char *ADMIN_GROUP_NAME = "admin";
     static constexpr int32_t NORMAL_GROUP_GID = 20;
@@ -78,6 +85,13 @@ public:
     static bool ParseGroupContent(const std::string &content, std::vector<EtcGroupEntry> &entries);
     static bool IsEtcUserNameRepresentable(const std::string &userName);
     static bool IsGroupMemberRepresentable(const std::string &userName);
+    static ErrCode CreateEtcMigrationFlagFile();
+    static ErrCode IsEtcMigrationFlagExist(bool &isExist);
+    static bool IsMigrationNameCompliant(const std::string &userName);
+    static bool GenerateCompliantShortName(const std::string &baseName, int32_t localId,
+        const std::set<std::string> &takenNames, std::string &newName);
+    static void BuildRenamePlan(const std::vector<OsAccountInfo> &osAccountInfos,
+        std::vector<OsAccountInfo> &renamePlan);
     static ErrCode BuildExpectedEtcContent(const std::vector<OsAccountInfo> &osAccountInfos,
         std::string &passwdContent, std::string &groupContent);
 };

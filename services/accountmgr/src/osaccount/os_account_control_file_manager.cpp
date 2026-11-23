@@ -407,7 +407,7 @@ void OsAccountControlFileManager::Init()
 #endif // SUPPORT_POSIX_ADAPTER
 #ifdef SUPPORT_ETC_USER_SYNC
     osAccountEtcFileManager_ = std::make_shared<OsAccountEtcFileManager>(weak_from_this());
-    CheckAndRecoverEtcFile();
+    (void)osAccountEtcFileManager_->RecoverEtcFiles();
 #endif // SUPPORT_ETC_USER_SYNC
     ACCOUNT_LOGI("OsAccountControlFileManager Init end");
 }
