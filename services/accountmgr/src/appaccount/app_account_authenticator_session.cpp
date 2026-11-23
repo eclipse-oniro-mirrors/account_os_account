@@ -253,6 +253,7 @@ void AppAccountAuthenticatorSession::OnAbilityConnectInner(const AppAccountAuthe
 
 void AppAccountAuthenticatorSession::OnAbilityDisconnectDone(const AppExecFwk::ElementName &element, int resultCode)
 {
+    std::lock_guard<std::mutex> lock(mutex_);
     isConnected_ = false;
 }
 
@@ -264,6 +265,11 @@ void AppAccountAuthenticatorSession::OnServerDied()
 
 int32_t AppAccountAuthenticatorSession::OnResult(int32_t resultCode, const AAFwk::Want &result) const
 {
+    bool expected = false;
+    if (!resultSent_.compare_exchange_strong(expected, true)) {
+        ACCOUNT_LOGI("OnResult already sent, skip duplicate call");
+        return resultCode;
+    }
     if (resultCode == ERR_JS_SUCCESS) {
         switch (action_) {
             case ADD_ACCOUNT_IMPLICITLY:
@@ -295,8 +301,11 @@ int32_t AppAccountAuthenticatorSession::OnRequestRedirected(AAFwk::Want &newRequ
         return ERR_JS_SUCCESS;
     }
     if ((!request_.callback) || (!request_.callback->AsObject())) {
-        if (isConnected_) {
-            AbilityManagerAdapter::GetInstance()->DisconnectAbility(conn_);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (isConnected_) {
+                AbilityManagerAdapter::GetInstance()->DisconnectAbility(conn_);
+            }
         }
         CloseSelf();
         return ERR_JS_SUCCESS;
@@ -317,8 +326,11 @@ int32_t AppAccountAuthenticatorSession::OnRequestRedirected(AAFwk::Want &newRequ
 int32_t AppAccountAuthenticatorSession::OnRequestContinued() const
 {
     if ((!request_.callback) || (!request_.callback->AsObject())) {
-        if (isConnected_) {
-            AbilityManagerAdapter::GetInstance()->DisconnectAbility(conn_);
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (isConnected_) {
+                AbilityManagerAdapter::GetInstance()->DisconnectAbility(conn_);
+            }
         }
         CloseSelf();
         return ERR_JS_SUCCESS;

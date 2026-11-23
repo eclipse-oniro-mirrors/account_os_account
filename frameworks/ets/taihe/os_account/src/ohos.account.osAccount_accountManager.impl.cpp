@@ -1065,7 +1065,7 @@ public:
 
     bool CheckMultiOsAccountEnabled()
     {
-        bool isMultiOAEnabled;
+        bool isMultiOAEnabled = false;
         ErrCode errCode = AccountSA::OsAccountManager::IsMultiOsAccountEnable(isMultiOAEnabled);
         if (errCode != ERR_OK) {
             ACCOUNT_LOGE("CheckMultiOsAccountEnabled failed with errCode: %{public}d", errCode);
@@ -1135,7 +1135,7 @@ public:
 
     bool IsOsAccountActivatedSync(int32_t localId)
     {
-        bool isOsAccountActived;
+        bool isOsAccountActived = false;
         if (AccountSA::AccountPermissionManager::CheckSystemApp(false) != ERR_OK) {
             SetTaiheBusinessErrorFromNativeCode(ERR_JS_IS_NOT_SYSTEM_APP);
             return isOsAccountActived;
@@ -1174,7 +1174,7 @@ public:
 
     bool IsOsAccountConstraintEnabledWithId(int32_t localId, string_view constraint)
     {
-        bool isConsEnabled;
+        bool isConsEnabled = false;
         if (AccountSA::AccountPermissionManager::CheckSystemApp(false) != ERR_OK) {
             SetTaiheBusinessErrorFromNativeCode(ERR_JS_IS_NOT_SYSTEM_APP);
             return isConsEnabled;

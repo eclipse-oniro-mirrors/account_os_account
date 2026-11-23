@@ -333,6 +333,38 @@ HWTEST_F(AppAccountSessionModuleTest, AppAccountSessionModuleTest_OnResult_0100,
 }
 
 /**
+ * @tc.name: AppAccountAuthenticateTest_OnResult_0200
+ * @tc.desc: test session func OnResult CAS one-shot: duplicate call invokes callback only once.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(AppAccountSessionModuleTest, AppAccountSessionModuleTest_OnResult_0200, TestSize.Level1)
+{
+    AuthenticatorAction action = AUTHENTICATE;
+    AuthenticatorSessionRequest request;
+    std::uint64_t id = 0;
+    request.name = PARAM_VALUE;
+    auto testCallBack = new (std::nothrow) MockAuthenticatorCallback();
+    ASSERT_NE(testCallBack, nullptr);
+    request.callback = testCallBack;
+    ASSERT_NE(request.callback, nullptr);
+    AAFwk::Want result;
+    result.SetParam(Constants::KEY_NAME, PARAM_VALUE);
+    auto session = std::make_shared<AppAccountAuthenticatorSession>(action, request, id);
+    ASSERT_NE(session, nullptr);
+    ASSERT_EQ(session->resultSent_.load(), false);
+
+    EXPECT_CALL(*testCallBack, OnResult(_, _)).Times(Exactly(1));
+    int32_t firstResult = session->OnResult(ERR_JS_SUCCESS, result);
+    ASSERT_EQ(firstResult, ERR_JS_SUCCESS);
+    ASSERT_EQ(session->resultSent_.load(), true);
+
+    int32_t secondResult = session->OnResult(ERR_JS_SUCCESS, result);
+    ASSERT_EQ(secondResult, ERR_JS_SUCCESS);
+    ASSERT_EQ(session->resultSent_.load(), true);
+}
+
+/**
  * @tc.name: AppAccountAuthenticateTest_GetAuthenticatorCallback_0100
  * @tc.desc: test func GetAuthenticatorCallback callerUid not equal ownerUid and callerBundleName not equal owner.
  * @tc.type: FUNC

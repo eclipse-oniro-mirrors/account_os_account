@@ -159,6 +159,10 @@ ErrCode AccountDataStorage::RemoveValueFromKvStore(const std::string &keyStr)
     std::string value;
     {
         std::lock_guard<std::recursive_mutex> lock(kvStorePtrMutex_);
+        if (kvStorePtr_ == nullptr) {
+            ACCOUNT_LOGE("kvStorePtr_ is nullptr");
+            return ERR_ACCOUNT_COMMON_CHECK_KVSTORE_ERROR;
+        }
         // check exist
         TryTwice([this, &status, &keyStr, &value] {
             status = kvStorePtr_->Get(keyStr, value);
@@ -188,6 +192,10 @@ DbAdapterStatus AccountDataStorage::GetEntries(
     std::string subId, std::vector<DbAdapterEntry> &allEntries) const
 {
     std::lock_guard<std::recursive_mutex> lock(kvStorePtrMutex_);
+    if (kvStorePtr_ == nullptr) {
+        ACCOUNT_LOGE("kvStorePtr_ is nullptr");
+        return DbAdapterStatus::INTERNAL_ERROR;
+    }
     DbAdapterStatus status = kvStorePtr_->GetEntries(subId, allEntries);
 
     return status;
@@ -298,6 +306,10 @@ ErrCode AccountDataStorage::PutValueToKvStore(const std::string &keyStr, const s
     DbAdapterStatus status = DbAdapterStatus::SUCCESS;
     {
         std::lock_guard<std::recursive_mutex> lock(kvStorePtrMutex_);
+        if (kvStorePtr_ == nullptr) {
+            ACCOUNT_LOGE("kvStorePtr_ is nullptr");
+            return ERR_ACCOUNT_COMMON_CHECK_KVSTORE_ERROR;
+        }
         status = kvStorePtr_->Put(keyStr, valueStr);
         if (status == DbAdapterStatus::IPC_ERROR) {
             status = kvStorePtr_->Put(keyStr, valueStr);
@@ -322,6 +334,10 @@ ErrCode AccountDataStorage::GetValueFromKvStore(const std::string &keyStr, std::
     DbAdapterStatus status ;
     {
         std::lock_guard<std::recursive_mutex> lock(kvStorePtrMutex_);
+        if (kvStorePtr_ == nullptr) {
+            ACCOUNT_LOGE("kvStorePtr_ is nullptr");
+            return ERR_ACCOUNT_COMMON_CHECK_KVSTORE_ERROR;
+        }
         status = kvStorePtr_->Get(keyStr, valueStr);
         if (status == DbAdapterStatus::IPC_ERROR) {
             ACCOUNT_LOGE("kvstore ipc error and try again, status = %{public}d", status);
@@ -392,6 +408,11 @@ ErrCode AccountDataStorage::StartTransaction()
     DbAdapterStatus status;
     {
         std::lock_guard<std::recursive_mutex> lock(kvStorePtrMutex_);
+        if (kvStorePtr_ == nullptr) {
+            ACCOUNT_LOGE("KvStore is nullptr");
+            transactionMutex_.unlock();
+            return ERR_ACCOUNT_COMMON_CHECK_KVSTORE_ERROR;
+        }
         TryTwice([this, &status] {
             status = kvStorePtr_->StartTransaction();
             return status;
@@ -414,6 +435,10 @@ ErrCode AccountDataStorage::Commit()
     DbAdapterStatus status;
     {
         std::lock_guard<std::recursive_mutex> lock(kvStorePtrMutex_);
+        if (kvStorePtr_ == nullptr) {
+            ACCOUNT_LOGE("KvStore is nullptr");
+            return ERR_ACCOUNT_COMMON_CHECK_KVSTORE_ERROR;
+        }
         TryTwice([this, &status] {
             status = kvStorePtr_->Commit();
             return status;
@@ -438,6 +463,11 @@ ErrCode AccountDataStorage::Rollback()
     DbAdapterStatus status;
     {
         std::lock_guard<std::recursive_mutex> lock(kvStorePtrMutex_);
+        if (kvStorePtr_ == nullptr) {
+            ACCOUNT_LOGE("KvStore is nullptr");
+            transactionMutex_.unlock();
+            return ERR_ACCOUNT_COMMON_CHECK_KVSTORE_ERROR;
+        }
         TryTwice([this, &status] {
             status = kvStorePtr_->Rollback();
             return status;

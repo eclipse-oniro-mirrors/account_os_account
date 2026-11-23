@@ -261,3 +261,22 @@ HWTEST_F(KvStoreAdapterTest, AccountDataStorageErrTest_0200, TestSize.Level1)
     errCode = dataStorage->Rollback();
     EXPECT_EQ(errCode, OHOS::ERR_OSACCOUNT_SERVICE_MANAGER_QUERY_DISTRIBUTE_DATA_ERROR);
 }
+
+/**
+ * @tc.name: AccountDataStorageErrTest_0300
+ * @tc.desc: Test GetEntries when kvStorePtr_ is nullptr returns INTERNAL_ERROR.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(KvStoreAdapterTest, AccountDataStorageErrTest_0300, TestSize.Level1)
+{
+    DbAdapterOptions options;
+    auto dataStorage = std::make_shared<TestAccountDataStorage>(TEST_STORE_ID, options);
+    ASSERT_NE(dataStorage, nullptr);
+    EXPECT_EQ(dataStorage->kvStorePtr_, nullptr);
+
+    std::vector<DbAdapterEntry> allEntries;
+    DbAdapterStatus status = dataStorage->GetEntries("", allEntries);
+    EXPECT_EQ(status, DbAdapterStatus::INTERNAL_ERROR);
+    EXPECT_TRUE(allEntries.empty());
+}
