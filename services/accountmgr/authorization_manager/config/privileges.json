@@ -61,6 +61,10 @@
         {
             "name":"ohos.privilege.manage_launch_service_status",
             "description":"Manage the status of a launch service"
+        },
+        {
+            "name":"ohos.privilege.modify_print_settings",
+            "description":"Modify printer or scanner settings"
         }
     ]
 }
