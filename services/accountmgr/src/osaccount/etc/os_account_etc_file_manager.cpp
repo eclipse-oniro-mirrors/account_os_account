@@ -15,7 +15,9 @@
 
 #include "os_account_etc_file_manager.h"
 #include <algorithm>
+#include <chrono>
 #include <set>
+#include <thread>
 #include "account_hisysevent_adapter.h"
 #include "account_log_wrapper.h"
 #include "os_account_etc_file.h"
@@ -26,9 +28,17 @@
 namespace OHOS {
 namespace AccountSA {
 #ifdef SUPPORT_ETC_USER_SYNC
+namespace {
+constexpr int32_t MAX_ETC_RETRY_TIMES = 3;
+constexpr int32_t MAX_ETC_RETRY_INTERVAL_MS = 100;
+} // namespace
 
 ErrCode OsAccountEtcFileManager::SyncEtcForCreate(const OsAccountInfo &osAccountInfo)
 {
+    if (migrationInProgress_.load()) {
+        ACCOUNT_LOGI("Skip etc sync during migration, localId = %{public}d", osAccountInfo.GetLocalId());
+        return ERR_OK;
+    }
     bool flagExist = false;
     bool passwdExist = false;
     ErrCode ret = EtcAccountFileUtils::IsEtcFaultFlagFileExist(flagExist);
@@ -54,6 +64,10 @@ ErrCode OsAccountEtcFileManager::SyncEtcForCreate(const OsAccountInfo &osAccount
 
 ErrCode OsAccountEtcFileManager::SyncEtcForRemove(const OsAccountInfo &osAccountInfo)
 {
+    if (migrationInProgress_.load()) {
+        ACCOUNT_LOGI("Skip etc sync during migration, localId = %{public}d", osAccountInfo.GetLocalId());
+        return ERR_OK;
+    }
     ErrCode ret = DeleteEtcUser(osAccountInfo);
     if (ret == ERR_OK) {
         ACCOUNT_LOGI("Sync etc files for removed account %{public}d success", osAccountInfo.GetLocalId());
@@ -67,7 +81,7 @@ ErrCode OsAccountEtcFileManager::SyncEtcForRemove(const OsAccountInfo &osAccount
     return ret;
 }
 
-void OsAccountEtcFileManager::CheckAndRecover()
+bool OsAccountEtcFileManager::RecoverEtcFiles()
 {
     bool etcFaultFlagExist = false;
     bool etcPasswdExist = false;
@@ -83,14 +97,219 @@ void OsAccountEtcFileManager::CheckAndRecover()
         ACCOUNT_LOGE("Check etc file state failed, ret = %{public}d.", ret);
         REPORT_OS_ACCOUNT_FAIL(0, Constants::OPERATION_ETC_FILE, ret, "Check etc file state failed");
         ret = FlushEtcFilesSync();
-    }
-    if (etcFaultFlagExist || !etcPasswdExist || !etcGroupExist) {
+    } else if (etcFaultFlagExist || !etcPasswdExist || !etcGroupExist) {
         ACCOUNT_LOGW("Etc file is in fault state or does not exist, need flush etc file.");
         ret = FlushEtcFilesSync();
+    } else {
+        return true;
     }
     if (ret != ERR_OK) {
         ACCOUNT_LOGE("Flush etc file failed, ret = %{public}d.", ret);
         REPORT_OS_ACCOUNT_FAIL(0, Constants::OPERATION_ETC_FILE, ret, "Flush etc file failed");
+    }
+    return false;
+}
+
+void OsAccountEtcFileManager::CheckAndRecover()
+{
+#ifndef ACCOUNT_TEST
+    bool migrationDone = false;
+    ErrCode migRet = EtcAccountFileUtils::IsEtcMigrationFlagExist(migrationDone);
+    if (migRet != ERR_OK || !migrationDone) {
+        ACCOUNT_LOGI("Etc migration is not finished, start migration.");
+        ErrCode ret = MigrateAndSync();
+        if (ret != ERR_OK) {
+            ACCOUNT_LOGE("Etc migration failed, ret = %{public}d, retry on next boot.", ret);
+            REPORT_OS_ACCOUNT_FAIL(0, Constants::OPERATION_ETC_FILE, ret, "Etc migration failed");
+        }
+        PostAsyncTask([sharedThis = shared_from_this()]() {
+            return sharedThis->ReconcileEtcFiles();
+        });
+        return;
+    }
+#endif
+    if (!RecoverEtcFiles()) {
+        return;
+    }
+#ifndef ACCOUNT_TEST
+    PostAsyncTask([sharedThis = shared_from_this()]() {
+        return sharedThis->ReconcileEtcFiles();
+    });
+#endif
+}
+
+ErrCode OsAccountEtcFileManager::MigrateAndSync()
+{
+    TraceGuard traceGuard("EtcFileMigrate");
+    migrationInProgress_.store(true);
+    ErrCode ret = MigrateAndSyncInner();
+    migrationInProgress_.store(false);
+    return ret;
+}
+
+ErrCode OsAccountEtcFileManager::MigrateAndSyncInner()
+{
+    auto shared = weakPtr_.lock();
+    if (shared == nullptr) {
+        ACCOUNT_LOGE("Upgrade weakptr failed.");
+        return ERR_OK;
+    }
+    std::vector<OsAccountInfo> osAccountInfos;
+    ErrCode ret = shared->GetOsAccountList(osAccountInfos, true);
+    if (ret != ERR_OK) {
+        ACCOUNT_LOGE("Get all account info failed, ret = %{public}d.", ret);
+        return ret;
+    }
+    std::vector<OsAccountInfo> renamePlan;
+    EtcAccountFileUtils::BuildRenamePlan(osAccountInfos, renamePlan);
+    ret = ApplyRenamePlan(renamePlan);
+    if (ret != ERR_OK) {
+        return ret;
+    }
+    ret = FlushEtcFilesSync();
+    if (ret != ERR_OK) {
+        return ret;
+    }
+    ret = EtcAccountFileUtils::CreateEtcMigrationFlagFile();
+    if (ret != ERR_OK) {
+        ACCOUNT_LOGE("Create etc migration flag failed, ret = %{public}d.", ret);
+        return ret;
+    }
+    ACCOUNT_LOGI("Etc migration success, renamed = %{public}zu", renamePlan.size());
+    return ERR_OK;
+}
+
+bool OsAccountEtcFileManager::RefreshTakenNamesAndResolve(
+    const std::shared_ptr<OsAccountControlFileManager> &shared, int32_t localId, std::string &name)
+{
+    std::vector<OsAccountInfo> currentList;
+    if (shared->GetOsAccountList(currentList) != ERR_OK) {
+        return false; // Read failed → use planned name, UpdateOsAccount will catch errors
+    }
+    std::set<std::string> freshTaken = { EtcAccountFileUtils::RESERVED_USER_NAME };
+    for (const auto &existing : currentList) {
+        if (existing.GetLocalId() != localId && !existing.GetShortName().empty()) {
+            freshTaken.insert(existing.GetShortName());
+        }
+    }
+    if (freshTaken.count(name) == 0) {
+        return false;
+    }
+    ACCOUNT_LOGW("Concurrent name conflict for localId %{public}d, regenerating.", localId);
+    return EtcAccountFileUtils::GenerateCompliantShortName(name, localId, freshTaken, name);
+}
+
+ErrCode OsAccountEtcFileManager::ApplyRenamePlan(const std::vector<OsAccountInfo> &renamePlan)
+{
+    auto shared = weakPtr_.lock();
+    if (shared == nullptr) {
+        ACCOUNT_LOGE("Upgrade weakptr failed.");
+        return ERR_OK;
+    }
+    for (const auto &item : renamePlan) {
+        OsAccountInfo current;
+        ErrCode getRet = shared->GetOsAccountInfoById(item.GetLocalId(), current);
+        if (getRet != ERR_OK) {
+            ACCOUNT_LOGE("Re-read account info failed, localId = %{public}d, ret = %{public}d.",
+                item.GetLocalId(), getRet);
+            return getRet;
+        }
+        if (EtcAccountFileUtils::IsMigrationNameCompliant(current.GetShortName())) {
+            ACCOUNT_LOGI("Skip migration rename for localId %{public}d: short name already compliant.",
+                item.GetLocalId());
+            continue;
+        }
+        std::string finalName = item.GetShortName();
+        if (RefreshTakenNamesAndResolve(shared, item.GetLocalId(), finalName)) {
+            ACCOUNT_LOGW("Name conflict resolved for localId %{public}d", item.GetLocalId());
+        }
+        current.SetOldShortName(current.GetShortName());
+        current.SetShortName(finalName);
+        ErrCode ret = shared->UpdateOsAccount(current);
+        if (ret != ERR_OK) {
+            ACCOUNT_LOGE("Persist migrated short name failed, localId = %{public}d, ret = %{public}d.",
+                item.GetLocalId(), ret);
+            return ret;
+        }
+        ACCOUNT_LOGI("Migrated short name for localId %{public}d", item.GetLocalId());
+    }
+    return ERR_OK;
+}
+
+ErrCode OsAccountEtcFileManager::ReconcileEtcFiles()
+{
+    TraceGuard traceGuard("EtcFileReconcile");
+    auto shared = weakPtr_.lock();
+    if (shared == nullptr) {
+        ACCOUNT_LOGE("Upgrade weakptr failed.");
+        return ERR_OK;
+    }
+    std::vector<OsAccountInfo> osAccountInfos;
+    ErrCode ret = shared->GetOsAccountList(osAccountInfos);
+    if (ret != ERR_OK) {
+        ACCOUNT_LOGE("Get all account info failed, ret = %{public}d.", ret);
+        return ret;
+    }
+    std::string expectedPasswd;
+    std::string expectedGroup;
+    ret = EtcAccountFileUtils::BuildExpectedEtcContent(osAccountInfos,
+        expectedPasswd, expectedGroup);
+    if (ret != ERR_OK) {
+        return ret;
+    }
+    bool passwdExist = false;
+    bool groupExist = false;
+    ret = EtcAccountFileUtils::IsEtcFileExist(EtcAccountFileUtils::PASSWD_FILE_NAME, passwdExist);
+    if (ret == ERR_OK) {
+        ret = EtcAccountFileUtils::IsEtcFileExist(EtcAccountFileUtils::GROUP_FILE_NAME, groupExist);
+    }
+    if (ret != ERR_OK || !passwdExist || !groupExist) {
+        ACCOUNT_LOGW("Etc files missing, rebuild.");
+        return FlushEtcFilesSync();
+    }
+    std::string actualPasswd;
+    std::string actualGroup;
+    ret = EtcAccountFileUtils::ReadEtcFile(EtcAccountFileUtils::PASSWD_FILE_NAME, actualPasswd);
+    if (ret == ERR_OK) {
+        ret = EtcAccountFileUtils::ReadEtcFile(EtcAccountFileUtils::GROUP_FILE_NAME, actualGroup);
+    }
+    if (ret != ERR_OK) {
+        return FlushEtcFilesSync();
+    }
+    if (actualPasswd == expectedPasswd && actualGroup == expectedGroup) {
+        return ERR_OK;
+    }
+    ACCOUNT_LOGW("Etc files mismatch with accounts, rebuild.");
+    return FlushEtcFilesSync();
+}
+
+void OsAccountEtcFileManager::PostAsyncTask(const std::function<ErrCode()> &task)
+{
+    auto runTask = [task]() {
+        int32_t retryTimes = 0;
+        ErrCode ret = ERR_OK;
+        while (retryTimes < MAX_ETC_RETRY_TIMES) {
+            ret = task();
+            if (ret == ERR_OK) {
+                ACCOUNT_LOGI("Etc async task success.");
+                return;
+            }
+            ACCOUNT_LOGE("Etc async task failed, ret = %{public}d. retry times: %{public}d",
+                ret, retryTimes);
+            std::this_thread::sleep_for(std::chrono::milliseconds(MAX_ETC_RETRY_INTERVAL_MS));
+            retryTimes++;
+        }
+        REPORT_OS_ACCOUNT_FAIL(0, Constants::OPERATION_ETC_FILE, ret, "Etc async task failed after retrying");
+    };
+    bool isAsync = true;
+#ifdef FUZZ_TEST
+    isAsync = false;
+#endif // FUZZ_TEST
+    if (isAsync) {
+        std::thread taskThread(runTask);
+        taskThread.detach();
+    } else {
+        runTask();
     }
 }
 
@@ -379,7 +598,8 @@ ErrCode OsAccountEtcFileManager::FlushEtcFilesSyncLocked()
     }
     std::string passwdContent;
     std::string groupContent;
-    ret = EtcAccountFileUtils::BuildExpectedEtcContent(osAccountInfos, passwdContent, groupContent);
+    ret = EtcAccountFileUtils::BuildExpectedEtcContent(osAccountInfos,
+        passwdContent, groupContent);
     if (ret != ERR_OK) {
         return ret;
     }

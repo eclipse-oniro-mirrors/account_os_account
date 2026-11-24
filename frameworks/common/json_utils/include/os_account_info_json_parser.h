@@ -25,6 +25,7 @@ namespace {
 const char LOCAL_ID[] = "localId";
 const char LOCAL_NAME[] = "localName";
 const char SHORT_NAME[] = "shortName";
+const char OLD_SHORT_NAME[] = "oldShortName";
 const char TYPE[] = "type";
 const char CONSTRAINTS[] = "constraints";
 const char IS_OS_ACCOUNT_VERIFIED[] = "isVerified";

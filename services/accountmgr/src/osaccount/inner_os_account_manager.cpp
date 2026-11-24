@@ -1829,6 +1829,13 @@ ErrCode IInnerOsAccountManager::SendMsgForAccountRemove(OsAccountInfo &osAccount
     return errCode;
 }
 
+#ifdef SUPPORT_ETC_USER_SYNC
+void IInnerOsAccountManager::CheckAndRecoverEtcFile()
+{
+    osAccountControl_->CheckAndRecoverEtcFile();
+}
+#endif // SUPPORT_ETC_USER_SYNC
+
 bool IInnerOsAccountManager::Init(const std::set<int32_t> &initAccounts)
 {
 #ifdef SUPPORT_BACKUP_RESTORE

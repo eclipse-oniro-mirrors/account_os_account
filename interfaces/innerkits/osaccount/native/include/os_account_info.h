@@ -128,6 +128,10 @@ public:
 
     void SetShortName(const std::string &shortName);
 
+    std::string GetOldShortName() const;
+
+    void SetOldShortName(const std::string &oldShortName);
+
     OsAccountType GetType() const;
 
     void SetType(OsAccountType type);
@@ -225,6 +229,7 @@ public:
     int localId_ = -1;
     std::string localName_;
     std::string shortName_;
+    std::string oldShortName_;
     OsAccountType type_ = OsAccountType::ADMIN;
     std::vector<std::string> constraints_;
     std::string photo_;

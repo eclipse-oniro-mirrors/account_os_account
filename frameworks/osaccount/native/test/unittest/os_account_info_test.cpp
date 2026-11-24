@@ -747,6 +747,39 @@ HWTEST_F(OsAccountInfoTest, OsAccountInfo_ToJson_RoundTrip_001, TestSize.Level1)
 }
 
 /**
+ * @tc.name: OsAccountInfo_OldShortName_RoundTrip_001
+ * @tc.desc: Test ToJson -> FromJson round trip preserves oldShortName, and legacy json without
+ *           the field parses to an empty oldShortName (upgrade compatibility).
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OsAccountInfoTest, OsAccountInfo_OldShortName_RoundTrip_001, TestSize.Level1)
+{
+    ACCOUNT_LOGI("OsAccountInfo_OldShortName_RoundTrip_001");
+
+    // round trip with a migrated account carrying both names
+    OsAccountInfo originalInfo;
+    originalInfo.SetLocalId(100);
+    originalInfo.SetLocalName("name100");
+    originalInfo.SetShortName("zhangsan1");
+    originalInfo.SetOldShortName("\xe5\xbc\xa0\xe4\xb8\x89");
+    auto jsonObject = ToJson(originalInfo);
+    ASSERT_NE(jsonObject, nullptr);
+    OsAccountInfo roundTripInfo;
+    FromJson(jsonObject.get(), roundTripInfo);
+    EXPECT_EQ(roundTripInfo.GetOldShortName(), originalInfo.GetOldShortName());
+    EXPECT_EQ(roundTripInfo.GetShortName(), originalInfo.GetShortName());
+
+    // legacy json without oldShortName field: parses fine, field defaults to empty
+    auto legacyJson = CreateJsonFromString(OS_ACCOUNT_INFO_JSON_STRING);
+    ASSERT_NE(legacyJson, nullptr);
+    OsAccountInfo legacyInfo;
+    FromJson(legacyJson.get(), legacyInfo);
+    EXPECT_EQ(legacyInfo.GetOldShortName(), std::string(""));
+    EXPECT_EQ(legacyInfo.GetShortName(), "ac");
+}
+
+/**
  * @tc.name: DomainAccountInfo_ToJson_FieldCompleteness_001
  * @tc.desc: Test ToJson(DomainAccountInfo) returns non-null with all fields present.
  * @tc.type: FUNC

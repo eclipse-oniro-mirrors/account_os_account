@@ -16,6 +16,7 @@
 #ifndef OS_ACCOUNT_SERVICES_ACCOUNTMGR_INCLUDE_ACCOUNT_MGR_SERVICE_H
 #define OS_ACCOUNT_SERVICES_ACCOUNTMGR_INCLUDE_ACCOUNT_MGR_SERVICE_H
 
+#include <atomic>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -145,6 +146,9 @@ private:
     bool isAmsReady_ = false;
     bool isBmsReady_ = false;
     bool isDefaultOsAccountActivated_ = false;
+#ifdef SUPPORT_ETC_USER_SYNC
+    std::atomic<bool> etcCheckTriggered_{false};
+#endif // SUPPORT_ETC_USER_SYNC
 #ifdef ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS
     bool isProcessRestart_ = false;
 #endif // ENABLE_MULTI_FOREGROUND_OS_ACCOUNTS

@@ -251,6 +251,8 @@
         "OHOS::AccountSA::OsAccountInfo::GetLocalName() const";
         "OHOS::AccountSA::OsAccountInfo::GetShortName() const";
         "OHOS::AccountSA::OsAccountInfo::SetShortName(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&)";
+        "OHOS::AccountSA::OsAccountInfo::GetOldShortName() const";
+        "OHOS::AccountSA::OsAccountInfo::SetOldShortName(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&)";
         "OHOS::AccountSA::OsAccountInfo::GetSerialNumber() const";
         "OHOS::AccountSA::OsAccountInfo::Marshalling(OHOS::Parcel&) const";
         "OHOS::AccountSA::OsAccountInfo::OsAccountInfo()";

@@ -68,6 +68,16 @@ void OsAccountInfo::SetShortName(const std::string &shortName)
     shortName_ = shortName;
 }
 
+std::string OsAccountInfo::GetOldShortName() const
+{
+    return oldShortName_;
+}
+
+void OsAccountInfo::SetOldShortName(const std::string &oldShortName)
+{
+    oldShortName_ = oldShortName;
+}
+
 OsAccountType OsAccountInfo::GetType() const
 {
     return type_;

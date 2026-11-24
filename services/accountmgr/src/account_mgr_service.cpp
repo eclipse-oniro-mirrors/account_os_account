@@ -1010,6 +1010,10 @@ void AccountMgrService::OnAddSystemAbility(int32_t systemAbilityId, const std::s
         }
     }
 
+#ifdef SUPPORT_ETC_USER_SYNC
+    IInnerOsAccountManager::GetInstance().CheckAndRecoverEtcFile();
+#endif // SUPPORT_ETC_USER_SYNC
+
     if (!isDefaultOsAccountActivated_ && isAmsReady_) {
         ActivateDefaultOsAccountAndRestore();
     }

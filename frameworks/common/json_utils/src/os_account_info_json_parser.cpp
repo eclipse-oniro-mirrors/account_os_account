@@ -71,6 +71,7 @@ CJsonUnique ToJson(const OsAccountInfo &accountInfo)
     success &= AddIntToJson(jsonObject, LOCAL_ID, accountInfo.localId_);
     success &= AddStringToJson(jsonObject, LOCAL_NAME, accountInfo.localName_);
     success &= AddStringToJson(jsonObject, SHORT_NAME, accountInfo.shortName_);
+    success &= AddStringToJson(jsonObject, OLD_SHORT_NAME, accountInfo.oldShortName_);
     success &= AddIntToJson(jsonObject, TYPE, static_cast<int32_t>(accountInfo.type_));
     success &= AddVectorStringToJson(jsonObject, CONSTRAINTS, accountInfo.constraints_);
     success &= AddBoolToJson(jsonObject, IS_OS_ACCOUNT_VERIFIED, accountInfo.isVerified_);
@@ -118,6 +119,7 @@ bool FromJson(cJSON *jsonObject, OsAccountInfo &accountInfo)
     bool parseSuccess = GetDataByType<int>(jsonObject, LOCAL_ID, accountInfo.localId_);
     GetDataByType<std::string>(jsonObject, LOCAL_NAME, accountInfo.localName_);
     GetDataByType<std::string>(jsonObject, SHORT_NAME, accountInfo.shortName_);
+    GetDataByType<std::string>(jsonObject, OLD_SHORT_NAME, accountInfo.oldShortName_);
     GetDataByType<OsAccountType>(jsonObject, TYPE, accountInfo.type_);
     GetDataByType<std::vector<std::string>>(jsonObject, CONSTRAINTS, accountInfo.constraints_);
     GetDataByType<bool>(jsonObject, IS_OS_ACCOUNT_VERIFIED, accountInfo.isVerified_);

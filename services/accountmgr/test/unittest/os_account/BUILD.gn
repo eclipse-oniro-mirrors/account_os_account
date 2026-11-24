@@ -110,7 +110,14 @@ ohos_unittest("OsAccountControlFileManagerUnitTest") {
       [ "${services_path}/accountmgr/src/osaccount/etc/os_account_etc_file.cpp" ]
   sources +=
       [ "${services_path}/accountmgr/src/osaccount/etc/os_account_etc_file_manager.cpp" ]
+  sources +=
+      [ "${services_path}/accountmgr/src/osaccount/etc/pinyin_converter.cpp" ]
+  sources += [ "etc_migration_test.cpp" ]
   external_deps += [ "selinux_adapter:librestorecon" ]
+  external_deps += [
+    "icu:shared_icui18n",
+    "icu:shared_icuuc",
+  ]
 
   part_name = "os_account"
 }
@@ -900,7 +907,12 @@ ohos_unittest("OsAccountInnerAccmgrBundleAdapterMockTest") {
   cflags_cc += [ "-DSUPPORT_ETC_USER_SYNC" ]
   sources += [ "${services_path}/accountmgr/src/osaccount/etc/os_account_etc_file.cpp" ]
   sources += [ "${services_path}/accountmgr/src/osaccount/etc/os_account_etc_file_manager.cpp" ]
+  sources += [ "${services_path}/accountmgr/src/osaccount/etc/pinyin_converter.cpp" ]
   external_deps += [ "selinux_adapter:librestorecon" ]
+  external_deps += [
+    "icu:shared_icui18n",
+    "icu:shared_icuuc",
+  ]
   part_name = "os_account"
 }
 
