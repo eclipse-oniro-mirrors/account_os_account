@@ -77,6 +77,10 @@ ohos_shared_library("account_iam_innerkits") {
     debug = false
   }
 
+  if (!use_clang_coverage) {
+    version_script = "libaccount_iam_innerkits.map"
+  }
+
   sources = [
     "${account_iam_framework_path}/src/account_iam_callback_service.cpp",
     "${account_iam_framework_path}/src/account_iam_info.cpp",

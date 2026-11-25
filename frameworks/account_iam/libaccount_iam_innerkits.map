@@ -1,0 +1,174 @@
+# Copyright (c) 2026 Huawei Device Co., Ltd.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+1.0 {
+  global:
+    extern "C++" {
+        "OHOS::AccountSA::AccountIAMClient::AccountIAMDeathRecipient::OnRemoteDied(OHOS::wptr<OHOS::IRemoteObject> const&)";
+        "OHOS::AccountSA::AccountIAMClient::AddCredential(int, OHOS::UserIam::UserAuth::CredentialParameters const&, std::__h::shared_ptr<OHOS::AccountSA::IDMCallback> const&)";
+        "OHOS::AccountSA::AccountIAMClient::Auth(OHOS::AccountSA::AuthOptions&, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&, OHOS::UserIam::UserAuth::AuthType, OHOS::UserIam::UserAuth::AuthTrustLevel, std::__h::shared_ptr<OHOS::AccountSA::IDMCallback> const&)";
+        "OHOS::AccountSA::AccountIAMClient::AuthUser(OHOS::AccountSA::AuthOptions&, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&, OHOS::UserIam::UserAuth::AuthType, OHOS::UserIam::UserAuth::AuthTrustLevel, std::__h::shared_ptr<OHOS::AccountSA::IDMCallback> const&)";
+        "OHOS::AccountSA::AccountIAMClient::Cancel(int)";
+        "OHOS::AccountSA::AccountIAMClient::CancelAuth(std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&)";
+        "OHOS::AccountSA::AccountIAMClient::CheckAuthOptions(OHOS::AccountSA::AuthOptions&)";
+        "OHOS::AccountSA::AccountIAMClient::CheckSelfPermission(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&)";
+        "OHOS::AccountSA::AccountIAMClient::CloseSession(int)";
+        "OHOS::AccountSA::AccountIAMClient::DelCred(int, unsigned long long, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&, std::__h::shared_ptr<OHOS::AccountSA::IDMCallback> const&)";
+        "OHOS::AccountSA::AccountIAMClient::DelCred(int, unsigned long, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&, std::__h::shared_ptr<OHOS::AccountSA::IDMCallback> const&)";
+        "OHOS::AccountSA::AccountIAMClient::DelUser(int, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&, std::__h::shared_ptr<OHOS::AccountSA::IDMCallback> const&)";
+        "OHOS::AccountSA::AccountIAMClient::GetAccountState(int)";
+        "OHOS::AccountSA::AccountIAMClient::GetAuthSubType(int)";
+        "OHOS::AccountSA::AccountIAMClient::GetAuthTypeIndex(OHOS::UserIam::UserAuth::AuthType)";
+        "OHOS::AccountSA::AccountIAMClient::GetAvailableStatus(OHOS::UserIam::UserAuth::AuthType, OHOS::UserIam::UserAuth::AuthTrustLevel, int&)";
+        "OHOS::AccountSA::AccountIAMClient::GetCredentialInfo(int, OHOS::UserIam::UserAuth::AuthType, std::__h::shared_ptr<OHOS::AccountSA::GetCredInfoCallback> const&)";
+        "OHOS::AccountSA::AccountIAMClient::GetCurrentUserId(int&)";
+        "OHOS::AccountSA::AccountIAMClient::GetEnrolledId(int, OHOS::UserIam::UserAuth::AuthType, std::__h::shared_ptr<OHOS::AccountSA::GetEnrolledIdCallback> const&)";
+        "OHOS::AccountSA::AccountIAMClient::GetInstance()";
+        "OHOS::AccountSA::AccountIAMClient::GetProperty(int, OHOS::UserIam::UserAuth::GetPropertyRequest const&, std::__h::shared_ptr<OHOS::AccountSA::GetSetPropCallback> const&)";
+        "OHOS::AccountSA::AccountIAMClient::GetPropertyByCredentialId(unsigned long long, std::__h::vector<OHOS::UserIam::UserAuth::Attributes::AttributeKey, std::__h::allocator<OHOS::UserIam::UserAuth::Attributes::AttributeKey>>&, std::__h::shared_ptr<OHOS::AccountSA::GetSetPropCallback> const&)";
+        "OHOS::AccountSA::AccountIAMClient::GetPropertyByCredentialId(unsigned long, std::__h::vector<OHOS::UserIam::UserAuth::Attributes::AttributeKey, std::__h::allocator<OHOS::UserIam::UserAuth::Attributes::AttributeKey>>&, std::__h::shared_ptr<OHOS::AccountSA::GetSetPropCallback> const&)";
+        "OHOS::AccountSA::AccountIAMClient::OpenSession(int, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>>&)";
+        "OHOS::AccountSA::AccountIAMClient::PrepareRemoteAuth(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&, std::__h::shared_ptr<OHOS::AccountSA::PreRemoteAuthCallback> const&)";
+        "OHOS::AccountSA::AccountIAMClient::RegisterDomainInputer(std::__h::shared_ptr<OHOS::UserIam::PinAuth::IInputer> const&)";
+        "OHOS::AccountSA::AccountIAMClient::RegisterInputer(int, std::__h::shared_ptr<OHOS::UserIam::PinAuth::IInputer> const&)";
+        "OHOS::AccountSA::AccountIAMClient::RegisterPINInputer(std::__h::shared_ptr<OHOS::UserIam::PinAuth::IInputer> const&)";
+        "OHOS::AccountSA::AccountIAMClient::ResetAccountIAMProxy(OHOS::wptr<OHOS::IRemoteObject> const&)";
+        "OHOS::AccountSA::AccountIAMClient::SetAuthSubType(int, int)";
+        "OHOS::AccountSA::AccountIAMClient::SetDomainAuthUnlockEnabled(int, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&, bool)";
+        "OHOS::AccountSA::AccountIAMClient::SetProperty(int, OHOS::UserIam::UserAuth::SetPropertyRequest const&, std::__h::shared_ptr<OHOS::AccountSA::GetSetPropCallback> const&)";
+        "OHOS::AccountSA::AccountIAMClient::StartDomainAuth(int, OHOS::AccountSA::DomainAccountUnlockOptions const&, std::__h::shared_ptr<OHOS::AccountSA::IDMCallback> const&)";
+        "OHOS::AccountSA::AccountIAMClient::UnregisterInputer(int)";
+        "OHOS::AccountSA::AccountIAMClient::UnregisterPINInputer()";
+        "OHOS::AccountSA::AccountIAMClient::UpdateCredential(int, OHOS::UserIam::UserAuth::CredentialParameters const&, std::__h::shared_ptr<OHOS::AccountSA::IDMCallback> const&)";
+        "OHOS::AccountSA::AccountIAMProxy::AddCredential(int, OHOS::AccountSA::CredentialParametersIam const&, OHOS::sptr<OHOS::AccountSA::IIDMCallback> const&)";
+        "OHOS::AccountSA::AccountIAMProxy::AuthUser(OHOS::AccountSA::AuthParam const&, OHOS::sptr<OHOS::AccountSA::IIDMCallback> const&, unsigned long long&)";
+        "OHOS::AccountSA::AccountIAMProxy::AuthUser(OHOS::AccountSA::AuthParam const&, OHOS::sptr<OHOS::AccountSA::IIDMCallback> const&, unsigned long&)";
+        "OHOS::AccountSA::AccountIAMProxy::Cancel(int)";
+        "OHOS::AccountSA::AccountIAMProxy::CancelAuth(unsigned long long)";
+        "OHOS::AccountSA::AccountIAMProxy::CancelAuth(unsigned long)";
+        "OHOS::AccountSA::AccountIAMProxy::CloseSession(int)";
+        "OHOS::AccountSA::AccountIAMProxy::DelCred(int, unsigned long long, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&, OHOS::sptr<OHOS::AccountSA::IIDMCallback> const&)";
+        "OHOS::AccountSA::AccountIAMProxy::DelCred(int, unsigned long, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&, OHOS::sptr<OHOS::AccountSA::IIDMCallback> const&)";
+        "OHOS::AccountSA::AccountIAMProxy::DelUser(int, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&, OHOS::sptr<OHOS::AccountSA::IIDMCallback> const&)";
+        "OHOS::AccountSA::AccountIAMProxy::GetAccountState(int, int&)";
+        "OHOS::AccountSA::AccountIAMProxy::GetAvailableStatus(int, unsigned int, int&)";
+        "OHOS::AccountSA::AccountIAMProxy::GetCredentialInfo(int, int, OHOS::sptr<OHOS::AccountSA::IGetCredInfoCallback> const&)";
+        "OHOS::AccountSA::AccountIAMProxy::GetEnrolledId(int, int, OHOS::sptr<OHOS::AccountSA::IGetEnrolledIdCallback> const&)";
+        "OHOS::AccountSA::AccountIAMProxy::GetProperty(int, OHOS::AccountSA::GetPropertyRequestIam const&, OHOS::sptr<OHOS::AccountSA::IGetSetPropCallback> const&)";
+        "OHOS::AccountSA::AccountIAMProxy::OpenSession(int, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>>&)";
+        "OHOS::AccountSA::AccountIAMProxy::PrepareRemoteAuth(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&, OHOS::sptr<OHOS::AccountSA::IPreRemoteAuthCallback> const&)";
+        "OHOS::AccountSA::AccountIAMProxy::SetProperty(int, OHOS::AccountSA::SetPropertyRequestIam const&, OHOS::sptr<OHOS::AccountSA::IGetSetPropCallback> const&)";
+        "OHOS::AccountSA::AccountIAMProxy::UpdateCredential(int, OHOS::AccountSA::CredentialParametersIam const&, OHOS::sptr<OHOS::AccountSA::IIDMCallback> const&)";
+        "OHOS::AccountSA::AccountIAMProxy::delegator_";
+        "OHOS::AccountSA::AccountProxy::delegator_";
+        "OHOS::AccountSA::AuthParam::Marshalling(OHOS::Parcel&) const";
+        "OHOS::AccountSA::AuthParam::ReadAdditionalInfo(OHOS::Parcel&)";
+        "OHOS::AccountSA::AuthParam::ReadFromParcel(OHOS::Parcel&)";
+        "OHOS::AccountSA::AuthParam::ReadRemoteAuthParam(OHOS::Parcel&)";
+        "OHOS::AccountSA::AuthParam::Unmarshalling(OHOS::Parcel&)";
+        "OHOS::AccountSA::AuthParam::WriteRemoteAuthParam(OHOS::Parcel&) const";
+        "OHOS::AccountSA::ConvertToCredentialInfoIamList(std::__h::vector<OHOS::UserIam::UserAuth::CredentialInfo, std::__h::allocator<OHOS::UserIam::UserAuth::CredentialInfo>> const&)";
+        "OHOS::AccountSA::ConvertToCredentialInfoList(std::__h::vector<OHOS::AccountSA::CredentialInfoIam, std::__h::allocator<OHOS::AccountSA::CredentialInfoIam>> const&)";
+        "OHOS::AccountSA::CredentialInfoIam::Marshalling(OHOS::Parcel&) const";
+        "OHOS::AccountSA::CredentialInfoIam::ReadFromParcel(OHOS::Parcel&)";
+        "OHOS::AccountSA::CredentialInfoIam::Unmarshalling(OHOS::Parcel&)";
+        "OHOS::AccountSA::CredentialParametersIam::Marshalling(OHOS::Parcel&) const";
+        "OHOS::AccountSA::CredentialParametersIam::ReadFromParcel(OHOS::Parcel&)";
+        "OHOS::AccountSA::CredentialParametersIam::Unmarshalling(OHOS::Parcel&)";
+        "OHOS::AccountSA::DomainAuthCallbackAdapter::DomainAuthCallbackAdapter(std::__h::shared_ptr<OHOS::AccountSA::IDMCallback> const&)";
+        "OHOS::AccountSA::DomainAuthCallbackAdapter::OnAcquireInfo(int, unsigned int, OHOS::AccountSA::DomainAccountUnlockExtraInfo const&)";
+        "OHOS::AccountSA::DomainAuthCallbackAdapter::OnResult(int, OHOS::Parcel&)";
+        "OHOS::AccountSA::DomainCredentialRecipient::OnSetData(int, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>>)";
+        "OHOS::AccountSA::DomainCredentialRecipient::~DomainCredentialRecipient()";
+        "OHOS::AccountSA::GetCredInfoCallbackService::GetCredInfoCallbackService(std::__h::shared_ptr<OHOS::AccountSA::GetCredInfoCallback> const&)";
+        "OHOS::AccountSA::GetCredInfoCallbackService::OnCredentialInfo(int, std::__h::vector<OHOS::AccountSA::CredentialInfoIam, std::__h::allocator<OHOS::AccountSA::CredentialInfoIam>> const&)";
+        "OHOS::AccountSA::GetCredInfoCallbackService::~GetCredInfoCallbackService()";
+        "OHOS::AccountSA::GetCredInfoCallbackStub::OnRemoteRequest(unsigned int, OHOS::MessageParcel&, OHOS::MessageParcel&, OHOS::MessageOption&)";
+        "OHOS::AccountSA::GetEnrolledIdCallbackService::GetEnrolledIdCallbackService(std::__h::shared_ptr<OHOS::AccountSA::GetEnrolledIdCallback> const&)";
+        "OHOS::AccountSA::GetEnrolledIdCallbackService::~GetEnrolledIdCallbackService()";
+        "OHOS::AccountSA::GetEnrolledIdCallbackStub::OnRemoteRequest(unsigned int, OHOS::MessageParcel&, OHOS::MessageParcel&, OHOS::MessageOption&)";
+        "OHOS::AccountSA::GetPropertyRequestIam::Marshalling(OHOS::Parcel&) const";
+        "OHOS::AccountSA::GetPropertyRequestIam::ReadFromParcel(OHOS::Parcel&)";
+        "OHOS::AccountSA::GetPropertyRequestIam::Unmarshalling(OHOS::Parcel&)";
+        "OHOS::AccountSA::GetSetPropCallbackService::GetSetPropCallbackService(std::__h::shared_ptr<OHOS::AccountSA::GetSetPropCallback> const&)";
+        "OHOS::AccountSA::GetSetPropCallbackService::OnResult(int, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&)";
+        "OHOS::AccountSA::GetSetPropCallbackService::~GetSetPropCallbackService()";
+        "OHOS::AccountSA::GetSetPropCallbackStub::OnRemoteRequest(unsigned int, OHOS::MessageParcel&, OHOS::MessageParcel&, OHOS::MessageOption&)";
+        "OHOS::AccountSA::IAMInputer::IAMInputer(int, std::__h::shared_ptr<OHOS::UserIam::PinAuth::IInputer> const&)";
+        "OHOS::AccountSA::IAMInputer::OnGetData(int, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>>, std::__h::shared_ptr<OHOS::UserIam::PinAuth::IInputerData>)";
+        "OHOS::AccountSA::IAccountIAM::LABEL";
+        "OHOS::AccountSA::IDMCallbackService::IDMCallbackService(int, std::__h::shared_ptr<OHOS::AccountSA::IDMCallback> const&)";
+        "OHOS::AccountSA::IDMCallbackService::OnAcquireInfo(int, unsigned int, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&)";
+        "OHOS::AccountSA::IDMCallbackService::OnResult(int, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&)";
+        "OHOS::AccountSA::IDMCallbackService::~IDMCallbackService()";
+        "OHOS::AccountSA::IDMCallbackStub::OnRemoteRequest(unsigned int, OHOS::MessageParcel&, OHOS::MessageParcel&, OHOS::MessageOption&)";
+        "OHOS::AccountSA::IGetCredInfoCallback::LABEL";
+        "OHOS::AccountSA::IGetEnrolledIdCallback::LABEL";
+        "OHOS::AccountSA::IGetSetPropCallback::LABEL";
+        "OHOS::AccountSA::IIDMCallback::LABEL";
+        "OHOS::AccountSA::IPreRemoteAuthCallback::LABEL";
+        "OHOS::AccountSA::PreRemoteAuthCallbackService::OnResult(int)";
+        "OHOS::AccountSA::PreRemoteAuthCallbackService::PreRemoteAuthCallbackService(std::__h::shared_ptr<OHOS::AccountSA::PreRemoteAuthCallback> const&)";
+        "OHOS::AccountSA::PreRemoteAuthCallbackService::~PreRemoteAuthCallbackService()";
+        "OHOS::AccountSA::PreRemoteAuthCallbackStub::OnRemoteRequest(unsigned int, OHOS::MessageParcel&, OHOS::MessageParcel&, OHOS::MessageOption&)";
+        "OHOS::AccountSA::SetPropertyRequestIam::Marshalling(OHOS::Parcel&) const";
+        "OHOS::AccountSA::SetPropertyRequestIam::ReadFromParcel(OHOS::Parcel&)";
+        "OHOS::AccountSA::SetPropertyRequestIam::Unmarshalling(OHOS::Parcel&)";
+        "VTT for OHOS::AccountSA::AccountIAMClient::AccountIAMDeathRecipient";
+        "VTT for OHOS::AccountSA::AccountIAMProxy";
+        "VTT for OHOS::AccountSA::AuthParam";
+        "VTT for OHOS::AccountSA::CredentialInfoIam";
+        "VTT for OHOS::AccountSA::CredentialParametersIam";
+        "VTT for OHOS::AccountSA::GetPropertyRequestIam";
+        "VTT for OHOS::AccountSA::SetPropertyRequestIam";
+        "construction vtable for OHOS::IRemoteProxy<OHOS::AccountSA::IAccountIAM>-in-OHOS::AccountSA::AccountIAMProxy";
+        "construction vtable for OHOS::IRemoteStub<OHOS::AccountSA::IGetCredInfoCallback>-in-OHOS::AccountSA::GetCredInfoCallbackService";
+        "construction vtable for OHOS::IRemoteStub<OHOS::AccountSA::IGetCredInfoCallback>-in-OHOS::AccountSA::GetCredInfoCallbackStub";
+        "construction vtable for OHOS::IRemoteStub<OHOS::AccountSA::IGetEnrolledIdCallback>-in-OHOS::AccountSA::GetEnrolledIdCallbackService";
+        "construction vtable for OHOS::IRemoteStub<OHOS::AccountSA::IGetEnrolledIdCallback>-in-OHOS::AccountSA::GetEnrolledIdCallbackStub";
+        "construction vtable for OHOS::IRemoteStub<OHOS::AccountSA::IGetSetPropCallback>-in-OHOS::AccountSA::GetSetPropCallbackService";
+        "construction vtable for OHOS::IRemoteStub<OHOS::AccountSA::IGetSetPropCallback>-in-OHOS::AccountSA::GetSetPropCallbackStub";
+        "construction vtable for OHOS::IRemoteStub<OHOS::AccountSA::IIDMCallback>-in-OHOS::AccountSA::IDMCallbackService";
+        "construction vtable for OHOS::IRemoteStub<OHOS::AccountSA::IIDMCallback>-in-OHOS::AccountSA::IDMCallbackStub";
+        "construction vtable for OHOS::IRemoteStub<OHOS::AccountSA::IPreRemoteAuthCallback>-in-OHOS::AccountSA::PreRemoteAuthCallbackService";
+        "construction vtable for OHOS::IRemoteStub<OHOS::AccountSA::IPreRemoteAuthCallback>-in-OHOS::AccountSA::PreRemoteAuthCallbackStub";
+        "construction vtable for OHOS::Parcelable-in-OHOS::AccountSA::AuthParam";
+        "guard variable for OHOS::AccountSA::AccountIAMProxy::delegator_";
+        "guard variable for OHOS::AccountSA::AccountProxy::delegator_";
+        "non-virtual thunk to OHOS::AccountSA::GetCredInfoCallbackService::OnCredentialInfo(int, std::__h::vector<OHOS::AccountSA::CredentialInfoIam, std::__h::allocator<OHOS::AccountSA::CredentialInfoIam>> const&)";
+        "non-virtual thunk to OHOS::AccountSA::GetCredInfoCallbackService::~GetCredInfoCallbackService()";
+        "non-virtual thunk to OHOS::AccountSA::GetEnrolledIdCallbackService::~GetEnrolledIdCallbackService()";
+        "non-virtual thunk to OHOS::AccountSA::GetSetPropCallbackService::OnResult(int, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&)";
+        "non-virtual thunk to OHOS::AccountSA::GetSetPropCallbackService::~GetSetPropCallbackService()";
+        "non-virtual thunk to OHOS::AccountSA::IDMCallbackService::OnAcquireInfo(int, unsigned int, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&)";
+        "non-virtual thunk to OHOS::AccountSA::IDMCallbackService::OnResult(int, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&)";
+        "non-virtual thunk to OHOS::AccountSA::IDMCallbackService::~IDMCallbackService()";
+        "non-virtual thunk to OHOS::AccountSA::PreRemoteAuthCallbackService::OnResult(int)";
+        "non-virtual thunk to OHOS::AccountSA::PreRemoteAuthCallbackService::~PreRemoteAuthCallbackService()";
+        "virtual thunk to OHOS::AccountSA::GetCredInfoCallbackService::~GetCredInfoCallbackService()";
+        "virtual thunk to OHOS::AccountSA::GetEnrolledIdCallbackService::~GetEnrolledIdCallbackService()";
+        "virtual thunk to OHOS::AccountSA::GetSetPropCallbackService::~GetSetPropCallbackService()";
+        "virtual thunk to OHOS::AccountSA::IDMCallbackService::~IDMCallbackService()";
+        "virtual thunk to OHOS::AccountSA::PreRemoteAuthCallbackService::~PreRemoteAuthCallbackService()";
+        "vtable for OHOS::AccountSA::AccountIAMClient::AccountIAMDeathRecipient";
+        "vtable for OHOS::AccountSA::AccountIAMProxy";
+        "vtable for OHOS::AccountSA::AuthParam";
+        "vtable for OHOS::AccountSA::CredentialInfoIam";
+        "vtable for OHOS::AccountSA::CredentialParametersIam";
+        "vtable for OHOS::AccountSA::GetPropertyRequestIam";
+        "vtable for OHOS::AccountSA::SetPropertyRequestIam";
+        "vtable for OHOS::BrokerDelegatorBase";
+    };
+  local:
+    *;
+};

@@ -51,6 +51,10 @@ ohos_shared_library("libaccount_common") {
     debug = false
   }
 
+  if (!use_clang_coverage) {
+    version_script = "libaccount_common.map"
+  }
+
   sources = [
     "${app_account_innerkits_native_path}/src/app_account_info.cpp",
     "${innerkits_native_path}/src/distributed_account_subscribe_callback.cpp",
