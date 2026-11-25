@@ -356,7 +356,7 @@ void AuthCallback::OnResult(int32_t result, const Attributes &extraInfo)
                 "Failed to auth, type:" + std::to_string(authType_));
         }
         if (result == UserIam::UserAuth::ResultCode::FAIL) {
-            return AccountInfoReport::ReportSecurityInfo("", authedAccountId, ReportEvent::EVENT_LOGIN, result);
+            AccountInfoReport::ReportSecurityInfo("", authedAccountId, ReportEvent::EVENT_LOGIN, result);
         }
         return;
     }
