@@ -77,6 +77,10 @@ ohos_shared_library("authorization_innerkits") {
     debug = false
   }
 
+  if (!use_clang_coverage) {
+    version_script = "libauthorization_innerkits.map"
+  }
+
   sources = [
     "${authorization_framework_path}/src/authorization_callback_service.cpp",
     "${authorization_framework_path}/src/authorization_client.cpp",

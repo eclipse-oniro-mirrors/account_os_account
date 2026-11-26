@@ -106,6 +106,10 @@ ohos_shared_library("domain_account_innerkits") {
     debug = false
   }
 
+  if (!use_clang_coverage) {
+    version_script = "libdomain_account_innerkits.map"
+  }
+
   sources = [
     "src/domain_account_callback_service.cpp",
     "src/domain_account_client.cpp",

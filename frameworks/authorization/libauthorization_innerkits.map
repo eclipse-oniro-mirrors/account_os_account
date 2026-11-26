@@ -1,0 +1,138 @@
+# Copyright (c) 2026 Huawei Device Co., Ltd.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+1.0 {
+  global:
+    extern "C++" {
+        "guard variable for OHOS::AccountSA::AuthorizationProxy::delegator_";
+        "guard variable for OHOS::AccountSA::ConnectAbilityCallbackProxy::delegator_";
+        "OHOS::AccountSA::IAuthorization::LABEL";
+        "OHOS::AccountSA::AuthorizationProxy::delegator_";
+        "OHOS::AccountSA::AuthorizationProxy::CheckAuthorization(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&, bool&)";
+        "OHOS::AccountSA::AuthorizationProxy::CheckAuthorization(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&, int, bool&)";
+        "OHOS::AccountSA::AuthorizationProxy::AcquireAuthorization(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&, OHOS::AccountSA::AcquireAuthorizationOptions const&, OHOS::sptr<OHOS::IRemoteObject> const&, OHOS::sptr<OHOS::IRemoteObject> const&)";
+        "OHOS::AccountSA::AuthorizationProxy::ReleaseAuthorization(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&)";
+        "OHOS::AccountSA::AuthorizationProxy::CheckAuthorizationToken(std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&, std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&, int, OHOS::AccountSA::CheckAuthorizationResult&)";
+        "OHOS::AccountSA::AuthorizationProxy::HasAuthorizationForPublic(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&, bool&)";
+        "OHOS::AccountSA::AuthorizationProxy::AcquireAuthorizationForPublic(std::__h::vector<std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>>, std::__h::allocator<std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>>>> const&, bool, OHOS::sptr<OHOS::IRemoteObject> const&, OHOS::sptr<OHOS::IRemoteObject> const&)";
+        "OHOS::AccountSA::ConnectAbilityInfo::Unmarshalling(OHOS::Parcel&)";
+        "OHOS::AccountSA::ConnectAbilityInfo::ReadFromParcel(OHOS::Parcel&)";
+        "OHOS::AccountSA::ConnectAbilityInfo::~ConnectAbilityInfo()";
+        "OHOS::AccountSA::ConnectAbilityInfo::operator=(OHOS::AccountSA::ConnectAbilityInfo const&)";
+        "OHOS::AccountSA::AuthorizationClient::GetInstance()";
+        "OHOS::AccountSA::AuthorizationClient::EraseAuthCallBack()";
+        "OHOS::AccountSA::AuthorizationClient::CheckAuthorization(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&, bool&)";
+        "OHOS::AccountSA::AuthorizationClient::CheckAuthorization(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&, int, bool&)";
+        "OHOS::AccountSA::AuthorizationClient::AcquireAuthorization(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&, OHOS::AccountSA::AcquireAuthorizationOptions const&, std::__h::shared_ptr<OHOS::AccountSA::AuthorizationCallback> const&)";
+        "OHOS::AccountSA::AuthorizationClient::ReleaseAuthorization(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&)";
+        "OHOS::AccountSA::AuthorizationClient::CheckAuthorizationToken(std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&, std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&, int, OHOS::AccountSA::CheckAuthorizationResult&)";
+        "OHOS::AccountSA::AuthorizationClient::AcquireAdminAuthorization(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>>&, std::__h::shared_ptr<OHOS::AccountSA::AdminAuthorizationCallback> const&, std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&)";
+        "OHOS::AccountSA::AuthorizationClient::HasAuthorizationForPublic(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&, bool&)";
+        "OHOS::AccountSA::AuthorizationClient::RegisterAuthAppRemoteObject()";
+        "OHOS::AccountSA::AuthorizationClient::AcquireAuthorizationForPublic(std::__h::vector<std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>>, std::__h::allocator<std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>>>> const&, bool, std::__h::shared_ptr<OHOS::AccountSA::AuthorizationCallback> const&)";
+        "OHOS::AccountSA::AuthorizationClient::UnRegisterAuthAppRemoteObject()";
+        "OHOS::AccountSA::AuthorizationClient::AuthorizationClient()";
+        "OHOS::AccountSA::AuthorizationClient::~AuthorizationClient()";
+        "OHOS::AccountSA::AuthorizationResult::Unmarshalling(OHOS::Parcel&)";
+        "OHOS::AccountSA::AuthorizationResult::ReadFromParcel(OHOS::Parcel&)";
+        "OHOS::AccountSA::AuthorizationResult::~AuthorizationResult()";
+        "OHOS::AccountSA::AuthorizationResult::operator=(OHOS::AccountSA::AuthorizationResult const&)";
+        "OHOS::AccountSA::AuthRemoteObjectStub::OnRemoteRequest(unsigned int, OHOS::MessageParcel&, OHOS::MessageParcel&, OHOS::MessageOption&)";
+        "OHOS::AccountSA::TransStringToVectorU8(std::__h::vector<unsigned char, std::__h::allocator<unsigned char>>&, std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&)";
+        "OHOS::AccountSA::TransVectorU8ToString(std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&, std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>>&)";
+        "OHOS::AccountSA::IAuthorizationCallback::LABEL";
+        "OHOS::AccountSA::IConnectAbilityCallback::LABEL";
+        "OHOS::AccountSA::AdminAuthorizationResult::~AdminAuthorizationResult()";
+        "OHOS::AccountSA::CheckAuthorizationResult::Unmarshalling(OHOS::Parcel&)";
+        "OHOS::AccountSA::CheckAuthorizationResult::ReadFromParcel(OHOS::Parcel&)";
+        "OHOS::AccountSA::AuthorizationCallbackStub::OnRemoteRequest(unsigned int, OHOS::MessageParcel&, OHOS::MessageParcel&, OHOS::MessageOption&)";
+        "OHOS::AccountSA::AcquireAuthorizationOptions::Unmarshalling(OHOS::Parcel&)";
+        "OHOS::AccountSA::AcquireAuthorizationOptions::ReadFromParcel(OHOS::Parcel&)";
+        "OHOS::AccountSA::AcquireAuthorizationOptions::~AcquireAuthorizationOptions()";
+        "OHOS::AccountSA::ConnectAbilityCallbackProxy::delegator_";
+        "OHOS::AccountSA::ConnectAbilityCallbackProxy::OnResult(int, std::__h::vector<unsigned char, std::__h::allocator<unsigned char>> const&, int, int)";
+        "OHOS::AccountSA::IAdminAuthorizationCallback::LABEL";
+        "OHOS::AccountSA::AuthorizationCallbackService::AuthorizationCallbackService(std::__h::shared_ptr<OHOS::AccountSA::AuthorizationCallback> const&, std::__h::function<void ()>)";
+        "OHOS::AccountSA::AuthorizationCallbackService::OnBatchResult(int, std::__h::vector<OHOS::AccountSA::AuthorizationResult, std::__h::allocator<OHOS::AccountSA::AuthorizationResult>> const&)";
+        "OHOS::AccountSA::AuthorizationCallbackService::OnConnectAbility(OHOS::AccountSA::ConnectAbilityInfo const&, OHOS::sptr<OHOS::IRemoteObject> const&)";
+        "OHOS::AccountSA::AuthorizationCallbackService::OnResult(int, OHOS::AccountSA::AuthorizationResult const&)";
+        "OHOS::AccountSA::AuthorizationCallbackService::~AuthorizationCallbackService()";
+        "OHOS::AccountSA::AdminAuthorizationCallbackStub::OnRemoteRequest(unsigned int, OHOS::MessageParcel&, OHOS::MessageParcel&, OHOS::MessageOption&)";
+        "OHOS::AccountSA::AdminAuthorizationCallbackService::OnResult(OHOS::AccountSA::AdminAuthorizationResult const&)";
+        "OHOS::AccountSA::ConnectAbilityInfo::Marshalling(OHOS::Parcel&) const";
+        "OHOS::AccountSA::AuthorizationResult::Marshalling(OHOS::Parcel&) const";
+        "OHOS::AccountSA::CheckAuthorizationResult::Marshalling(OHOS::Parcel&) const";
+        "OHOS::AccountSA::AcquireAuthorizationOptions::Marshalling(OHOS::Parcel&) const";
+        "construction vtable for OHOS::IRemoteProxy<OHOS::AccountSA::IAuthorization>-in-OHOS::AccountSA::AuthorizationProxy";
+        "construction vtable for OHOS::Parcelable-in-OHOS::AccountSA::ConnectAbilityInfo";
+        "construction vtable for OHOS::Parcelable-in-OHOS::AccountSA::AuthorizationResult";
+        "construction vtable for OHOS::IRemoteStub<OHOS::AccountSA::IAuthRemoteObject>-in-OHOS::AccountSA::AuthRemoteObjectStub";
+        "construction vtable for OHOS::Parcelable-in-OHOS::AccountSA::CheckAuthorizationResult";
+        "construction vtable for OHOS::IRemoteStub<OHOS::AccountSA::IAuthorizationCallback>-in-OHOS::AccountSA::AuthorizationCallbackStub";
+        "construction vtable for OHOS::Parcelable-in-OHOS::AccountSA::AcquireAuthorizationOptions";
+        "construction vtable for OHOS::IRemoteProxy<OHOS::AccountSA::IConnectAbilityCallback>-in-OHOS::AccountSA::ConnectAbilityCallbackProxy";
+        "construction vtable for OHOS::IRemoteStub<OHOS::AccountSA::IAuthorizationCallback>-in-OHOS::AccountSA::AuthorizationCallbackService";
+        "construction vtable for OHOS::IRemoteStub<OHOS::AccountSA::IAdminAuthorizationCallback>-in-OHOS::AccountSA::AdminAuthorizationCallbackStub";
+        "construction vtable for OHOS::IRemoteStub<OHOS::AccountSA::IAdminAuthorizationCallback>-in-OHOS::AccountSA::AdminAuthorizationCallbackService";
+        "VTT for OHOS::AccountSA::AuthorizationProxy";
+        "VTT for OHOS::AccountSA::ConnectAbilityInfo";
+        "VTT for OHOS::AccountSA::AuthorizationResult";
+        "VTT for OHOS::AccountSA::AuthRemoteObjectStub";
+        "VTT for OHOS::AccountSA::AdminAuthorizationResult";
+        "VTT for OHOS::AccountSA::CheckAuthorizationResult";
+        "VTT for OHOS::AccountSA::AuthorizationCallbackStub";
+        "VTT for OHOS::AccountSA::AcquireAuthorizationOptions";
+        "VTT for OHOS::AccountSA::ConnectAbilityCallbackProxy";
+        "VTT for OHOS::AccountSA::AuthorizationCallbackService";
+        "VTT for OHOS::AccountSA::AdminAuthorizationCallbackStub";
+        "VTT for OHOS::AccountSA::AdminAuthorizationCallbackService";
+        "vtable for OHOS::BrokerDelegatorBase";
+        "vtable for OHOS::AccountSA::AuthorizationProxy";
+        "vtable for OHOS::AccountSA::ConnectAbilityInfo";
+        "vtable for OHOS::AccountSA::AuthorizationResult";
+        "vtable for OHOS::AccountSA::AuthRemoteObjectStub";
+        "vtable for OHOS::AccountSA::AdminAuthorizationResult";
+        "vtable for OHOS::AccountSA::CheckAuthorizationResult";
+        "vtable for OHOS::AccountSA::AuthorizationCallbackStub";
+        "vtable for OHOS::AccountSA::AcquireAuthorizationOptions";
+        "vtable for OHOS::AccountSA::ConnectAbilityCallbackProxy";
+        "vtable for OHOS::AccountSA::AuthorizationCallbackService";
+        "vtable for OHOS::AccountSA::AdminAuthorizationCallbackStub";
+        "vtable for OHOS::AccountSA::AdminAuthorizationCallbackService";
+        "non-virtual thunk to OHOS::AccountSA::AuthorizationCallbackService::OnConnectAbility(OHOS::AccountSA::ConnectAbilityInfo const&, OHOS::sptr<OHOS::IRemoteObject> const&)";
+        "non-virtual thunk to OHOS::AccountSA::AuthorizationCallbackService::OnBatchResult(int, std::__h::vector<OHOS::AccountSA::AuthorizationResult, std::__h::allocator<OHOS::AccountSA::AuthorizationResult>> const&)";
+        "non-virtual thunk to OHOS::AccountSA::AuthorizationCallbackService::OnResult(int, OHOS::AccountSA::AuthorizationResult const&)";
+        "non-virtual thunk to OHOS::AccountSA::AuthorizationCallbackService::~AuthorizationCallbackService()";
+        "non-virtual thunk to OHOS::AccountSA::AdminAuthorizationCallbackService::OnResult(OHOS::AccountSA::AdminAuthorizationResult const&)";
+        "virtual thunk to OHOS::AccountSA::ConnectAbilityInfo::~ConnectAbilityInfo()";
+        "virtual thunk to OHOS::AccountSA::AuthorizationResult::~AuthorizationResult()";
+        "virtual thunk to OHOS::AccountSA::AdminAuthorizationResult::~AdminAuthorizationResult()";
+        "virtual thunk to OHOS::AccountSA::AcquireAuthorizationOptions::~AcquireAuthorizationOptions()";
+        "virtual thunk to OHOS::AccountSA::AuthorizationCallbackService::~AuthorizationCallbackService()";
+        "_fini";
+        "_init";
+        "OHOS::AccountSA::AuthorizationClient::AuthorizationDeathRecipient::OnRemoteDied(OHOS::wptr<OHOS::IRemoteObject> const&)";
+        "OHOS::AccountSA::AuthorizationClient::GetAuthorizationProxy()";
+        "OHOS::AccountSA::AuthorizationClient::GetOrCreateRequestRemoteObject()";
+        "OHOS::AccountSA::AuthorizationClient::ResetAuthorizationProxy(OHOS::wptr<OHOS::IRemoteObject> const&)";
+        "OHOS::DelayedSingleton<OHOS::AppExecFwk::AppMgrClient>::instance_";
+        "OHOS::DelayedSingleton<OHOS::AppExecFwk::AppMgrClient>::mutex_";
+        "VTT for OHOS::AccountSA::AuthorizationClient::AuthorizationDeathRecipient";
+        "construction vtable for OHOS::IRemoteObject::DeathRecipient-in-OHOS::AccountSA::AuthorizationClient::AuthorizationDeathRecipient";
+        "guard variable for OHOS::DelayedSingleton<OHOS::AppExecFwk::AppMgrClient>::instance_";
+        "guard variable for OHOS::DelayedSingleton<OHOS::AppExecFwk::AppMgrClient>::mutex_";
+        "vtable for OHOS::AccountSA::AuthorizationClient::AuthorizationDeathRecipient";
+    };
+  local:
+    *;
+};

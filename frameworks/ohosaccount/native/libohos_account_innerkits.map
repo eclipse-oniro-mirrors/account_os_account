@@ -14,39 +14,34 @@
 1.0 {
   global:
     extern "C++" {
-        "VTT for OHOS::AccountSA::AccountProxy";
-        "vtable for OHOS::AccountSA::AccountProxy";
-        "OHOS::AccountSA::OhosAccountKitsImpl::GetInstance()";
-        "OHOS::AccountSA::OhosAccountKits::GetInstance()";
-        "OHOS::AccountSA::OhosAccountKitsImpl::GetDomainAccountService()";
-        "OHOS::AccountSA::OhosAccountKitsImpl::GetAppAccountService()";
-        "OHOS::AccountSA::OhosAccountKitsImpl::GetOsAccountService()";
-        "OHOS::AccountSA::OhosAccountKitsImpl::GetAccountIAMService()";
-        "OHOS::AccountSA::OhosAccountKitsImpl::GetAuthorizationService()";
-        "OHOS::AccountSA::OhosAccountKitsImpl::GetOsAccountSubspaceService()";
-        "OHOS::AccountSA::OhosAccountKitsImpl::QueryOhosAccountInfo(OHOS::AccountSA::OhosAccountInfo&)";
-
-        OHOS::AccountSA::OhosAccountKitsImpl::QueryDistributedVirtualDeviceId*;
-        "OHOS::AccountSA::WriteOhosAccountInfo(OHOS::MessageParcel&, OHOS::AccountSA::OhosAccountInfo const&)";
-        "OHOS::AccountSA::ReadOhosAccountInfo(OHOS::MessageParcel&, OHOS::AccountSA::OhosAccountInfo&)";
-        "OHOS::AccountSA::SystemAbilityStatusChangeListener::SystemAbilityStatusChangeListener(std::__h::function<void (int, std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>>)> const&)";
-        "OHOS::AccountSA::OhosAccountKitsImpl::SubscribeSystemAbility(std::__h::function<void (int, std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>>)> const&)";
-        "VTT for OHOS::AccountSA::DistributedAccountEventData";
-        "vtable for OHOS::AccountSA::DistributedAccountEventData";
+        "OHOS::AccountSA::DistributedAccountEventService::AddType(OHOS::AccountSA::DISTRIBUTED_ACCOUNT_SUBSCRIBE_TYPE, std::__h::shared_ptr<OHOS::AccountSA::DistributedAccountSubscribeCallback> const&)";
+        "OHOS::AccountSA::DistributedAccountEventService::DeleteType(OHOS::AccountSA::DISTRIBUTED_ACCOUNT_SUBSCRIBE_TYPE, std::__h::shared_ptr<OHOS::AccountSA::DistributedAccountSubscribeCallback> const&)";
+        "OHOS::AccountSA::DistributedAccountEventService::DistributedAccountEventService()";
+        "OHOS::AccountSA::DistributedAccountEventService::GetAllType(std::__h::set<OHOS::AccountSA::DISTRIBUTED_ACCOUNT_SUBSCRIBE_TYPE, std::__h::less<OHOS::AccountSA::DISTRIBUTED_ACCOUNT_SUBSCRIBE_TYPE>, std::__h::allocator<OHOS::AccountSA::DISTRIBUTED_ACCOUNT_SUBSCRIBE_TYPE>>&)";
+        "OHOS::AccountSA::DistributedAccountEventService::GetCallbackSize()";
         "OHOS::AccountSA::DistributedAccountEventService::GetInstance()";
         "OHOS::AccountSA::DistributedAccountEventService::IsTypeExist(OHOS::AccountSA::DISTRIBUTED_ACCOUNT_SUBSCRIBE_TYPE, std::__h::shared_ptr<OHOS::AccountSA::DistributedAccountSubscribeCallback> const&)";
-        "OHOS::AccountSA::DistributedAccountEventService::DeleteType(OHOS::AccountSA::DISTRIBUTED_ACCOUNT_SUBSCRIBE_TYPE, std::__h::shared_ptr<OHOS::AccountSA::DistributedAccountSubscribeCallback> const&)";
-        "OHOS::AccountSA::DistributedAccountEventService::GetAllType(std::__h::set<OHOS::AccountSA::DISTRIBUTED_ACCOUNT_SUBSCRIBE_TYPE, std::__h::less<OHOS::AccountSA::DISTRIBUTED_ACCOUNT_SUBSCRIBE_TYPE>, std::__h::allocator<OHOS::AccountSA::DISTRIBUTED_ACCOUNT_SUBSCRIBE_TYPE>>&)";
-        "OHOS::AccountSA::DistributedAccountEventService::DistributedAccountEventService()";
-        "OHOS::AccountSA::DistributedAccountEventService::AddType(OHOS::AccountSA::DISTRIBUTED_ACCOUNT_SUBSCRIBE_TYPE, std::__h::shared_ptr<OHOS::AccountSA::DistributedAccountSubscribeCallback> const&)";
-        "OHOS::AccountSA::DistributedAccountEventService::GetCallbackSize()";
-        "OHOS::AccountSA::DistributedAccountEventData::operator==(OHOS::AccountSA::DistributedAccountEventData const&) const";
-        "VTT for OHOS::AccountSA::OhosAccountInfo";
-        "vtable for OHOS::AccountSA::OhosAccountInfo";
-        "OHOS::AccountSA::OhosAccountInfo::Unmarshalling(OHOS::Parcel&)";
-        "OHOS::AccountSA::OhosAccountInfo::Marshalling(OHOS::Parcel&) const";
-        "OHOS::AccountSA::OsAccountSubspaceResult::Unmarshalling(OHOS::Parcel&)";
         "OHOS::AccountSA::DistributedAccountEventStub::OnRemoteRequest(unsigned int, OHOS::MessageParcel&, OHOS::MessageParcel&, OHOS::MessageOption&)";
+        "OHOS::AccountSA::OhosAccountInfo::Marshalling(OHOS::Parcel&) const";
+        "OHOS::AccountSA::OhosAccountInfo::Unmarshalling(OHOS::Parcel&)";
+        "OHOS::AccountSA::OhosAccountKits::GetInstance()";
+        "OHOS::AccountSA::OhosAccountKitsImpl::GetAccountIAMService()";
+        "OHOS::AccountSA::OhosAccountKitsImpl::GetAppAccountService()";
+        "OHOS::AccountSA::OhosAccountKitsImpl::GetAuthorizationService()";
+        "OHOS::AccountSA::OhosAccountKitsImpl::GetDomainAccountService()";
+        "OHOS::AccountSA::OhosAccountKitsImpl::GetInstance()";
+        "OHOS::AccountSA::OhosAccountKitsImpl::GetOsAccountService()";
+        "OHOS::AccountSA::OhosAccountKitsImpl::GetOsAccountSubspaceService()";
+        "OHOS::AccountSA::OhosAccountKitsImpl::QueryDistributedVirtualDeviceId(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>> const&, int, std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>>&)";
+        "OHOS::AccountSA::OhosAccountKitsImpl::QueryDistributedVirtualDeviceId(std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>>&)";
+        "OHOS::AccountSA::OhosAccountKitsImpl::QueryOhosAccountInfo(OHOS::AccountSA::OhosAccountInfo&)";
+        "OHOS::AccountSA::OhosAccountKitsImpl::SubscribeSystemAbility(std::__h::function<void (int, std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>>)> const&)";
+        "OHOS::AccountSA::OsAccountSubspaceResult::Unmarshalling(OHOS::Parcel&)";
+        "OHOS::AccountSA::SystemAbilityStatusChangeListener::SystemAbilityStatusChangeListener(std::__h::function<void (int, std::__h::basic_string<char, std::__h::char_traits<char>, std::__h::allocator<char>>)> const&)";
+        "VTT for OHOS::AccountSA::AccountProxy";
+        "VTT for OHOS::AccountSA::OhosAccountInfo";
+        "vtable for OHOS::AccountSA::AccountProxy";
+        "vtable for OHOS::AccountSA::OhosAccountInfo";
     };
   local:
     *;
