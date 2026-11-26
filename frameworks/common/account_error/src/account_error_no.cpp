@@ -23,7 +23,7 @@ static const std::unordered_map<uint32_t, std::string> g_errorStringMap = {
         "2. Incorrect parameter types; "
         "3. Parameter verification failed."},
     {ERR_JS_ACCOUNT_NOT_FOUND, "Account not found, please check whether the account exists"},
-    {ERR_JS_IS_NOT_SYSTEM_APP, "This api is system api, Please use the system application to call this api"},
+    {ERR_JS_IS_NOT_SYSTEM_APP, "Permission verification failed. A non-system application calls a system API"},
     {ERR_JS_ACCOUNT_ALREADY_EXIST, "Account already exists, please cancel or try other account"},
     {ERR_JS_ACCOUNT_ALREADY_ACTIVATED, "Account already activated, do not activate duplicately"},
     {ERR_JS_ACCOUNT_SERVICE_BUSY, "Account service is busy, please wait for a moment and try again"},
@@ -71,9 +71,12 @@ static const std::unordered_map<uint32_t, std::string> g_errorStringMap = {
     {ERR_JS_CUSTOM_DATA_NOT_FOUND,
      "Application account customized data not found, please use existed customized data and try again"},
     {ERR_JS_AUTH_TYPE_NOT_FOUND, "Application account auth type not found, please use existed auth type"},
-    {ERR_JS_PERMISSION_DENIED, "Permission denied"},
+    {ERR_JS_PERMISSION_DENIED, "Permission verification failed. The application does not have the permission"},
     {ERR_JS_PLUGIN_NETWORK_EXCEPTION, "Network exception"},
-    {ERR_JS_CAPABILITY_NOT_SUPPORTED, "capability not supported"},
+    {ERR_JS_CAPABILITY_NOT_SUPPORTED, "Capability not supported. Possible causes: "
+        "1. The hardware does not support the capability; "
+        "2. The chip does not support the capability; "
+        "3. A dependent service feature is not supported."},
     {ERR_JS_ACCOUNT_LOGGED_IN_ACCOUNTS_OVERSIZE, "The number of the logged in OS accounts reaches upper limit"},
     {ERR_JS_COMPLEXITY_CHECK_FAILED, "The complexity of credential check failed"},
     {ERR_JS_PIN_IS_EXPIRED, "The PIN credential is expired"},

@@ -93,7 +93,7 @@ static void SwitchOsAccountSubProfileExecuteCB(napi_env env, void *data)
 napi_value NapiOsAccountSubProfileManager::GetOsAccountSubProfileManager(napi_env env, napi_callback_info cbInfo)
 {
     if (AccountPermissionManager::CheckSystemApp(false) != ERR_OK) {
-        std::string errMsg = "Not system application.";
+        std::string errMsg = ConvertToJsErrMsg(ERR_JS_IS_NOT_SYSTEM_APP);
         AccountNapiThrow(env, ERR_JS_IS_NOT_SYSTEM_APP, errMsg, true);
         return nullptr;
     }
