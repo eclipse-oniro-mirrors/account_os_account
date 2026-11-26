@@ -16,13 +16,21 @@
 #include <gtest/gtest.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <atomic>
+#include <chrono>
+#include <functional>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 #include "account_error_no.h"
-#include "os_account_etc_file.h"
 #include "os_account_constants.h"
-#include "os_account_control_file_manager.h"
+#define private public
 #include "os_account_etc_file_manager.h"
+#include "os_account_control_file_manager.h"
+#undef private
+#include "os_account_etc_file.h"
 
 #ifndef ACCOUNT_TEST
 #error "os_account_etc_file_manager_test.cpp must be built with -DACCOUNT_TEST"
@@ -35,10 +43,17 @@ using namespace testing::ext;
 namespace {
 const int32_t TEST_ID_ONE = 101;
 const int32_t TEST_ID_TWO = 102;
+const int32_t TEST_ID_MISSING = 10500;
 const std::string TEST_NAME_ONE = "alice";
 const std::string TEST_NAME_TWO = "bob";
 const std::string TEST_NAME_ADMIN = "adm1";
+const std::string TEST_NAME_PINYIN = "zhangsan";
+const std::string TEST_NAME_CHINESE = "\xe5\xbc\xa0\xe4\xb8\x89"; // UTF-8 for 张三
 const std::string TEST_ETC_DIR = EtcAccountFileUtils::ETC_FILE_DIR;
+const int32_t EXPECTED_ETC_RETRY_TIMES = 3;
+const int32_t EXPECTED_ETC_SECOND_ATTEMPT_COUNT = 2;
+const int32_t ASYNC_TASK_WAIT_TIMEOUT_MS = 5000;
+const int32_t ASYNC_POLL_INTERVAL_MS = 10;
 
 std::shared_ptr<OsAccountControlFileManager> g_etcControlManager = std::make_shared<OsAccountControlFileManager>();
 
@@ -69,6 +84,8 @@ protected:
     int CountUserRows(const std::string &passwdContent, const std::string &name);
     bool HasGroupMember(const std::string &groupContent, const std::string &groupName,
         const std::string &member);
+    void ResetAccountStore();
+    bool WaitForAsyncState(const std::function<bool()> &ready);
 };
 
 void OsAccountEtcFileManagerTest::SetUpTestCase()
@@ -98,7 +115,33 @@ void OsAccountEtcFileManagerTest::SetUp()
     etcManager_ = std::make_shared<OsAccountEtcFileManager>(g_etcControlManager);
 }
 
-void OsAccountEtcFileManagerTest::TearDown() {}
+void OsAccountEtcFileManagerTest::TearDown()
+{
+    ResetAccountStore();
+}
+
+void OsAccountEtcFileManagerTest::ResetAccountStore()
+{
+#ifdef ACCOUNT_TEST
+    system(("rm -rf " + Constants::USER_INFO_BASE).c_str());
+#endif
+    g_etcControlManager = std::make_shared<OsAccountControlFileManager>();
+    g_etcControlManager->Init();
+    etcManager_ = std::make_shared<OsAccountEtcFileManager>(g_etcControlManager);
+}
+
+bool OsAccountEtcFileManagerTest::WaitForAsyncState(const std::function<bool()> &ready)
+{
+    auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::milliseconds(ASYNC_TASK_WAIT_TIMEOUT_MS);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (ready()) {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(ASYNC_POLL_INTERVAL_MS));
+    }
+    return ready();
+}
 
 OsAccountInfo OsAccountEtcFileManagerTest::MakeAccount(int32_t id, const std::string &shortName,
     OsAccountType type)
@@ -123,9 +166,10 @@ void OsAccountEtcFileManagerTest::SeedEtcFiles()
 
 void OsAccountEtcFileManagerTest::CleanEtcFiles()
 {
-    system(("rm -f " + EtcFilePath(EtcAccountFileUtils::PASSWD_FILE_NAME) + " " +
+    system(("rm -rf " + EtcFilePath(EtcAccountFileUtils::PASSWD_FILE_NAME) + " " +
         EtcFilePath(EtcAccountFileUtils::GROUP_FILE_NAME) + " " +
-        EtcFilePath(EtcAccountFileUtils::ETC_FAULT_FLAG_NAME)).c_str());
+        EtcFilePath(EtcAccountFileUtils::ETC_FAULT_FLAG_NAME) + " " +
+        EtcFilePath(EtcAccountFileUtils::ETC_MIGRATION_FLAG_NAME)).c_str());
 }
 
 std::string OsAccountEtcFileManagerTest::ReadPasswd()
@@ -630,6 +674,501 @@ HWTEST_F(OsAccountEtcFileManagerTest, SyncEtcForCreate013, TestSize.Level1)
     EXPECT_NE(ret, ERR_OK);
     EXPECT_FALSE(PasswdExists());
     system(("mkdir -p " + std::string(EtcAccountFileUtils::ETC_FILE_DIR)).c_str());
+}
+
+/**
+ * @tc.name: EtcMigrationFlagNotExist001
+ * @tc.desc: Migration flag is absent by default, the existence check succeeds with false.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, EtcMigrationFlagNotExist001, TestSize.Level1)
+{
+    bool isExist = true;
+    ASSERT_EQ(EtcAccountFileUtils::IsEtcMigrationFlagExist(isExist), ERR_OK);
+    EXPECT_FALSE(isExist);
+}
+
+/**
+ * @tc.name: EtcMigrationFlagCreateAndExist001
+ * @tc.desc: Create the migration flag, then the existence check reports it.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, EtcMigrationFlagCreateAndExist001, TestSize.Level1)
+{
+    ASSERT_EQ(EtcAccountFileUtils::CreateEtcMigrationFlagFile(), ERR_OK);
+    bool isExist = false;
+    ASSERT_EQ(EtcAccountFileUtils::IsEtcMigrationFlagExist(isExist), ERR_OK);
+    EXPECT_TRUE(isExist);
+}
+
+/**
+ * @tc.name: EtcMigrationFlagCreateBlockedByDir001
+ * @tc.desc: Creating the migration flag fails when the flag path is occupied by a directory.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, EtcMigrationFlagCreateBlockedByDir001, TestSize.Level1)
+{
+    std::string flagPath = EtcFilePath(EtcAccountFileUtils::ETC_MIGRATION_FLAG_NAME);
+    system(("mkdir -p " + flagPath).c_str());
+    EXPECT_NE(EtcAccountFileUtils::CreateEtcMigrationFlagFile(), ERR_OK);
+    system(("rm -rf " + flagPath).c_str());
+}
+
+/**
+ * @tc.name: EtcMigrationFlagExistCheckBlockedByDir001
+ * @tc.desc: Existence check fails with an error when the flag path is a directory.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, EtcMigrationFlagExistCheckBlockedByDir001, TestSize.Level1)
+{
+    std::string flagPath = EtcFilePath(EtcAccountFileUtils::ETC_MIGRATION_FLAG_NAME);
+    system(("mkdir -p " + flagPath).c_str());
+    bool isExist = true;
+    EXPECT_NE(EtcAccountFileUtils::IsEtcMigrationFlagExist(isExist), ERR_OK);
+    system(("rm -rf " + flagPath).c_str());
+}
+
+/**
+ * @tc.name: SyncEtcForCreateSkipDuringMigration001
+ * @tc.desc: Create sync is skipped with success while migration is in progress, no row appears.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, SyncEtcForCreateSkipDuringMigration001, TestSize.Level1)
+{
+    SeedEtcFiles();
+    std::string passwdBefore = ReadPasswd();
+    etcManager_->migrationInProgress_.store(true);
+    EXPECT_EQ(etcManager_->SyncEtcForCreate(MakeAccount(TEST_ID_ONE, TEST_NAME_ONE)), ERR_OK);
+    EXPECT_EQ(ReadPasswd(), passwdBefore);
+    EXPECT_FALSE(HasUserRow(ReadPasswd(), TEST_ID_ONE, TEST_NAME_ONE));
+}
+
+/**
+ * @tc.name: SyncEtcForRemoveSkipDuringMigration001
+ * @tc.desc: Remove sync is skipped with success while migration is in progress, row stays.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, SyncEtcForRemoveSkipDuringMigration001, TestSize.Level1)
+{
+    SeedEtcFiles();
+    ASSERT_EQ(etcManager_->SyncEtcForCreate(MakeAccount(TEST_ID_ONE, TEST_NAME_ONE)), ERR_OK);
+    ASSERT_TRUE(HasUserRow(ReadPasswd(), TEST_ID_ONE, TEST_NAME_ONE));
+    etcManager_->migrationInProgress_.store(true);
+    EXPECT_EQ(etcManager_->SyncEtcForRemove(MakeAccount(TEST_ID_ONE, TEST_NAME_ONE)), ERR_OK);
+    EXPECT_TRUE(HasUserRow(ReadPasswd(), TEST_ID_ONE, TEST_NAME_ONE));
+}
+
+/**
+ * @tc.name: MigrateAndSyncWeakPtrExpired001
+ * @tc.desc: Migration with an expired control-manager weak pointer is a no-op with success.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, MigrateAndSyncWeakPtrExpired001, TestSize.Level1)
+{
+    std::weak_ptr<OsAccountControlFileManager> expiredWeak;
+    {
+        auto temp = std::make_shared<OsAccountControlFileManager>();
+        expiredWeak = temp;
+    } // temp released: the weak pointer is expired
+    auto orphanManager = std::make_shared<OsAccountEtcFileManager>(expiredWeak);
+    EXPECT_EQ(orphanManager->MigrateAndSync(), ERR_OK);
+    EXPECT_FALSE(orphanManager->migrationInProgress_.load());
+    bool flagExist = true;
+    ASSERT_EQ(EtcAccountFileUtils::IsEtcMigrationFlagExist(flagExist), ERR_OK);
+    EXPECT_FALSE(flagExist);
+}
+
+/**
+ * @tc.name: MigrateAndSyncSuccess001
+ * @tc.desc: Migration renames a non-compliant short name, rebuilds etc files and writes the flag.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, MigrateAndSyncSuccess001, TestSize.Level1)
+{
+    OsAccountInfo account = MakeAccount(TEST_ID_ONE, TEST_NAME_CHINESE);
+    ASSERT_EQ(g_etcControlManager->InsertOsAccount(account), ERR_OK);
+    EXPECT_EQ(etcManager_->MigrateAndSync(), ERR_OK);
+    EXPECT_FALSE(etcManager_->migrationInProgress_.load());
+    OsAccountInfo migrated;
+    ASSERT_EQ(g_etcControlManager->GetOsAccountInfoById(TEST_ID_ONE, migrated), ERR_OK);
+    EXPECT_EQ(migrated.GetShortName(), TEST_NAME_PINYIN); // 张三 → zhangsan
+    EXPECT_EQ(migrated.GetOldShortName(), TEST_NAME_CHINESE);
+    EXPECT_TRUE(HasUserRow(ReadPasswd(), TEST_ID_ONE, TEST_NAME_PINYIN));
+    std::string group = ReadGroup();
+    EXPECT_TRUE(HasGroupMember(group, EtcAccountFileUtils::NORMAL_GROUP_NAME, TEST_NAME_PINYIN));
+    bool flagExist = false;
+    ASSERT_EQ(EtcAccountFileUtils::IsEtcMigrationFlagExist(flagExist), ERR_OK);
+    EXPECT_TRUE(flagExist);
+}
+
+/**
+ * @tc.name: MigrateAndSyncGetAccountListFailed001
+ * @tc.desc: Migration fails and resets progress when the account list file is corrupted.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, MigrateAndSyncGetAccountListFailed001, TestSize.Level1)
+{
+    system(("echo not_json > " + Constants::ACCOUNT_LIST_FILE_JSON_PATH).c_str());
+    EXPECT_EQ(etcManager_->MigrateAndSync(), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_FALSE(etcManager_->migrationInProgress_.load());
+    bool flagExist = true;
+    ASSERT_EQ(EtcAccountFileUtils::IsEtcMigrationFlagExist(flagExist), ERR_OK);
+    EXPECT_FALSE(flagExist);
+}
+
+/**
+ * @tc.name: MigrateAndSyncApplyRenamePlanFailed001
+ * @tc.desc: Migration fails when the rename plan references an account whose file is gone.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, MigrateAndSyncApplyRenamePlanFailed001, TestSize.Level1)
+{
+    OsAccountInfo holder = MakeAccount(TEST_ID_TWO, TEST_NAME_TWO);
+    OsAccountInfo legacy = MakeAccount(TEST_ID_MISSING, TEST_NAME_CHINESE);
+    ASSERT_EQ(g_etcControlManager->InsertOsAccount(holder), ERR_OK);
+    ASSERT_EQ(g_etcControlManager->InsertOsAccount(legacy), ERR_OK);
+    std::string storeBase = Constants::USER_INFO_BASE + Constants::PATH_SEPARATOR;
+    std::string infoFile = Constants::PATH_SEPARATOR + Constants::USER_INFO_FILE_NAME;
+    // Slot TEST_ID_TWO now serves content whose localId is TEST_ID_MISSING; dropping that
+    // account's own file makes the rename plan (keyed by the embedded id) impossible to re-read.
+    system(("cp " + storeBase + std::to_string(TEST_ID_MISSING) + infoFile + " " + storeBase +
+        std::to_string(TEST_ID_TWO) + infoFile).c_str());
+    system(("rm -rf " + storeBase + std::to_string(TEST_ID_MISSING)).c_str());
+    EXPECT_EQ(etcManager_->MigrateAndSync(), ERR_ACCOUNT_COMMON_ACCOUNT_NOT_EXIST_ERROR);
+    EXPECT_FALSE(etcManager_->migrationInProgress_.load());
+}
+
+/**
+ * @tc.name: MigrateAndSyncFlushEtcFilesFailed001
+ * @tc.desc: Migration fails when etc files cannot be rebuilt because the etc dir is missing.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, MigrateAndSyncFlushEtcFilesFailed001, TestSize.Level1)
+{
+    system(("rm -rf " + TEST_ETC_DIR).c_str());
+    EXPECT_EQ(etcManager_->MigrateAndSync(), ERR_ACCOUNT_COMMON_FILE_NOT_EXIST);
+    EXPECT_FALSE(etcManager_->migrationInProgress_.load());
+    bool flagExist = true;
+    ASSERT_EQ(EtcAccountFileUtils::IsEtcMigrationFlagExist(flagExist), ERR_OK);
+    EXPECT_FALSE(flagExist);
+    system(("mkdir -p " + TEST_ETC_DIR).c_str());
+}
+
+/**
+ * @tc.name: MigrateAndSyncCreateFlagFailed001
+ * @tc.desc: Migration fails at the last step when the flag path is blocked by a directory;
+ *           rename and rebuild have already been applied.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, MigrateAndSyncCreateFlagFailed001, TestSize.Level1)
+{
+    OsAccountInfo account = MakeAccount(TEST_ID_ONE, TEST_NAME_CHINESE);
+    ASSERT_EQ(g_etcControlManager->InsertOsAccount(account), ERR_OK);
+    std::string flagPath = EtcFilePath(EtcAccountFileUtils::ETC_MIGRATION_FLAG_NAME);
+    system(("mkdir -p " + flagPath).c_str());
+    EXPECT_NE(etcManager_->MigrateAndSync(), ERR_OK);
+    EXPECT_FALSE(etcManager_->migrationInProgress_.load());
+    EXPECT_TRUE(HasUserRow(ReadPasswd(), TEST_ID_ONE, TEST_NAME_PINYIN)); // rebuild happened
+    system(("rm -rf " + flagPath).c_str());
+}
+
+/**
+ * @tc.name: ApplyRenamePlanWeakPtrExpired001
+ * @tc.desc: Applying a rename plan with an expired weak pointer succeeds without any work.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, ApplyRenamePlanWeakPtrExpired001, TestSize.Level1)
+{
+    std::weak_ptr<OsAccountControlFileManager> expiredWeak;
+    {
+        auto temp = std::make_shared<OsAccountControlFileManager>();
+        expiredWeak = temp;
+    }
+    auto orphanManager = std::make_shared<OsAccountEtcFileManager>(expiredWeak);
+    // Non-empty plan proves the early return: proceeding would fail re-reading TEST_ID_ONE.
+    std::vector<OsAccountInfo> plan = { MakeAccount(TEST_ID_ONE, TEST_NAME_ONE) };
+    EXPECT_EQ(orphanManager->ApplyRenamePlan(plan), ERR_OK);
+}
+
+/**
+ * @tc.name: ApplyRenamePlanRereadFailed001
+ * @tc.desc: Applying a rename plan fails when the account no longer exists in the store.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, ApplyRenamePlanRereadFailed001, TestSize.Level1)
+{
+    std::vector<OsAccountInfo> plan = { MakeAccount(TEST_ID_MISSING, TEST_NAME_ONE) };
+    EXPECT_EQ(etcManager_->ApplyRenamePlan(plan), ERR_ACCOUNT_COMMON_ACCOUNT_NOT_EXIST_ERROR);
+}
+
+/**
+ * @tc.name: ApplyRenamePlanAlreadyCompliantSkipped001
+ * @tc.desc: A plan entry whose current short name is already compliant is skipped, store untouched.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, ApplyRenamePlanAlreadyCompliantSkipped001, TestSize.Level1)
+{
+    OsAccountInfo account = MakeAccount(TEST_ID_ONE, TEST_NAME_ONE); // "alice" is compliant
+    ASSERT_EQ(g_etcControlManager->InsertOsAccount(account), ERR_OK);
+    std::vector<OsAccountInfo> plan = { MakeAccount(TEST_ID_ONE, TEST_NAME_TWO) };
+    EXPECT_EQ(etcManager_->ApplyRenamePlan(plan), ERR_OK);
+    OsAccountInfo current;
+    ASSERT_EQ(g_etcControlManager->GetOsAccountInfoById(TEST_ID_ONE, current), ERR_OK);
+    EXPECT_EQ(current.GetShortName(), TEST_NAME_ONE);
+    EXPECT_TRUE(current.GetOldShortName().empty());
+}
+
+/**
+ * @tc.name: ApplyRenamePlanConflictResolved001
+ * @tc.desc: A planned name taken by another account meanwhile is regenerated with a free suffix.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, ApplyRenamePlanConflictResolved001, TestSize.Level1)
+{
+    OsAccountInfo legacy = MakeAccount(TEST_ID_ONE, TEST_NAME_CHINESE);
+    OsAccountInfo holder = MakeAccount(TEST_ID_TWO, TEST_NAME_ONE);
+    ASSERT_EQ(g_etcControlManager->InsertOsAccount(legacy), ERR_OK);
+    ASSERT_EQ(g_etcControlManager->InsertOsAccount(holder), ERR_OK);
+    // Plan was built when "alice" was free for account TEST_ID_ONE; TEST_ID_TWO owns it now.
+    std::vector<OsAccountInfo> plan = { MakeAccount(TEST_ID_ONE, TEST_NAME_ONE) };
+    EXPECT_EQ(etcManager_->ApplyRenamePlan(plan), ERR_OK);
+    OsAccountInfo migrated;
+    ASSERT_EQ(g_etcControlManager->GetOsAccountInfoById(TEST_ID_ONE, migrated), ERR_OK);
+    EXPECT_EQ(migrated.GetShortName(), TEST_NAME_ONE + "1");
+    EXPECT_EQ(migrated.GetOldShortName(), TEST_NAME_CHINESE);
+}
+
+/**
+ * @tc.name: ApplyRenamePlanUpdateOsAccountFailed001
+ * @tc.desc: Applying a rename plan fails when persisting targets a missing per-account file.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, ApplyRenamePlanUpdateOsAccountFailed001, TestSize.Level1)
+{
+    OsAccountInfo holder = MakeAccount(TEST_ID_TWO, TEST_NAME_TWO);
+    OsAccountInfo legacy = MakeAccount(TEST_ID_MISSING, TEST_NAME_CHINESE);
+    ASSERT_EQ(g_etcControlManager->InsertOsAccount(holder), ERR_OK);
+    ASSERT_EQ(g_etcControlManager->InsertOsAccount(legacy), ERR_OK);
+    std::string storeBase = Constants::USER_INFO_BASE + Constants::PATH_SEPARATOR;
+    std::string infoFile = Constants::PATH_SEPARATOR + Constants::USER_INFO_FILE_NAME;
+    // Slot TEST_ID_TWO serves content whose localId is TEST_ID_MISSING and whose own file is
+    // removed: re-read succeeds, but UpdateOsAccount writes to the missing TEST_ID_MISSING path.
+    system(("cp " + storeBase + std::to_string(TEST_ID_MISSING) + infoFile + " " + storeBase +
+        std::to_string(TEST_ID_TWO) + infoFile).c_str());
+    system(("rm -rf " + storeBase + std::to_string(TEST_ID_MISSING)).c_str());
+    std::vector<OsAccountInfo> plan = { MakeAccount(TEST_ID_TWO, TEST_NAME_ONE) };
+    EXPECT_EQ(etcManager_->ApplyRenamePlan(plan),
+        ERR_OSACCOUNT_SERVICE_CONTROL_UPDATE_FILE_NOT_EXISTS_ERROR);
+}
+
+/**
+ * @tc.name: RefreshTakenNamesReadFailed001
+ * @tc.desc: Name resolution keeps the planned name when the account store cannot be read.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, RefreshTakenNamesReadFailed001, TestSize.Level1)
+{
+    system(("echo not_json > " + Constants::ACCOUNT_LIST_FILE_JSON_PATH).c_str());
+    std::string name = TEST_NAME_ONE;
+    EXPECT_FALSE(etcManager_->RefreshTakenNamesAndResolve(g_etcControlManager, TEST_ID_ONE, name));
+    EXPECT_EQ(name, TEST_NAME_ONE); // planned name kept, UpdateOsAccount will surface errors
+}
+
+/**
+ * @tc.name: RefreshTakenNamesNoConflict001
+ * @tc.desc: Name resolution keeps the planned name when no other account took it.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, RefreshTakenNamesNoConflict001, TestSize.Level1)
+{
+    OsAccountInfo holder = MakeAccount(TEST_ID_TWO, TEST_NAME_TWO);
+    ASSERT_EQ(g_etcControlManager->InsertOsAccount(holder), ERR_OK);
+    std::string name = TEST_NAME_ONE; // free: only "bob" is taken
+    EXPECT_FALSE(etcManager_->RefreshTakenNamesAndResolve(g_etcControlManager, TEST_ID_ONE, name));
+    EXPECT_EQ(name, TEST_NAME_ONE);
+}
+
+/**
+ * @tc.name: RefreshTakenNamesConflictRegenerated001
+ * @tc.desc: Name resolution regenerates a conflict-free name when the planned one is taken.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, RefreshTakenNamesConflictRegenerated001, TestSize.Level1)
+{
+    OsAccountInfo holder = MakeAccount(TEST_ID_TWO, TEST_NAME_PINYIN);
+    ASSERT_EQ(g_etcControlManager->InsertOsAccount(holder), ERR_OK);
+    std::string name = TEST_NAME_PINYIN; // taken by TEST_ID_TWO
+    EXPECT_TRUE(etcManager_->RefreshTakenNamesAndResolve(g_etcControlManager, TEST_ID_ONE, name));
+    EXPECT_EQ(name, TEST_NAME_PINYIN + "1");
+}
+
+/**
+ * @tc.name: ReconcileEtcFilesWeakPtrExpired001
+ * @tc.desc: Reconcile with an expired weak pointer is a no-op with success, no files appear.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, ReconcileEtcFilesWeakPtrExpired001, TestSize.Level1)
+{
+    ASSERT_FALSE(PasswdExists()); // SetUp cleaned the etc files
+    std::weak_ptr<OsAccountControlFileManager> expiredWeak;
+    {
+        auto temp = std::make_shared<OsAccountControlFileManager>();
+        expiredWeak = temp;
+    }
+    auto orphanManager = std::make_shared<OsAccountEtcFileManager>(expiredWeak);
+    EXPECT_EQ(orphanManager->ReconcileEtcFiles(), ERR_OK);
+    EXPECT_FALSE(PasswdExists()); // early return: no rebuild attempted
+}
+
+/**
+ * @tc.name: ReconcileEtcFilesGetAccountListFailed001
+ * @tc.desc: Reconcile fails without rebuilding when the account list file is corrupted.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, ReconcileEtcFilesGetAccountListFailed001, TestSize.Level1)
+{
+    SeedEtcFiles();
+    system(("echo not_json > " + Constants::ACCOUNT_LIST_FILE_JSON_PATH).c_str());
+    std::string passwdBefore = ReadPasswd();
+    EXPECT_EQ(etcManager_->ReconcileEtcFiles(), ERR_ACCOUNT_COMMON_BAD_JSON_FORMAT_ERROR);
+    EXPECT_EQ(ReadPasswd(), passwdBefore); // no rebuild on list failure
+}
+
+/**
+ * @tc.name: ReconcileEtcFilesMissingFilesRebuilt001
+ * @tc.desc: Reconcile rebuilds missing etc files from the account list.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, ReconcileEtcFilesMissingFilesRebuilt001, TestSize.Level1)
+{
+    OsAccountInfo account = MakeAccount(TEST_ID_ONE, TEST_NAME_ONE);
+    ASSERT_EQ(g_etcControlManager->InsertOsAccount(account), ERR_OK);
+    ASSERT_FALSE(PasswdExists()); // SetUp cleaned the etc files
+    EXPECT_EQ(etcManager_->ReconcileEtcFiles(), ERR_OK);
+    std::string passwd = ReadPasswd();
+    EXPECT_TRUE(HasUserRow(passwd, TEST_ID_ONE, TEST_NAME_ONE));
+    EXPECT_NE(passwd.find(EtcAccountFileUtils::U0_FIXED_PASSWD_LINE), std::string::npos);
+    EXPECT_TRUE(HasGroupMember(ReadGroup(), EtcAccountFileUtils::NORMAL_GROUP_NAME, TEST_NAME_ONE));
+}
+
+/**
+ * @tc.name: ReconcileEtcFilesExistenceCheckFailed001
+ * @tc.desc: Reconcile attempts a rebuild when the group path is blocked by a directory, and the
+ *           rebuild itself fails writing there.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, ReconcileEtcFilesExistenceCheckFailed001, TestSize.Level1)
+{
+    SeedEtcFiles();
+    std::string groupPath = EtcFilePath(EtcAccountFileUtils::GROUP_FILE_NAME);
+    system(("rm -rf " + groupPath).c_str());
+    system(("mkdir -p " + groupPath).c_str());
+    EXPECT_NE(etcManager_->ReconcileEtcFiles(), ERR_OK); // rebuild cannot write the group file
+    system(("rm -rf " + groupPath).c_str());
+}
+
+/**
+ * @tc.name: ReconcileEtcFilesMatchNoChange001
+ * @tc.desc: Reconcile succeeds without rewriting when files already match the account list.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, ReconcileEtcFilesMatchNoChange001, TestSize.Level1)
+{
+    OsAccountInfo account = MakeAccount(TEST_ID_ONE, TEST_NAME_ONE);
+    ASSERT_EQ(g_etcControlManager->InsertOsAccount(account), ERR_OK);
+    ASSERT_EQ(etcManager_->FlushEtcFilesSync(), ERR_OK);
+    std::string passwdBefore = ReadPasswd();
+    std::string groupBefore = ReadGroup();
+    EXPECT_EQ(etcManager_->ReconcileEtcFiles(), ERR_OK);
+    EXPECT_EQ(ReadPasswd(), passwdBefore);
+    EXPECT_EQ(ReadGroup(), groupBefore);
+}
+
+/**
+ * @tc.name: ReconcileEtcFilesMismatchRebuilt001
+ * @tc.desc: Reconcile rewrites etc files that drifted from the account list.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, ReconcileEtcFilesMismatchRebuilt001, TestSize.Level1)
+{
+    OsAccountInfo account = MakeAccount(TEST_ID_ONE, TEST_NAME_ONE);
+    ASSERT_EQ(g_etcControlManager->InsertOsAccount(account), ERR_OK);
+    ASSERT_EQ(etcManager_->FlushEtcFilesSync(), ERR_OK);
+    // Simulate drift: strip group members so the content no longer matches the account list.
+    ASSERT_EQ(EtcAccountFileUtils::WriteEtcFile(EtcAccountFileUtils::GROUP_FILE_NAME,
+        "normal:x:20:\nadmin:x:80:\n"), ERR_OK);
+    EXPECT_EQ(etcManager_->ReconcileEtcFiles(), ERR_OK);
+    std::string group = ReadGroup();
+    EXPECT_TRUE(HasGroupMember(group, EtcAccountFileUtils::NORMAL_GROUP_NAME, TEST_NAME_ONE));
+    EXPECT_TRUE(HasGroupMember(group, EtcAccountFileUtils::ADMIN_GROUP_NAME,
+        EtcAccountFileUtils::RESERVED_ETC_USER_NAME));
+}
+
+/**
+ * @tc.name: PostAsyncTaskRetryUntilSuccess001
+ * @tc.desc: A failing async task is retried and stops as soon as it succeeds.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, PostAsyncTaskRetryUntilSuccess001, TestSize.Level1)
+{
+    auto attempts = std::make_shared<std::atomic<int32_t>>(0);
+    auto task = [attempts]() {
+        attempts->fetch_add(1);
+        return attempts->load() >= EXPECTED_ETC_SECOND_ATTEMPT_COUNT ? ERR_OK
+            : ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+    };
+    etcManager_->PostAsyncTask(task);
+    ASSERT_TRUE(WaitForAsyncState([attempts]() {
+        return attempts->load() >= EXPECTED_ETC_SECOND_ATTEMPT_COUNT;
+    }));
+    EXPECT_EQ(attempts->load(), EXPECTED_ETC_SECOND_ATTEMPT_COUNT);
+}
+
+/**
+ * @tc.name: PostAsyncTaskRetryExhausted001
+ * @tc.desc: An always-failing async task stops after the maximum retry times.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(OsAccountEtcFileManagerTest, PostAsyncTaskRetryExhausted001, TestSize.Level1)
+{
+    auto attempts = std::make_shared<std::atomic<int32_t>>(0);
+    auto task = [attempts]() {
+        attempts->fetch_add(1);
+        return ERR_ACCOUNT_COMMON_INVALID_PARAMETER;
+    };
+    etcManager_->PostAsyncTask(task);
+    ASSERT_TRUE(WaitForAsyncState([attempts]() {
+        return attempts->load() >= EXPECTED_ETC_RETRY_TIMES;
+    }));
+    EXPECT_EQ(attempts->load(), EXPECTED_ETC_RETRY_TIMES);
 }
 
 }  // namespace AccountSA

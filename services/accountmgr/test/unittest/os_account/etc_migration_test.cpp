@@ -378,3 +378,42 @@ HWTEST_F(EtcMigrationTest, BuildRenamePlan_ReservedRootNeverAssigned, TestSize.L
     ASSERT_EQ(plan.size(), static_cast<size_t>(1));
     EXPECT_EQ(plan[0].GetShortName(), "root1");
 }
+
+/**
+ * @tc.name: GenerateName_SuffixExhausted
+ * @tc.desc: Candidate and all suffixes 1..999 are taken, rename fails and newName is not written.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(EtcMigrationTest, GenerateName_SuffixExhausted, TestSize.Level1)
+{
+    std::set<std::string> taken = { "root", "zhangsan" };
+    for (uint32_t suffix = 1; suffix <= EtcAccountFileUtils::ETC_NAME_SUFFIX_MAX; ++suffix) {
+        taken.insert("zhangsan" + std::to_string(suffix));
+    }
+    std::string newName = "untouched";
+    EXPECT_FALSE(EtcAccountFileUtils::GenerateCompliantShortName(
+        "zhangsan", TEST_LOCAL_ID, taken, newName));
+    EXPECT_EQ(newName, "untouched"); // no partial write on failure
+}
+
+/**
+ * @tc.name: BuildRenamePlan_RenameUnexpectedlyFailedSkipped
+ * @tc.desc: Account whose generated names are all taken is skipped, plan stays empty.
+ * @tc.type: FUNC
+ * @tc.require: SR000GGVFG
+ */
+HWTEST_F(EtcMigrationTest, BuildRenamePlan_RenameUnexpectedlyFailedSkipped, TestSize.Level1)
+{
+    std::vector<OsAccountInfo> accounts;
+    int32_t localId = TEST_LOCAL_ID;
+    accounts.push_back(MakeAccountForMigration(localId++, "zhangsan", "holder"));
+    for (uint32_t suffix = 1; suffix <= EtcAccountFileUtils::ETC_NAME_SUFFIX_MAX; ++suffix) {
+        accounts.push_back(MakeAccountForMigration(localId++, "zhangsan" + std::to_string(suffix),
+            "holder"));
+    }
+    accounts.push_back(MakeAccountForMigration(localId++, "\xe5\xbc\xa0\xe4\xb8\x89", "legacy"));
+    std::vector<OsAccountInfo> plan;
+    EtcAccountFileUtils::BuildRenamePlan(accounts, plan);
+    EXPECT_TRUE(plan.empty()); // rename failed for the legacy account, it is skipped
+}
