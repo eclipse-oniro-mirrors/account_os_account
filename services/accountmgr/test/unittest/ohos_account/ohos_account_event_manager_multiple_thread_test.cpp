@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Huawei Device Co., Ltd.
+ * Copyright (c) 2024-2026 Huawei Device Co., Ltd.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -25,7 +25,6 @@
 #include "distributed_account_event_service.h"
 #include "distributed_account_subscribe_manager.h"
 
-
 namespace OHOS {
 namespace AccountSA {
 using namespace testing;
@@ -34,9 +33,10 @@ using namespace testing::ext;
 namespace {
 constexpr int32_t TEST_COUNT = 100;
 constexpr int32_t TEST_ID = 100;
+constexpr int32_t TEST_THREAD_COUNT = 10;
+constexpr int32_t TEST_PUBLISH_THREAD_COUNT = 4;
 constexpr DISTRIBUTED_ACCOUNT_SUBSCRIBE_TYPE TEST_TYPE = DISTRIBUTED_ACCOUNT_SUBSCRIBE_TYPE::LOGIN;
-const char THREAD_OHOS_ACCOUNT_EVENT_TEST[] = "TestOhosAccountEvent";
-IDistributedAccountSubscribe &mgr = DistributedAccountSubscribeManager::GetInstance();
+DistributedAccountSubscribeManager &mgr = DistributedAccountSubscribeManager::GetInstance();
 }  // namespace
 class OhosAccountEventManagerTest : public testing::Test {
 public:
@@ -65,23 +65,22 @@ void TestPulishOhosAccountEvent()
 
 void TestSubscribeOhosAccountEvent()
 {
-    sptr<IRemoteObject> callbacks[TEST_COUNT];
-    for (int32_t i = 0; i < TEST_COUNT; i++) {
-        callbacks[i] = new (std::nothrow) DistributedAccountEventService();
-        EXPECT_EQ(ERR_OK, mgr.SubscribeDistributedAccountEvent(TEST_TYPE, callbacks[i]));
+    auto listener = sptr<IRemoteObject>(new (std::nothrow) DistributedAccountEventService());
+    ASSERT_NE(listener, nullptr);
+    EXPECT_EQ(ERR_OK, mgr.SubscribeDistributedAccountEvent(TEST_TYPE, listener));
+    std::vector<std::thread> publishThreads;
+    for (int32_t i = 0; i < TEST_PUBLISH_THREAD_COUNT; i++) {
+        publishThreads.emplace_back(TestPulishOhosAccountEvent);
     }
-    auto task = [] { TestPulishOhosAccountEvent(); };
-    std::thread taskThread(task);
-    pthread_setname_np(taskThread.native_handle(), THREAD_OHOS_ACCOUNT_EVENT_TEST);
-    taskThread.detach();
-    for (int32_t i = 0; i < TEST_COUNT; i++) {
-        EXPECT_EQ(ERR_OK, mgr.UnsubscribeDistributedAccountEvent(callbacks[i]));
+    EXPECT_EQ(ERR_OK, mgr.UnsubscribeDistributedAccountEvent(listener));
+    for (auto &t : publishThreads) {
+        t.join();
     }
 }
 
 /**
  * @tc.name: OsAccountEventManagerTestTest001
- * @tc.desc: Test multiple thread event manager
+ * @tc.desc: Test concurrent publish vs unsubscribe with single record per process
  * @tc.type: FUNC
  * @tc.require:
  */
@@ -182,6 +181,66 @@ HWTEST_F(OhosAccountEventManagerTest, OnAccountsChanged_MultiSubscriberConcurren
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     EXPECT_EQ(callCount.load(), callbackCount);
+}
+
+/**
+ * @tc.name: ConcurrentSubscribeSameListener_001
+ * @tc.desc: 10 threads concurrently subscribe with the same listener; final map has exactly 1 record.
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OhosAccountEventManagerTest, ConcurrentSubscribeSameListener_001, TestSize.Level1)
+{
+    auto &manager = DistributedAccountSubscribeManager::GetInstance();
+    auto listener = sptr<IRemoteObject>(new (std::nothrow) DistributedAccountEventService());
+    ASSERT_NE(listener, nullptr);
+
+    std::vector<std::thread> threads;
+    for (int32_t i = 0; i < TEST_THREAD_COUNT; i++) {
+        threads.emplace_back([&manager, &listener]() {
+            manager.SubscribeDistributedAccountEvent(TEST_TYPE, listener);
+        });
+    }
+    for (auto &t : threads) {
+        t.join();
+    }
+
+    EXPECT_EQ(ERR_OK, manager.UnsubscribeDistributedAccountEvent(listener));
+    EXPECT_EQ(ERR_OHOSACCOUNT_KIT_NO_SPECIFIED_CALLBACK_HAS_BEEN_REGISTERED,
+        manager.UnsubscribeDistributedAccountEvent(TEST_TYPE, listener));
+}
+
+/**
+ * @tc.name: ConcurrentSubscribeUnsubscribeMixed_001
+ * @tc.desc: 10 threads concurrently subscribe and unsubscribe the same listener;
+ *           verify no crash and map stays consistent (no dangling entries).
+ * @tc.type: FUNC
+ * @tc.require:
+ */
+HWTEST_F(OhosAccountEventManagerTest, ConcurrentSubscribeUnsubscribeMixed_001, TestSize.Level1)
+{
+    auto &manager = DistributedAccountSubscribeManager::GetInstance();
+    auto listener = sptr<IRemoteObject>(new (std::nothrow) DistributedAccountEventService());
+    ASSERT_NE(listener, nullptr);
+
+    EXPECT_EQ(ERR_OK, manager.SubscribeDistributedAccountEvent(TEST_TYPE, listener));
+
+    std::vector<std::thread> threads;
+    for (int32_t i = 0; i < TEST_THREAD_COUNT; i++) {
+        threads.emplace_back([&manager, &listener, i]() {
+            if (i % 2 == 0) {
+                manager.SubscribeDistributedAccountEvent(TEST_TYPE, listener);
+            } else {
+                manager.UnsubscribeDistributedAccountEvent(listener);
+            }
+        });
+    }
+    for (auto &t : threads) {
+        t.join();
+    }
+    EXPECT_EQ(ERR_OK, manager.UnsubscribeDistributedAccountEvent(listener));
+    EXPECT_EQ(ERR_OHOSACCOUNT_KIT_NO_SPECIFIED_CALLBACK_HAS_BEEN_REGISTERED,
+        manager.UnsubscribeDistributedAccountEvent(TEST_TYPE, listener));
 }
 }  // namespace AccountSA
 }  // namespace OHOS
