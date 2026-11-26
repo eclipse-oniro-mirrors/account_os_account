@@ -379,7 +379,7 @@ napi_value NapiAuthorizationManager::HasAuthorization(napi_env env, napi_callbac
 napi_value NapiAuthorizationManager::GetAuthorizationManager(napi_env env, napi_callback_info cbInfo)
 {
     if (!IsSystemApp(env)) {
-        std::string errMsg = "Not system application.";
+        std::string errMsg = ConvertToJsErrMsg(ERR_JS_IS_NOT_SYSTEM_APP);
         AccountNapiThrow(env, ERR_JS_IS_NOT_SYSTEM_APP, errMsg, true);
         return nullptr;
     }
