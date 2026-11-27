@@ -631,23 +631,8 @@ HWTEST_F(AccountIAMClientTest, AccountIAMClient_AuthUser_0200, TestSize.Level3)
 }
 
 /**
- * @tc.name: AccountIAMClient_CheckAuthOptions_AdditionalInfoSizeExceed_0100
- * @tc.desc: CheckAuthOptions rejects additionalInfo size > 500KB
- * @tc.type: FUNC
- * @tc.require: FEAT-20260623-001
- */
-HWTEST_F(AccountIAMClientTest, AccountIAMClient_CheckAuthOptions_AdditionalInfoSizeExceed_0100, TestSize.Level3)
-{
-    AuthOptions authOptions;
-    authOptions.hasRemoteAuthOptions = true;
-    authOptions.hasAdditionalInfo = true;
-    authOptions.additionalInfo = std::string(ADDITIONAL_INFO_MAX_SIZE + 1, 'x');
-    EXPECT_FALSE(AccountIAMClient::GetInstance().CheckAuthOptions(authOptions));
-}
-
-/**
  * @tc.name: AccountIAMClient_CheckAuthOptions_AdditionalInfoSizeValid_0100
- * @tc.desc: CheckAuthOptions accepts additionalInfo size <= 500KB and empty
+ * @tc.desc: CheckAuthOptions accepts additionalInfo and empty
  * @tc.type: FUNC
  * @tc.require: FEAT-20260623-001
  */

@@ -110,13 +110,7 @@ bool AuthParam::WriteAdditionalInfo(Parcel &parcel) const
     if (!hasValue) {
         return true;
     }
-    int32_t additionalInfoSize = static_cast<int32_t>(additionalInfo.value().size());
-    if (!parcel.WriteInt32(additionalInfoSize)) {
-        ACCOUNT_LOGE("write additionalInfoSize failed!");
-        return false;
-    }
-    if (!static_cast<MessageParcel &>(parcel).WriteRawData(static_cast<const void *>(
-        additionalInfo.value().c_str()), additionalInfoSize)) {
+    if (!parcel.WriteString(additionalInfo.value())) {
         ACCOUNT_LOGE("write additionalInfo failed!");
         return false;
     }
@@ -183,21 +177,12 @@ bool AuthParam::ReadAdditionalInfo(Parcel &parcel)
     if (!hasValue) {
         return true;
     }
-    int32_t additionalInfoSize = 0;
-    if (!parcel.ReadInt32(additionalInfoSize)) {
-        ACCOUNT_LOGE("Read additionalInfoSize failed!");
-        return false;
-    }
-    if (additionalInfoSize < 0 || additionalInfoSize > ADDITIONAL_INFO_MAX_SIZE) {
-        ACCOUNT_LOGE("AdditionalInfoSize is invalid, size=%{public}d", additionalInfoSize);
-        return false;
-    }
-    auto infoPtr = static_cast<MessageParcel &>(parcel).ReadRawData(additionalInfoSize);
-    if (infoPtr == nullptr) {
+    std::string additionalInfoStr;
+    if (!parcel.ReadString(additionalInfoStr)) {
         ACCOUNT_LOGE("read additionalInfo failed");
         return false;
     }
-    additionalInfo = std::string(reinterpret_cast<const char *>(infoPtr), additionalInfoSize);
+    additionalInfo = additionalInfoStr;
     return true;
 }
 
