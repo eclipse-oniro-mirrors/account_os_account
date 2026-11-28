@@ -119,17 +119,21 @@ HWTEST_F(DomainAccountPluginProxyTest, DomainAccountPluginProxyTest_GetAuthStatu
 
 /**
  * @tc.name: DomainAccountPluginProxyTest_GetAuthStatusInfo_002
- * @tc.desc: GetAuthStatusInfo success.
+ * @tc.desc: GetAuthStatusInfo with innerPlugin nullptr, verify callback receives error via oneway.
  * @tc.type: FUNC
  * @tc.require:
  */
 HWTEST_F(DomainAccountPluginProxyTest, DomainAccountPluginProxyTest_GetAuthStatusInfo_002, TestSize.Level3)
 {
     DomainAccountInfo info;
-    std::shared_ptr<DomainAccountCallback> callback = nullptr;
-    sptr<DomainAccountCallbackService> callbackService = new (std::nothrow) DomainAccountCallbackService(callback);
+    int32_t callbackErrCode = ERR_OK;
+    DomainAccountCallbackFunc callbackFunc = [&callbackErrCode](const int32_t errCode, Parcel &parcel) {
+        callbackErrCode = errCode;
+    };
+    sptr<DomainAccountCallbackService> callbackService = new (std::nothrow) DomainAccountCallbackService(callbackFunc);
     EXPECT_NE(callbackService, nullptr);
-    EXPECT_NE(pluginProxy_->GetAuthStatusInfo(info, callbackService), ERR_OK);
+    EXPECT_EQ(pluginProxy_->GetAuthStatusInfo(info, callbackService), ERR_OK);
+    EXPECT_EQ(callbackErrCode, ERR_ACCOUNT_COMMON_NULL_PTR_ERROR);
 }
 
 /**
@@ -147,18 +151,22 @@ HWTEST_F(DomainAccountPluginProxyTest, DomainAccountPluginProxyTest_AuthWithToke
 
 /**
  * @tc.name: DomainAccountPluginProxyTest_AuthWithToken_002
- * @tc.desc: GetAuthStatusInfo success.
+ * @tc.desc: AuthWithToken with innerPlugin nullptr, verify callback receives error via oneway.
  * @tc.type: FUNC
  * @tc.require:
  */
 HWTEST_F(DomainAccountPluginProxyTest, DomainAccountPluginProxyTest_AuthWithToken_002, TestSize.Level3)
 {
     DomainAccountInfo info;
-    std::shared_ptr<DomainAccountCallback> callback = nullptr;
-    sptr<DomainAccountCallbackService> callbackService = new (std::nothrow) DomainAccountCallbackService(callback);
-    EXPECT_NE(callbackService, nullptr);
     std::vector<uint8_t> token;
-    EXPECT_NE(pluginProxy_->AuthWithToken(info, token, callbackService), ERR_OK);
+    int32_t callbackErrCode = ERR_OK;
+    DomainAccountCallbackFunc callbackFunc = [&callbackErrCode](const int32_t errCode, Parcel &parcel) {
+        callbackErrCode = errCode;
+    };
+    sptr<DomainAccountCallbackService> callbackService = new (std::nothrow) DomainAccountCallbackService(callbackFunc);
+    EXPECT_NE(callbackService, nullptr);
+    EXPECT_EQ(pluginProxy_->AuthWithToken(info, token, callbackService), ERR_OK);
+    EXPECT_EQ(callbackErrCode, ERR_ACCOUNT_COMMON_NULL_PTR_ERROR);
 }
 
 /**
